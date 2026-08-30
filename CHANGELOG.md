@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.1 (30.08.2026)
+
+Fix (Live-Test-Fund, Dietmar): Instanzanlage des Splitters brach mit `Fatal error:
+Call to undefined method OCPPHubSplitter::RegisterHook()` ab —
+`RegisterHook()`/`ProcessHookData()` sind KEINE eingebauten `IPSModule`-Methoden,
+wie ursprünglich angenommen. Korrigiert auf den echten, gegen zwei offizielle
+Symcon-Quellen verifizierten Mechanismus: eigene `RegisterHook()`-Methode trägt
+diese Instanz manuell in die `Hooks`-Property der eingebauten
+„WebHook Control"-Kern-Instanz ein (`IPS_SetProperty`+`IPS_ApplyChanges`), zusätzlich
+Kernel-Ready-Absicherung (`RegisterMessage(IPS_KERNELMESSAGE)`/`MessageSink()`), da
+die WebHook-Control-Instanz direkt nach einem Symcon-Neustart noch nicht bereit sein
+kann. Betroffen: nur OCPPHub Splitter, Ladepunkt/Konfigurator unverändert.
+
+Auch `OHUB_ManualStart`/`OHUB_ManualStop`/`OHUB_SetDailyOverride` von
+OCPPHubSplitter auf OCPPHubLadepunkt verschoben (jetzt `OHUBL_*`, einzige nötige ID
+ist die Ladepunkt-Instanz-ID, wie mit Dashboard abgestimmt) — der ursprüngliche
+Entwurf hätte Dashboard zusätzlich zur Splitter-ID gezwungen.
+
 ## 0.1.0 (30.08.2026)
 
 Erste installierbare Fassung — Stufe 1 laut `.docs/pflichtenheft.md`

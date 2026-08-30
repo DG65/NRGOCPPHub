@@ -25,11 +25,12 @@
 
 class OCPPHubSplitter extends IPSModule
 {
-    // Eingebaute Symcon-Instanz "WebSocket-Server" (Web Connect) — pusht
-    // Daten asynchron an eine über einen Hook offene WebSocket-Verbindung.
-    // Aus dem offiziellen symcon/OCPP-Modul übernommene, verifizierte GUID
-    // (öffentliche Symcon-Kern-Modul-ID, kein Geschäftsgeheimnis).
-    private const WEBSOCKET_SERVER_GUID = '{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}';
+    // Eingebaute Symcon-Kern-Instanz "WebHook Control" — verwaltet alle
+    // registrierten Hooks (Property "Hooks", JSON-Liste aus {Hook,TargetID})
+    // UND pusht Daten asynchron an eine darüber offene WebSocket-Verbindung
+    // (WC_PushMessage). GUID verifiziert gegen zwei offizielle Symcon-Quellen
+    // (symcon/OCPP UND symcon/SymconMisc/libs/WebHookModule.php).
+    private const WEBHOOK_CONTROL_GUID = '{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}';
 
     private const LADEPUNKT_GUID = '{27A1625F-A006-4945-8A36-FFBAA38A5FB5}';
 
@@ -57,6 +58,21 @@ class OCPPHubSplitter extends IPSModule
         // Charge-Point-Identities — vom Konfigurator gelesen.
         // Struktur: { "<cpid>": <unix-timestamp letzte Sichtung> }
         $this->RegisterAttributeString('SeenChargePoints', '{}');
+
+        // Hook-Registrierung braucht die WebHook-Control-Instanz, die beim
+        // ersten ApplyChanges() nach einem Symcon-Neustart evtl. noch nicht
+        // bereit ist (Muster aus symcon/SymconMisc/libs/WebHookModule.php,
+        // dort ausdrücklich als Kernel-Timing-Absicherung dokumentiert) —
+        // deshalb zusätzlich auf KR_READY horchen und dann erneut versuchen.
+        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
+        if ($Message === IPS_KERNELMESSAGE && $Data[0] === KR_READY) {
+            $this->RegisterHook($this->hookPath());
+        }
     }
 
     public function ApplyChanges()
@@ -81,9 +97,44 @@ class OCPPHubSplitter extends IPSModule
             return;
         }
 
-        $this->RegisterHook($this->hookPath());
+        // Nur im laufenden Kernel-Betrieb registrieren — direkt beim Symcon-
+        // Start ist die WebHook-Control-Instanz evtl. noch nicht bereit
+        // (siehe MessageSink()/KR_READY oben, gleiches Muster wie
+        // symcon/SymconMisc/libs/WebHookModule.php).
+        if (IPS_GetKernelRunlevel() === KR_READY) {
+            $this->RegisterHook($this->hookPath());
+        }
 
         $this->SetStatus($this->ReadPropertyBoolean('Active') ? 102 : 104);
+    }
+
+    // Trägt diese Instanz als Ziel für $Hook in die "Hooks"-Property der
+    // eingebauten WebHook-Control-Instanz ein (Standard-Community-Muster,
+    // da es dafür keine eigene WHC_RegisterHook()-API-Funktion gibt —
+    // verifiziert gegen symcon/SymconMisc/libs/WebHookModule.php, eigene
+    // Umsetzung statt Codeübernahme).
+    private function RegisterHook(string $Hook): void
+    {
+        $ids = @IPS_GetInstanceListByModuleID(self::WEBHOOK_CONTROL_GUID);
+        if (!$ids) {
+            return;
+        }
+        $hooks = json_decode((string)@IPS_GetProperty($ids[0], 'Hooks'), true) ?: [];
+        $found = false;
+        foreach ($hooks as $index => $entry) {
+            if (($entry['Hook'] ?? '') === $Hook) {
+                if ((int)($entry['TargetID'] ?? 0) === $this->InstanceID) {
+                    return; // schon korrekt registriert
+                }
+                $hooks[$index]['TargetID'] = $this->InstanceID;
+                $found = true;
+            }
+        }
+        if (!$found) {
+            $hooks[] = ['Hook' => $Hook, 'TargetID' => $this->InstanceID];
+        }
+        IPS_SetProperty($ids[0], 'Hooks', json_encode($hooks));
+        IPS_ApplyChanges($ids[0]);
     }
 
     public function GetConfigurationForm()
@@ -379,41 +430,13 @@ class OCPPHubSplitter extends IPSModule
     }
 
     // ---------------------------------------------------------------------
-    // Backend-Funktionen für Dashboard (Scope-Korrektur 30.08.2026: OCPPHub
-    // baut KEINE eigene WebFront-Kachel — Dashboard konsumiert diese
-    // Funktionen für die eigentliche Bedienoberfläche, siehe
-    // .docs/architektur.md „Bedienung: Backend-Funktion für Dashboard".
-    // ---------------------------------------------------------------------
-
-    public function ManualStart(int $LadepunktID, int $ZugangID = 0): void
-    {
-        $cpid = @IPS_GetProperty($LadepunktID, 'CPID');
-        if ($cpid === false || $cpid === '') {
-            return;
-        }
-        // Stufe 1: $ZugangID wird noch ignoriert (kein Kundenverwaltung-Vertrag
-        // vorhanden) — interner "symcon"-idTag wie bei RemoteStart üblich.
-        // Ab Betriebsart ② löst $ZugangID stattdessen den passenden idTag auf.
-        $this->RemoteStart($cpid);
-    }
-
-    public function ManualStop(int $LadepunktID): void
-    {
-        $cpid = @IPS_GetProperty($LadepunktID, 'CPID');
-        if ($cpid === false || $cpid === '') {
-            return;
-        }
-        $this->RemoteStop($cpid, OHUBL_GetLastTransactionId($LadepunktID));
-    }
-
-    public function SetDailyOverride(int $LadepunktID, bool $Active): void
-    {
-        OHUBL_SetDailyOverride($LadepunktID, $Active);
-    }
-
-    // ---------------------------------------------------------------------
     // Ausgehend — aufgerufen von OCPPHubLadepunkt (Parent-Instanz-ID via
     // IPS_GetParent()) oder von einer späteren Steuerungs-/Skript-Ebene.
+    // Die eigentlichen Dashboard-Backend-Funktionen (ManualStart/ManualStop/
+    // SetDailyOverride) liegen bewusst auf OCPPHubLadepunkt, nicht hier —
+    // Dashboard soll nur die eine Ladepunkt-Instanz-ID brauchen, keine
+    // zusätzliche Splitter-ID auflösen müssen. Siehe .docs/architektur.md
+    // „Bedienung: Backend-Funktion für Dashboard".
     // ---------------------------------------------------------------------
 
     public function RemoteStart(string $cpid, string $idTag = 'symcon'): void
@@ -460,7 +483,7 @@ class OCPPHubSplitter extends IPSModule
 
     private function sendRaw(string $cpid, array $frame): void
     {
-        $wsInstances = @IPS_GetInstanceListByModuleID(self::WEBSOCKET_SERVER_GUID);
+        $wsInstances = @IPS_GetInstanceListByModuleID(self::WEBHOOK_CONTROL_GUID);
         if (!$wsInstances) {
             $this->SendDebug('OCPPHub', 'Keine WebSocket-Server-Instanz gefunden — Nachricht nicht gesendet.', 0);
             return;

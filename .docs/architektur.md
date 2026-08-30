@@ -14,10 +14,15 @@ Vorlage, falls an anderer Stelle im Modul dieselbe Frage aufkommt.
 
 ## Instanzmodell (an das offizielle Symcon-OCPP-Modul und den Verbund angelehnt)
 
-1. **OCPPHub Splitter** (I/O): hält den WebSocket-Server (Symcon Server Socket +
-   eigenes OCPP-J-Framing, KEIN externer Daemon), nimmt Verbindungen aller Ladepunkte
-   an, routet nach Charge-Point-Identity (URL-Pfad `/<cpid>`), verwaltet zentrale
-   RFID-Whitelist + Basic-Auth-Zugangsdaten (Attribute, Regel 7).
+1. **OCPPHub Splitter** (I/O): nimmt WebSocket-Verbindungen aller Wallboxen entgegen —
+   **Korrektur nach Recherche am echten Mechanismus** (ursprünglich hier als „Symcon
+   Server Socket + eigenes OCPP-J-Framing" vermutet, das war falsch): tatsächlich über
+   Symcons eingebaute **WebHook-Control**-Kern-Instanz (`RegisterHook()`/
+   `ProcessHookData()`/`WC_PushMessage()`, verifiziert gegen zwei offizielle
+   Symcon-Quellen, siehe „Verfügbarkeit / Offline-Verhalten" und Splitter-Quellcode-
+   Kommentar), KEIN externer Daemon, KEIN eigenes WebSocket-Framing. Routet nach
+   Charge-Point-Identity (URL-Pfad hinter dem Hook), verwaltet zentrale RFID-Whitelist +
+   Basic-Auth-Zugangsdaten (Attribute, Regel 7).
 2. **OCPPHub Ladepunkt** (Device, 1 je Wallbox/Connector): Variablen analog ChargerHub
    (gleiche Ident-Namen wo semantisch gleich: `power`, `energy_total`, `energy_session`,
    `state`, `vehicle_plugged`, `vehicle_name`, `ctl_enable`, `ctl_curr_limit`,
@@ -206,18 +211,23 @@ Backend. Ursprünglich als eigene Kachel entworfen (siehe Git-Historie dieses
 Abschnitts), jetzt umgebaut: OCPPHub stellt die nötige Funktionalität als reine
 Backend-Funktion bereit, Dashboard baut die eigentliche Bedienoberfläche darüber.
 
-- `OHUB_ManualStart(int $LadepunktID, int $ZugangID = 0)` / `OHUB_ManualStop(int
-  $LadepunktID)` — `$LadepunktID` ist die Instanz-ID der OCPPHub-Ladepunkt-Instanz
-  (bestätigt gegenüber Dashboard, 30.08.2026 — passt direkt in deren bestehendes
-  Knoten-/instanceID-Modell, keine eigene ID-Auflösung nötig). Löst intern denselben
-  Weg aus wie eine Kartenauflage (`Authorize.req` mit dem übergebenen Zugang, danach
-  `RemoteStartTransaction`/`RemoteStopTransaction`). Bei Betriebsart ① (kein
-  RFID-Zwang) wird `$ZugangID` ignoriert, es wird der interne „symcon"-idTag genutzt.
-  Damit ist die Zuordnung unabhängig davon, was bei der rollenbasierten Konsole am Ende
-  rauskommt — die eigentliche Zugriffskontrolle „wer darf das auslösen" ist Dashboards/
-  WebFronts Berechtigungsfrage, keine von OCPPHub zu lösende.
-- `OHUB_SetDailyOverride(int $LadepunktID, bool $Active)` — Tages-Override „heute
-  Vollladen trotz PV-Vorrang", setzt die Vorrangkaskade („Steuerung /
+- `OHUBL_ManualStart(int $LadepunktID, int $ZugangID = 0)` / `OHUBL_ManualStop(int
+  $LadepunktID)` — **Korrektur 30.08.2026**: liegen auf der Ladepunkt-Instanz selbst,
+  nicht auf dem Splitter (ursprünglich `OHUB_*` mit Splitter als Zielinstanz entworfen —
+  hätte Dashboard gezwungen, zusätzlich die Splitter-ID aufzulösen, obwohl genau das
+  „keine eigene ID-Auflösung nötig"-Versprechen brechen würde). `$LadepunktID` bleibt
+  die einzige nötige ID (bestätigt gegenüber Dashboard, 30.08.2026 — passt direkt in
+  deren bestehendes Knoten-/instanceID-Modell). Löst intern denselben Weg aus wie ein
+  Klick auf `ctl_enable` (`IPS_RequestAction()`), dahinter wie eine Kartenauflage
+  (`Authorize.req`, danach `RemoteStartTransaction`/`RemoteStopTransaction` über den
+  Splitter). Bei Betriebsart ① (kein RFID-Zwang) wird `$ZugangID` ignoriert, es wird
+  der interne „symcon"-idTag genutzt. Damit ist die Zuordnung unabhängig davon, was bei
+  der rollenbasierten Konsole am Ende rauskommt — die eigentliche Zugriffskontrolle
+  „wer darf das auslösen" ist Dashboards/WebFronts Berechtigungsfrage, keine von
+  OCPPHub zu lösende.
+- `OHUBL_SetDailyOverride(int $LadepunktID, bool $Active)` — ebenfalls auf der
+  Ladepunkt-Instanz. Tages-Override „heute Vollladen trotz PV-Vorrang", setzt die
+  Vorrangkaskade („Steuerung /
   Überschussladen") für die laufende Sitzung außer Kraft. **Korrektur 30.08.2026**
   (Dashboard-Rückfrage zeigte: ein Reset-Cron auf deren Seite wäre unnötige neue
   Infrastruktur für einen Zustand, der ohnehin bei uns liegt): OCPPHub setzt den
@@ -575,7 +585,7 @@ Stand 30.08.2026 — alle vier Punkte geklärt:
         gut für Kreuzvalidierung OCPP-MeterValues gegen Modbus-Register.
      c. go-e-Firmware auf WB1 prüfen: OCPP braucht ≥56.1, besser ≥56.8.
    ChargerHub-Sitzung bei Live-Gang informieren, sie beobachtet von ihrer Seite mit.
-   Repo öffentlich schalten → **ja, sobald erster installierbarer Code drin ist**
-   (bestätigt 30.08.2026), analog den anderen NRG-Stack-Repos.
+   Repo öffentlich schalten → **erledigt 30.08.2026**, nach dem ersten installierbaren
+   Commit (`b061672`, Stufe 1) auf public gestellt, analog den anderen NRG-Stack-Repos.
 4. Lizenz → **PolyForm Noncommercial 1.0.0** (bestätigt 30.08.2026), kanonischer Text
    aus dem EMS-Repo übernommen, liegt jetzt als `LICENSE` im Root.

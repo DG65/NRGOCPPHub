@@ -107,8 +107,9 @@ Abschnitt 4.2, PF10).
   Reservierung/Tarif-Zusage.
 - PF9 (S): Splitter-interne Lastverteilung bei mehreren eigenen, gleichzeitig aktiven
   Ladepunkten ohne aktives EMS.
-- PF10 (S): Backend-Funktionen `OHUB_ManualStart`/`OHUB_ManualStop`/
-  `OHUB_SetDailyOverride` — keine eigene Bedienoberfläche, Dashboard baut die Kachel.
+- PF10 (S): Backend-Funktionen `OHUBL_ManualStart`/`OHUBL_ManualStop`/
+  `OHUBL_SetDailyOverride` (auf der Ladepunkt-Instanz, einzige nötige ID) — keine
+  eigene Bedienoberfläche, Dashboard baut die Kachel.
 
 ### 4.3 Authentifizierung
 - PF11 (M): Zentrale Autorisierung jeder Kartenauflage via `Authorize.req`, unbegrenzte

@@ -315,14 +315,37 @@ class OCPPHubLadepunkt extends IPSModule
         }
     }
 
-    // Für OHUB_ManualStop am Splitter, siehe .docs/architektur.md „Bedienung:
-    // Backend-Funktion für Dashboard".
     public function GetLastTransactionId(): int
     {
         return $this->ReadAttributeInteger('LastTransactionId');
     }
 
-    // Für OHUB_SetDailyOverride am Splitter — siehe Update()-Kommentar unten.
+    // ---------------------------------------------------------------------
+    // Backend-Funktionen für Dashboard (Scope-Korrektur 30.08.2026: OCPPHub
+    // baut KEINE eigene WebFront-Kachel — Dashboard konsumiert diese
+    // Funktionen für die eigentliche Bedienoberfläche, siehe
+    // .docs/architektur.md „Bedienung: Backend-Funktion für Dashboard").
+    // Bewusst hier auf OCPPHubLadepunkt statt auf dem Splitter — Dashboard
+    // braucht dafür nur die eine Ladepunkt-Instanz-ID, wie mit der
+    // Dashboard-Sitzung abgestimmt (30.08.2026), keine zusätzliche
+    // Splitter-ID-Auflösung.
+    // ---------------------------------------------------------------------
+
+    public function ManualStart(int $ZugangID = 0): void
+    {
+        // Stufe 1: $ZugangID wird noch ignoriert (kein Kundenverwaltung-
+        // Vertrag vorhanden) — derselbe Weg wie ein Klick auf ctl_enable,
+        // löst intern RemoteStartTransaction über den Splitter aus.
+        IPS_RequestAction($this->InstanceID, 'ctl_enable', true);
+    }
+
+    public function ManualStop(): void
+    {
+        IPS_RequestAction($this->InstanceID, 'ctl_enable', false);
+    }
+
+    // Tages-Override „heute Vollladen trotz PV-Vorrang" — siehe
+    // Update()-Kommentar unten für den automatischen Reset.
     public function SetDailyOverride(bool $Active): void
     {
         $this->WriteAttributeBoolean('DailyOverride', $Active);
