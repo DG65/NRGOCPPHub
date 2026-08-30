@@ -25,8 +25,18 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.7';
+    private const VERSION = '0.1.8';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+
+    // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
+    // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
+    // NICHT bei jedem library.json-Build (sonst nervt es).
+    private const NEWS_VERSION = '0.1.7';
+    private const NEWS_ITEMS = [
+        'Eigenständiges PV-Überschussladen reagiert jetzt sofort auf neue Messwerte (nicht nur per Timer) und setzt aus, wenn Messwerte älter als 30s sind, statt mit veralteten Werten weiterzurechnen.',
+        'Sicherer Phasenzahl-Default (3 statt 1) — verhindert ungewollten Netzbezug, solange die Phasenumschaltung noch nicht implementiert ist.',
+        'Neue Backend-Funktionen für Dashboard: OHUBL_ManualStart/ManualStop/SetDailyOverride (die eigentliche Bedienoberfläche baut Dashboard).',
+    ];
 
     // Frische-Wache Überschussladen (ChargerHub-Empfehlung 30.08.2026): ist
     // die letzte MeterValues-Meldung älter, wird nicht mehr geregelt. Passt
@@ -65,6 +75,7 @@ class OCPPHubLadepunkt extends IPSModule
         parent::Create();
 
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
+        $this->RegisterAttributeString('SeenNews', '');
 
         // Charge-Point-Identity — der URL-Pfad-Teil, mit dem sich diese
         // Wallbox beim Splitter meldet. Einziges Pflichtfeld.
@@ -214,7 +225,31 @@ class OCPPHubLadepunkt extends IPSModule
             ];
         }
 
+        $banner = $this->newsBanner();
+        if ($banner !== null) {
+            array_unshift($form['elements'], $banner);
+        }
+
         return json_encode($form);
+    }
+
+    private function newsBanner(): ?array
+    {
+        if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
+            return null;
+        }
+        $items = [['type' => 'Label', 'caption' => '🆕 Neu in diesem Modul — bitte kurz ansehen und ggf. die Einstellungen prüfen:']];
+        foreach (self::NEWS_ITEMS as $line) {
+            $items[] = ['type' => 'Label', 'caption' => '• ' . $line];
+        }
+        $items[] = ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUBL_AckNews($id);'];
+        return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => '🆕 Neu in Version ' . self::NEWS_VERSION, 'expanded' => true, 'items' => $items];
+    }
+
+    public function AckNews(): void
+    {
+        $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
+        $this->UpdateFormField('NewsPanel', 'visible', false);
     }
 
     public function DismissReviewHint(): void

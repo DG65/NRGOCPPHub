@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.8 (30.08.2026)
+
+Nachgezogen (Dietmar): zwei weitere fehlende Verbund-Formularkonventionen.
+
+- **„🆕 Neu in Version X.Y"-Banner** (ChargerHub-Muster: `NEWS_VERSION`/
+  `NEWS_ITEMS`, aufgeklapptes Panel ganz oben, einmalig ausblendbar,
+  Attribut `SeenNews`) in allen drei Modulen ergänzt — fehlte komplett.
+- **Herstellerspezifische Hinweise** im Splitter-Doku-Panel ergänzt (go-e,
+  KEBA x-series vs. c-series, Alfen Eve, Heidelberg kann kein OCPP) —
+  analog ChargerHubs Hersteller-Bullets, aus `.docs/recherche.md`
+  übernommen.
+- OCPPHub-Konfigurator hatte bisher gar keinen GitHub-Rückmeldungshinweis
+  (ReviewHint) — jetzt ergänzt, analog Splitter/Ladepunkt.
+
+Keine funktionalen Änderungen.
+
 ## 0.1.7 (30.08.2026)
 
 Nachgezogen (Dietmar: Formulare hatten die nötigen Felder, aber weder die

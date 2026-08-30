@@ -40,14 +40,25 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.7';
+    private const VERSION = '0.1.8';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+
+    // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
+    // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
+    // NICHT bei jedem library.json-Build (sonst nervt es).
+    private const NEWS_VERSION = '0.1.7';
+    private const NEWS_ITEMS = [
+        'Erste installierbare Fassung: OCPP-1.6J-Kernprotokoll läuft (BootNotification, Heartbeat, StatusNotification, Authorize — noch immer „Accepted", StartTransaction, StopTransaction, MeterValues).',
+        'Nach jedem Verbindungsaufbau wird das MeterValues-Intervall der Wallbox automatisch auf 10s verkürzt (ChangeConfiguration) — sonst rechnet das Überschussladen an der Ladepunkt-Instanz mit veralteten Werten.',
+        'Noch kein RFID-Zwang, keine Kundenverwaltung, keine Tarife/Reservierung — kommt in einer späteren Version.',
+    ];
 
     public function Create()
     {
         parent::Create();
 
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
+        $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterPropertyBoolean('Active', true);
         // Basic-Auth optional (leerer Nutzername = kein Schutz). Zugangsdaten-
         // Konvention (Verbund-Regel 7): Passwort nur als Formular-Eingabe
@@ -155,6 +166,10 @@ class OCPPHubSplitter extends IPSModule
                         ['type' => 'Label', 'caption' => '🔌 In der OCPP-Konfiguration der Wallbox als Backend-URL eintragen: ' . $this->hookPath() . '/<Charge-Point-Identity> — <Charge-Point-Identity> ist ein frei wählbarer Name, den die Wallbox selbst mitschickt (z. B. „WB1"), muss NICHT vorher hier angelegt werden.'],
                         ['type' => 'Label', 'caption' => 'ℹ️ Stufe 1 (aktueller Stand): Kernprotokoll (Boot/Heartbeat/Status/Start/Stop/MeterValues) + eigenständiges PV-Überschussladen. Noch KEIN RFID-Zwang — jede Karte/jedes Anstecken wird angenommen. Kundenverwaltung, Tarife, Reservierung folgen in einer späteren Version.'],
                         ['type' => 'Label', 'caption' => '⚠️ Ungetestet gegen die meisten OCPP-1.6J-Wallboxen außer go-e — bei anderen Herstellern bitte Rückmeldung über GitHub geben, falls etwas nicht passt (Measurand-Namen/Einheiten in MeterValues, ChargingRateUnit bei SetChargingProfile).'],
+                        ['type' => 'Label', 'caption' => '• go-e Gemini/HOME+: OCPP 1.6J ab Firmware 56.1 (besser ≥56.8), Aktivierung per App, WSS + HTTP-Basic-Auth empfohlen. Referenz-/Testhardware dieses Moduls.'],
+                        ['type' => 'Label', 'caption' => '• KEBA P30: OCPP 1.6 nur bei der x-series — die c-series kann kein OCPP (dort ChargerHub per Modbus/UDP nutzen).'],
+                        ['type' => 'Label', 'caption' => '• Alfen Eve (Single/Double Pro-line): OCPP ist dort das native Primärprotokoll, sollte gut funktionieren — noch nicht selbst getestet.'],
+                        ['type' => 'Label', 'caption' => '• Heidelberg Energy Control: kann KEIN OCPP (nur Modbus RTU) — dafür ChargerHub verwenden, nicht OCPPHub.'],
                     ],
                 ],
                 [
@@ -206,6 +221,12 @@ class OCPPHubSplitter extends IPSModule
             ];
         }
 
+        // „Was ist neu"-Banner ganz oben, vor dem Doku-Panel.
+        $banner = $this->newsBanner();
+        if ($banner !== null) {
+            array_unshift($form['elements'], $banner);
+        }
+
         return json_encode($form);
     }
 
@@ -213,6 +234,28 @@ class OCPPHubSplitter extends IPSModule
     {
         $this->WriteAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, true);
         $this->UpdateFormField('ReviewHint', 'visible', false);
+    }
+
+    // „Was ist neu"-Banner: erscheint nach einem Update (Attribut startet
+    // leer), bis der Nutzer „Verstanden" klickt. Neuinstallation sieht es
+    // einmalig. Muster wie ChargerHub.
+    private function newsBanner(): ?array
+    {
+        if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
+            return null;
+        }
+        $items = [['type' => 'Label', 'caption' => '🆕 Neu in diesem Modul — bitte kurz ansehen und ggf. die Einstellungen prüfen:']];
+        foreach (self::NEWS_ITEMS as $line) {
+            $items[] = ['type' => 'Label', 'caption' => '• ' . $line];
+        }
+        $items[] = ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUB_AckNews($id);'];
+        return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => '🆕 Neu in Version ' . self::NEWS_VERSION, 'expanded' => true, 'items' => $items];
+    }
+
+    public function AckNews(): void
+    {
+        $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
+        $this->UpdateFormField('NewsPanel', 'visible', false);
     }
 
     private function hookPath(): string

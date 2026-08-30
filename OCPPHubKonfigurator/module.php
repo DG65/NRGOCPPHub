@@ -20,13 +20,24 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.7';
+    private const VERSION = '0.1.8';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
+    private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+
+    // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
+    // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
+    // NICHT bei jedem library.json-Build (sonst nervt es).
+    private const NEWS_VERSION = '0.1.7';
+    private const NEWS_ITEMS = [
+        'Splitter-Zuordnung jetzt auch manuell wählbar (Auswahlfeld oben), falls die automatische Erkennung über die Instanz-Verschachtelung nicht greift.',
+    ];
 
     public function Create()
     {
         parent::Create();
         $this->RegisterPropertyInteger('SplitterID', 0);
+        $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
+        $this->RegisterAttributeString('SeenNews', '');
     }
 
     public function ApplyChanges()
@@ -75,7 +86,7 @@ class OCPPHubKonfigurator extends IPSModule
             }
         }
 
-        return json_encode([
+        $form = [
             'elements' => [
                 [
                     'type'     => 'ExpansionPanel',
@@ -113,6 +124,49 @@ class OCPPHubKonfigurator extends IPSModule
             'status' => [
                 ['code' => 102, 'icon' => 'active', 'caption' => 'Aktiv'],
             ],
-        ]);
+        ];
+
+        if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
+            $form['elements'][] = [
+                'type'  => 'RowLayout',
+                'name'  => 'ReviewHint',
+                'items' => [
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub.'],
+                    ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUBK_DismissReviewHint($id);'],
+                ],
+            ];
+        }
+
+        $banner = $this->newsBanner();
+        if ($banner !== null) {
+            array_unshift($form['elements'], $banner);
+        }
+
+        return json_encode($form);
+    }
+
+    public function DismissReviewHint(): void
+    {
+        $this->WriteAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, true);
+        $this->UpdateFormField('ReviewHint', 'visible', false);
+    }
+
+    private function newsBanner(): ?array
+    {
+        if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
+            return null;
+        }
+        $items = [['type' => 'Label', 'caption' => '🆕 Neu in diesem Modul — bitte kurz ansehen und ggf. die Einstellungen prüfen:']];
+        foreach (self::NEWS_ITEMS as $line) {
+            $items[] = ['type' => 'Label', 'caption' => '• ' . $line];
+        }
+        $items[] = ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUBK_AckNews($id);'];
+        return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => '🆕 Neu in Version ' . self::NEWS_VERSION, 'expanded' => true, 'items' => $items];
+    }
+
+    public function AckNews(): void
+    {
+        $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
+        $this->UpdateFormField('NewsPanel', 'visible', false);
     }
 }
