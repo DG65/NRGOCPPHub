@@ -17,13 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.3';
+    private const VERSION = '0.2.4';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.3';
+    private const NEWS_VERSION = '0.2.4';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const NEWS_ITEMS = [
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
-        'Fahrzeuge/Gruppen und Kunden/Zugänge stehen im Formular jeweils nebeneinander, verbreitert für bessere Übersicht.',
+        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier Reiter nebeneinander — Klick öffnet die jeweilige Liste.',
     ];
 
     public function Create()
@@ -133,7 +133,6 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'caption'  => '🚙 Fahrzeuge',
                             'expanded' => false,
-                            'width'    => '600px',
                             'items'    => [
                                 ['type' => 'Label', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
                                 [
@@ -156,7 +155,6 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'caption'  => '👥 Gruppen',
                             'expanded' => false,
-                            'width'    => '450px',
                             'items'    => [
                                 ['type' => 'Label', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
                                 [
@@ -176,16 +174,10 @@ class OCPPHubAbrechnung extends IPSModule
                                 ],
                             ],
                         ],
-                    ],
-                ],
-                [
-                    'type'  => 'RowLayout',
-                    'items' => [
                         [
                             'type'     => 'ExpansionPanel',
                             'caption'  => '🙋 Kunden',
-                            'expanded' => true,
-                            'width'    => '900px',
+                            'expanded' => false,
                             'items'    => [
                                 [
                                     'type'     => 'List',
@@ -209,8 +201,7 @@ class OCPPHubAbrechnung extends IPSModule
                         [
                             'type'     => 'ExpansionPanel',
                             'caption'  => '🪪 Zugänge (Karten)',
-                            'expanded' => true,
-                            'width'    => '1100px',
+                            'expanded' => false,
                             'items'    => [
                                 [
                                     'type'     => 'List',

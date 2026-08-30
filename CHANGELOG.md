@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.4 (30.08.2026)
+
+Korrektur zu 0.2.3: Dietmar stellte klar, dass er nicht vier verbreiterte Panels wollte,
+sondern das genaue Gegenteil vom optischen Eindruck her — vor 0.2.3 saßen Fahrzeuge und
+Gruppen kollabiert als schmale, reiterartige Köpfe (~20px) nebeneinander; erst per Klick
+öffnete sich das jeweilige, beliebig breite ExpansionPanel. Genau dieses Reiter-Verhalten
+sollte auf alle vier Gruppen ausgeweitet werden, nicht die feste Verbreiterung aus 0.2.3.
+
+- Alle vier `width`-Vorgaben aus 0.2.3 wieder entfernt — Panels sind wieder unskaliert
+  (Reiterbreite richtet sich nach der Beschriftung, nicht nach einer festen Pixelzahl).
+- Fahrzeuge, Gruppen, Kunden und Zugänge stehen jetzt als EIN gemeinsames `RowLayout`
+  mit vier Reitern (vorher zwei getrennte Zweierreihen) — genau das Bild „4 Reiter auf
+  einer Höhe" aus Dietmars Beschreibung.
+- Kunden/Zugänge starten jetzt ebenfalls eingeklappt (`expanded: false`, vorher `true`)
+  — einheitliches Reiter-Verhalten für alle vier statt eines Sonderfalls.
+
 ## 0.2.3 (30.08.2026)
 
 Dietmar fand das Fahrzeuge/Gruppen-Nebeneinander aus 0.2.2 gut und wollte es
