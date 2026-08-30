@@ -1,24 +1,28 @@
 <?php
 
 // ===========================================================================
-// OCPPHub Konfigurator — Kind der OCPPHub-Splitter-Instanz (wie
-// OCPPHub Ladepunkt), zeigt Charge-Point-Identities, die sich bereits per
+// OCPPHub Konfigurator — zeigt Charge-Point-Identities, die sich bereits per
 // OCPP beim Splitter gemeldet haben, aber noch keine Ladepunkt-Instanz
 // haben. Klick auf „Erstellen" legt eine OCPPHub-Ladepunkt-Instanz mit
-// vorausgefüllter CPID an — die Symcon-Konfigurator-UI verbindet die neue
-// Instanz automatisch mit demselben Splitter-Parent wie diesen Konfigurator
-// (setzt voraus, dass beide Module dasselbe Interface in
-// parentRequirements/implemented deklarieren, siehe module.json).
-// STUFE 1 / UNGETESTET, siehe OCPPHubSplitter-Header.
+// vorausgefüllter CPID an.
+// FIX 30.08.2026 (Live-Fund: Konfigurator blieb leer): ursprünglich verlassen
+// auf IPS_GetParent() für die Splitter-Zuordnung (setzt voraus, dass die
+// automatische Parent-Verbindung beim Anlegen tatsächlich gegriffen hat —
+// war von Anfang an als UNGETESTETE Annahme markiert und hat sich als
+// nicht zuverlässig herausgestellt). Jetzt zusätzlich explizites
+// Auswahlfeld „SplitterID", das Vorrang vor IPS_GetParent() hat.
+// STUFE 1 / TEILWEISE GETESTET, siehe OCPPHubSplitter-Header.
 // ===========================================================================
 
 class OCPPHubKonfigurator extends IPSModule
 {
     private const LADEPUNKT_GUID = '{27A1625F-A006-4945-8A36-FFBAA38A5FB5}';
+    private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
 
     public function Create()
     {
         parent::Create();
+        $this->RegisterPropertyInteger('SplitterID', 0);
     }
 
     public function ApplyChanges()
@@ -27,9 +31,18 @@ class OCPPHubKonfigurator extends IPSModule
         $this->SetStatus(102);
     }
 
+    private function resolveSplitterId(): int
+    {
+        $explicit = $this->ReadPropertyInteger('SplitterID');
+        if ($explicit > 0) {
+            return $explicit;
+        }
+        return (int)(@IPS_GetParent($this->InstanceID) ?: 0);
+    }
+
     public function GetConfigurationForm()
     {
-        $splitterId = @IPS_GetParent($this->InstanceID);
+        $splitterId = $this->resolveSplitterId();
 
         $existing = [];
         if ($splitterId > 0) {
@@ -66,11 +79,18 @@ class OCPPHubKonfigurator extends IPSModule
                     'items'   => [
                         ['type' => 'Label', 'caption' => 'Zeigt Wallboxen, die sich bereits mit ihrer Charge-Point-Identity beim OCPPHub-Splitter gemeldet haben, aber noch keine eigene Instanz haben.'],
                         ['type' => 'Label', 'caption' => 'Wallbox zuerst in ihrer eigenen OCPP-Konfiguration auf den Splitter-Endpunkt einstellen, dann hier „Erstellen" klicken.'],
+                        ['type' => 'Label', 'caption' => 'Falls unten kein Splitter automatisch erkannt wird: rechts die passende OCPPHub-Splitter-Instanz manuell auswählen.'],
                     ],
+                ],
+                [
+                    'type'     => 'SelectInstance',
+                    'name'     => 'SplitterID',
+                    'caption'  => 'OCPPHub-Splitter (nur nötig, falls nicht automatisch erkannt)',
+                    'moduleID' => self::SPLITTER_GUID,
                 ],
                 $splitterId > 0
                     ? ['type' => 'Label', 'caption' => 'Verbunden mit Splitter-Instanz #' . $splitterId]
-                    : ['type' => 'Label', 'caption' => '⚠️ Kein übergeordneter OCPPHub-Splitter verbunden.'],
+                    : ['type' => 'Label', 'caption' => '⚠️ Kein OCPPHub-Splitter gefunden — oben manuell auswählen.'],
                 [
                     'type'     => 'Configurator',
                     'name'     => 'ChargePointList',

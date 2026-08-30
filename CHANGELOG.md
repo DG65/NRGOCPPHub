@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.4 (30.08.2026)
+
+Fix (Live-Test-Fund, Dietmar): OCPP-Kernprotokoll läuft bereits sauber
+(BootNotification/StatusNotification bestätigt), aber der Konfigurator
+blieb leer — "Kein übergeordneter OCPPHub-Splitter verbunden". Ursache: die
+Annahme, dass die Konfigurator-Instanz beim Anlegen automatisch mit einer
+Splitter-Instanz als Parent verbunden wird, war von Anfang an als
+UNGETESTET markiert und hat sich als nicht zuverlässig herausgestellt.
+OCPPHub Konfigurator hat jetzt zusätzlich ein explizites Auswahlfeld
+"OCPPHub-Splitter" (`SplitterID`-Property), das Vorrang vor der
+automatischen Parent-Erkennung hat.
+
 ## 0.1.3 (30.08.2026)
 
 Fix (Live-Test-Fund, Dietmar): Debug zeigte, die Anfrage erreicht OCPPHub
