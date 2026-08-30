@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.10 (30.08.2026)
+
+Fahrzeug-Zuordnung und SOC nach Rücksprache mit ChargerHub 1:1 nachgebaut (Dietmars
+Vorgabe). Kernaussage von ChargerHub: sie machen bewusst sehr wenig, die
+Korrelations-Intelligenz liegt absichtlich nicht im Hub.
+
+- `OHUBL_SetVehicleName(int $LadepunktID, string $Name)` — dummer Setter ohne eigene
+  Logik, analog `CHUB_SetVehicleName()`. `vehicleNameID` war schon im Vertrag.
+- Auto-Löschung von `vehicle_name` beim Abstecken, nur bei tatsächlich erkanntem
+  OCPP-Status (dabei nebenbei einen Bug gefixt: `vehicle_plugged` wurde vorher auch bei
+  unbekanntem Status fälschlich auf `false` gesetzt).
+- Keine eigene Korrelationslogik — das bleibt laut Verbund-Entscheidung ausschließlich
+  Dashboards `AssignVehicles()` (Zeitkorrelation beim Anstecken). Dashboard gebeten,
+  OCPPHub-Ladepunkte dort mit einzusammeln.
+- Kein eigener SOC-Vertrag (wie ChargerHub) — Ausnahme: OCPP kennt den Measurand „SoC"
+  in MeterValues, Splitter parst ihn jetzt mit, Ladepunkt hat eine `vehicle_soc`-
+  Variable. Bewusst noch NICHT als `vehicleSocID` im Vertrag, bis an echter Hardware
+  bestätigt und mit EMS abgestimmt.
+- idTag-basierte Direktzuordnung (Vorrang vor Dashboards Zeitkorrelation) als TODO für
+  Stufe 2 vermerkt — braucht die noch fehlende Kundenverwaltung.
+
+Details: `.docs/architektur.md` „Fahrzeug-Zuordnung & SOC".
+
 ## 0.1.9 (30.08.2026)
 
 **Wichtiger Fix** (Dashboard-Diagnose, direkt an Dietmars laufender Instanz

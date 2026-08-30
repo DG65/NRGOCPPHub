@@ -365,6 +365,60 @@ wird — bei Einzelnutzer gibt es niemanden, vor dem reserviert werden müsste).
   „Volle Abrechnung" aktiv ist; ohne Tarife auch keine Reservierungsgebühr (Reservierung
   selbst bleibt aber schon ab Betriebsart ② nutzbar, dann kostenlos).
 
+## Fahrzeug-Zuordnung & SOC
+
+Dietmars Vorgabe (30.08.2026): alle fahrzeugbezogenen Funktionen von ChargerHub 1:1
+übernehmen. Gegenprüfung mit ChargerHub am echten Code (0.9.53) ergab: ChargerHub macht
+hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT im Hub.
+
+- **`OHUBL_SetVehicleName(int $LadepunktID, string $Name)`** (auf der Ladepunkt-Instanz):
+  dummer Setter ohne jede eigene Logik, schreibt nur `vehicle_name`. Analog
+  `CHUB_SetVehicleName()`. `vehicleNameID` steht bereits im Vertrag
+  (`GetContractEntry()`).
+- **Keine eigene Korrelationslogik** (kein Zeitabgleich, keine Heuristik) — Verbund-
+  Entscheidung nach Debatte ChargerHub/Tessie/Dashboard: EIN Korrelationsmechanismus im
+  Verbund statt mehrerer konkurrierender. Die Zeitkorrelation beim Anstecken macht
+  ausschließlich Dashboards `AssignVehicles()`. Tessie ruft Hubs NICHT direkt auf.
+  **Für Dashboard zu erledigen** (angefragt 30.08.2026): `AssignVehicles()` iteriert
+  bisher vermutlich nur über ChargerHub-Instanzen — muss OCPPHub-Ladepunkte mit
+  einsammeln.
+- **Auto-Löschung beim Abstecken**: `vehicle_name` wird geleert, sobald `vehicle_plugged`
+  auf `false` geht — NUR bei tatsächlich erkanntem Status (nicht bei unbekanntem OCPP-
+  Status-String, sonst würde ein einfach nicht verstandener Status fälschlich als „kein
+  Fahrzeug" interpretiert). Bugfix nebenbei gefunden: `UpdateStatus()` setzte
+  `vehicle_plugged` vorher IMMER, auch bei unbekanntem Status (dann fälschlich `false`)
+  — jetzt nur noch bei erkanntem Status.
+  Analog ChargerHubs `Update()`-Verhalten.
+- **Direktweg über idTag** (ChargerHub-Empfehlung, noch NICHT umsetzbar — braucht
+  Kundenverwaltung/Stufe 2): kommt eine Transaktion mit einem idTag rein, der in unserer
+  künftigen Kundenverwaltung einem Fahrzeug zugeordnet ist, ist das eine ECHTE
+  Identifikation statt Zeitkorrelation — dann `vehicle_name` direkt selbst setzen statt
+  auf Dashboard zu warten. Kein Verstoß gegen die Ein-Mechanismus-Regel (kein
+  Heuristik-Duplikat, sondern Wissen). Abstimmung mit Dashboard schon getroffen:
+  idTag-Zuordnung gewinnt gegen Zeitkorrelation — Dashboard überschreibt einen bereits
+  gesetzten, nicht-leeren `vehicle_name` nicht. TODO Stufe 2, sobald Kundenverwaltung
+  steht.
+- **KEIN eigener SOC-Vertrag** (ChargerHub hat auch keinen — Modbus-Wallboxen liefern
+  keinen Fahrzeug-SOC, SOC kommt vom Fahrzeug-Modul, z. B. `TESSIE_GetVehicleState`
+  contractVersion 1.4, konsumiert von EMS/Dashboard). **Ausnahme, die bei uns anders
+  liegt**: OCPP 1.6 kennt den Measurand `SoC` in MeterValues (manche Wallboxen/
+  Fahrzeuge übertragen ihn wirklich, v. a. bei DC-Laden/ISO 15118) — Splitter parst das
+  bereits mit (`onMeterValues()`), Ladepunkt hat eine `vehicle_soc`-Variable. **Bewusst
+  NOCH NICHT im `OHUB_GetFunctions`-Vertrag als `vehicleSocID`** — erst nach Bestätigung,
+  dass reale Hardware (WB1) das tatsächlich liefert, UND Abstimmung mit der EMS-Sitzung
+  (additives Vertragsfeld). Falls go-e das nicht liefert: Variable bleibt leer,
+  unschädlich.
+- **„Verbraucherkreis"-Darstellung** (Dietmars Frage): reines Dashboard-Konzept
+  (Energiefluss-/Sankey-Darstellung) — ChargerHub zeigt selbst nichts dergleichen an,
+  bei uns gilt das erst recht (Scope-Korrektur: keine eigene WebFront-Kachel). Wir
+  liefern nur `vehicleNameID` (+ ggf. künftig `vehicleSocID`), die Darstellung ist
+  Dashboards Aufgabe.
+- **Weitere fahrzeugbezogene Funktionen bewusst NICHT bei uns** (liegen richtig bei
+  anderen Modulen, wären Duplikation): Ziel-SOC/Abfahrtszeit über
+  `TIBBERGR_SetVehicleSetting` bzw. EMS-Planung, Reichweite über den Tessie-Vertrag,
+  RFID-Kartenzähler-Äquivalent ist unsere eigene Kundenverwaltung/Transaktionshistorie
+  (Stufe 2/3), nicht ein eigener Direktkanal wie ChargerHubs go-e-MQTT-Kartenzähler.
+
 ## Authentifizierung (RFID & Alternativen)
 
 Klarstellung 30.08.2026 (Dietmar): unbegrenzt viele RFIDs müssen abrechenbar sein, nicht

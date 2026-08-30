@@ -40,14 +40,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.9';
+    private const VERSION = '0.1.10';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.9';
+    private const NEWS_VERSION = '0.1.10';
     private const NEWS_ITEMS = [
+        'MeterValues erkennt jetzt zusätzlich den OCPP-Measurand „SoC" (Fahrzeug-Ladestand), falls die Wallbox ihn überträgt — landet in der neuen vehicle_soc-Variable am Ladepunkt.',
         'Wichtiger Fix: die Zuordnung Ladepunkt↔Splitter lief bisher über die Objektbaum-Position (Symcons Kategorie-Struktur in der Konsole) — verschiebt man eine Ladepunkt-Instanz dort in eine andere Kategorie, fand der Splitter sie nicht mehr (weder für Steuerbefehle noch für den Dashboard-Vertrag). Jetzt eine explizite Pflicht-Zuordnung je Ladepunkt-Instanz, unabhängig von der Konsolen-Organisation. Bereits angelegte Ladepunkt-Instanzen bitte einmal öffnen und „OCPPHub-Splitter" nachtragen.',
         'Erste installierbare Fassung: OCPP-1.6J-Kernprotokoll läuft (BootNotification, Heartbeat, StatusNotification, Authorize — noch immer „Accepted", StartTransaction, StopTransaction, MeterValues).',
         'Nach jedem Verbindungsaufbau wird das MeterValues-Intervall der Wallbox automatisch auf 10s verkürzt (ChangeConfiguration) — sonst rechnet das Überschussladen an der Ladepunkt-Instanz mit veralteten Werten.',
@@ -529,6 +530,7 @@ class OCPPHubSplitter extends IPSModule
         if ($ladepunktId !== 0) {
             $powerW = null;
             $energyWh = null;
+            $socPercent = null;
             foreach ((array)($payload['meterValue'] ?? []) as $mv) {
                 foreach ((array)($mv['sampledValue'] ?? []) as $sv) {
                     $measurand = $sv['measurand'] ?? 'Energy.Active.Import.Register';
@@ -541,11 +543,17 @@ class OCPPHubSplitter extends IPSModule
                         $powerW = ($unit === 'kW') ? $value * 1000 : $value;
                     } elseif ($measurand === 'Energy.Active.Import.Register') {
                         $energyWh = ($unit === 'kWh') ? $value * 1000 : $value;
+                    } elseif ($measurand === 'SoC') {
+                        // Nicht jede Wallbox/jedes Fahrzeug liefert das (eher
+                        // DC-Laden/ISO 15118) — siehe OCPPHubLadepunkt::
+                        // UpdateMeterValues()-Kommentar zum vehicleSocID-
+                        // Vertragsstatus.
+                        $socPercent = $value;
                     }
                 }
             }
-            if ($powerW !== null || $energyWh !== null) {
-                OHUBL_UpdateMeterValues($ladepunktId, $powerW, $energyWh);
+            if ($powerW !== null || $energyWh !== null || $socPercent !== null) {
+                OHUBL_UpdateMeterValues($ladepunktId, $powerW, $energyWh, $socPercent);
             }
         }
         return new \stdClass(); // MeterValues.conf: leeres Objekt

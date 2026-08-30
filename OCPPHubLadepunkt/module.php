@@ -26,14 +26,16 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.9';
+    private const VERSION = '0.1.10';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.9';
+    private const NEWS_VERSION = '0.1.10';
     private const NEWS_ITEMS = [
+        'Fahrzeug-Zuordnung: OHUBL_SetVehicleName() als dummer Setter (analog ChargerHub), vehicle_name wird beim Abstecken automatisch geleert. Die eigentliche Zeitkorrelation macht weiterhin ausschließlich Dashboard — OCPPHub rät selbst nichts.',
+        'Neue Variable vehicle_soc: wird befüllt, falls die Wallbox den OCPP-Measurand „SoC" überträgt (nicht garantiert) — noch kein Vertragsfeld, erst nach Bestätigung an echter Hardware.',
         'Wichtiger Fix: neues Pflichtfeld „OCPPHub-Splitter" — die Zuordnung zum Splitter lief bisher über die Objektbaum-Position und ging beim Verschieben der Instanz in eine andere Konsolen-Kategorie verloren (Steuerbefehle und Dashboard-Vertrag funktionierten dann nicht mehr, ohne sichtbare Fehlermeldung). Bitte bei bereits angelegten Instanzen einmal öffnen und den Splitter manuell auswählen.',
         'Eigenständiges PV-Überschussladen reagiert jetzt sofort auf neue Messwerte (nicht nur per Timer) und setzt aus, wenn Messwerte älter als 30s sind, statt mit veralteten Werten weiterzurechnen.',
         'Sicherer Phasenzahl-Default (3 statt 1) — verhindert ungewollten Netzbezug, solange die Phasenumschaltung noch nicht implementiert ist.',
@@ -298,6 +300,12 @@ class OCPPHubLadepunkt extends IPSModule
             IPS_CreateVariableProfile('NRG.Ampere', VARIABLETYPE_INTEGER);
             IPS_SetVariableProfileText('NRG.Ampere', '', ' A');
         }
+        if (!IPS_VariableProfileExists('NRG.Percent')) {
+            IPS_CreateVariableProfile('NRG.Percent', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('NRG.Percent', '', ' %');
+            IPS_SetVariableProfileDigits('NRG.Percent', 0);
+            IPS_SetVariableProfileValues('NRG.Percent', 0, 100, 1);
+        }
 
         // Modul-eigene Profile (Präfix OHUB., Verbund-Regel 8): Sitzungs-kWh
         // bewusst NICHT NRG.kWh, damit die MeterHub-Zählersuche den
@@ -329,6 +337,9 @@ class OCPPHubLadepunkt extends IPSModule
         $this->MaintainVariable('state', 'Status', VARIABLETYPE_INTEGER, 'OHUB.ChargePointStatus', 30, true);
         $this->MaintainVariable('vehicle_plugged', 'Fahrzeug angesteckt', VARIABLETYPE_BOOLEAN, '', 40, true);
         $this->MaintainVariable('vehicle_name', 'Zugeordnetes Fahrzeug', VARIABLETYPE_STRING, '', 50, true);
+        // Nur befüllt, wenn die Wallbox den OCPP-Measurand „SoC" tatsächlich
+        // überträgt (nicht jede tut das) — siehe UpdateMeterValues().
+        $this->MaintainVariable('vehicle_soc', 'Fahrzeug-Ladestand (SoC, falls von der Wallbox übertragen)', VARIABLETYPE_FLOAT, 'NRG.Percent', 55, true);
 
         $this->MaintainVariable('ctl_enable', 'Ladefreigabe', VARIABLETYPE_BOOLEAN, '', 60, true);
         $this->MaintainVariable('ctl_curr_limit', 'Stromlimit', VARIABLETYPE_INTEGER, 'NRG.Ampere', 70, true);
@@ -396,13 +407,33 @@ class OCPPHubLadepunkt extends IPSModule
 
     public function UpdateStatus(string $ocppStatus, string $errorCode): void
     {
-        if (isset(self::STATUS_MAP[$ocppStatus])) {
-            $this->SetValue('state', self::STATUS_MAP[$ocppStatus]);
-        }
         if ($errorCode !== '' && $errorCode !== 'NoError') {
             IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' meldet Fehler: ' . $errorCode);
         }
-        $this->SetValue('vehicle_plugged', in_array($ocppStatus, ['Preparing', 'Charging', 'SuspendedEVSE', 'SuspendedEV', 'Finishing'], true));
+        // FIX 30.08.2026: vehicle_plugged/state nur bei ERKANNTEM Status
+        // setzen — vorher wurde bei einem unbekannten OCPP-Status-String
+        // fälschlich vehicle_plugged=false gesetzt (in_array liefert dann
+        // false, was hier aber "kein Fahrzeug" statt "unbekannt" bedeutet
+        // hätte). Auto-Löschung der Fahrzeugzuordnung beim Abstecken —
+        // ChargerHub-Konvention (Gegenprüfung 30.08.2026): nur bei WIRKLICH
+        // erkanntem false, nicht bei unbekanntem Zustand.
+        if (isset(self::STATUS_MAP[$ocppStatus])) {
+            $this->SetValue('state', self::STATUS_MAP[$ocppStatus]);
+            $plugged = in_array($ocppStatus, ['Preparing', 'Charging', 'SuspendedEVSE', 'SuspendedEV', 'Finishing'], true);
+            $this->SetValue('vehicle_plugged', $plugged);
+            if (!$plugged) {
+                $this->SetValue('vehicle_name', '');
+            }
+        }
+    }
+
+    // Fahrzeug-Zuordnung — dummer Setter, KEINE eigene Korrelationslogik
+    // (Verbund-Entscheidung, siehe .docs/architektur.md „Fahrzeug-Zuordnung
+    // & SOC"): die eigentliche Zeitkorrelation macht ausschließlich
+    // Dashboards AssignVehicles(). Analog ChargerHubs CHUB_SetVehicleName().
+    public function SetVehicleName(string $name): void
+    {
+        $this->SetValue('vehicle_name', $name);
     }
 
     public function StartTransaction(int $transactionId, string $idTag, int $meterStartWh): void
@@ -423,7 +454,13 @@ class OCPPHubLadepunkt extends IPSModule
         $this->SendDebug('OCPPHub StopTransaction', "id=$transactionId meterStop=$meterStopWh", 0);
     }
 
-    public function UpdateMeterValues(?float $powerW, ?float $energyWh): void
+    // $socPercent: OCPP-1.6-Measurand „SoC" aus MeterValues — NICHT jede
+    // Wallbox/jedes Fahrzeug liefert das (eher DC-Laden/ISO 15118). Bewusst
+    // NOCH NICHT im OHUB_GetFunctions-Vertrag als vehicleSocID (ChargerHub-
+    // Empfehlung 30.08.2026: additives Feld erst nach Bestätigung, dass
+    // reale Hardware das liefert, UND Abstimmung mit der EMS-Sitzung) — bis
+    // dahin nur lokal sichtbare Variable, kein Vertragsbestandteil.
+    public function UpdateMeterValues(?float $powerW, ?float $energyWh, ?float $socPercent = null): void
     {
         // NaN/Inf-Wache (ChargerHub-Empfehlung 30.08.2026, dort für Modbus-
         // Füllwerte, bei uns für kaputte MeterValues-Payloads relevant).
@@ -432,6 +469,12 @@ class OCPPHubLadepunkt extends IPSModule
         }
         if ($energyWh !== null && !is_finite($energyWh)) {
             $energyWh = null;
+        }
+        if ($socPercent !== null && (!is_finite($socPercent) || $socPercent < 0 || $socPercent > 100)) {
+            $socPercent = null;
+        }
+        if ($socPercent !== null) {
+            $this->SetValue('vehicle_soc', $socPercent);
         }
 
         if ($powerW !== null) {
