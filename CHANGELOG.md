@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.7 (30.08.2026)
+
+Nachgezogen (Dietmar: Formulare hatten die nötigen Felder, aber weder die
+Verbund-Formularkonventionen noch die ausführlichen Erklärungen wie bei
+ChargerHub): alle drei Module bekommen jetzt ein „📖 Dokumentation &
+Hilfe"-Panel (eingeklappt, mit Versionsnummer), erklärende Label-Zeilen zu
+jedem nicht selbsterklärenden Feld (Zwei-Regler-Warnung, wann
+Überschussladen tatsächlich greift, Basic-Auth-Verhalten, Speicheranteil-
+Wirkung usw. — analog ChargerHubs Formular) und einen einmalig
+ausblendbaren GitHub-Rückmeldungshinweis. Keine funktionalen Änderungen.
+
 ## 0.1.6 (30.08.2026)
 
 Fix (Dietmar hinterfragte zu Recht, ob das Überschussladen so funktionieren kann —

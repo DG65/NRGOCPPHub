@@ -23,6 +23,11 @@ class OCPPHubLadepunkt extends IPSModule
 
     private const MIN_CURRENT_HARD = 6; // A — kleinster IEC-61851-Ladestrom
 
+    // Bei jedem Versions-Bump in library.json auch hier nachziehen
+    // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
+    private const VERSION = '0.1.7';
+    private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+
     // Frische-Wache Überschussladen (ChargerHub-Empfehlung 30.08.2026): ist
     // die letzte MeterValues-Meldung älter, wird nicht mehr geregelt. Passt
     // zum angestrebten MeterValueSampleInterval von 10s (siehe Splitter
@@ -58,6 +63,8 @@ class OCPPHubLadepunkt extends IPSModule
     public function Create()
     {
         parent::Create();
+
+        $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
 
         // Charge-Point-Identity — der URL-Pfad-Teil, mit dem sich diese
         // Wallbox beim Splitter meldet. Einziges Pflichtfeld.
@@ -130,8 +137,17 @@ class OCPPHubLadepunkt extends IPSModule
 
     public function GetConfigurationForm()
     {
-        return json_encode([
+        $form = [
             'elements' => [
+                [
+                    'type'     => 'ExpansionPanel',
+                    'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
+                    'expanded' => false,
+                    'items'    => [
+                        ['type' => 'Label', 'caption' => 'Eine Instanz je Wallbox/Connector. Die Charge-Point-Identity muss exakt zu dem entsprechen, was die Wallbox selbst an den Splitter meldet — am einfachsten über „OCPPHub Konfigurator" anlegen, dort ist das Feld schon vorausgefüllt.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Stufe 1 (aktueller Stand): kein RFID-Zwang — jede Ladung wird angenommen, unabhängig von Karte/Nutzer. Die Variablen `power`/`energy_total`/`state` erscheinen unter dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular.'],
+                    ],
+                ],
                 [
                     'type'    => 'ValidationTextBox',
                     'name'    => 'CPID',
@@ -146,8 +162,10 @@ class OCPPHubLadepunkt extends IPSModule
                     'type'    => 'ExpansionPanel',
                     'caption' => '⚡ Stromgrenzen & Steuerungshoheit',
                     'items'   => [
-                        ['type' => 'NumberSpinner', 'name' => 'MinCurrent', 'caption' => 'Minimaler Ladestrom (A)'],
-                        ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => 'Maximaler Ladestrom (A)'],
+                        ['type' => 'NumberSpinner', 'name' => 'MinCurrent', 'caption' => 'Minimaler Ladestrom (A)', 'minimum' => 6, 'maximum' => 32, 'suffix' => 'A'],
+                        ['type' => 'Label', 'caption' => 'Kleinster Ladestrom, den die Wallbox/das Fahrzeug akzeptiert (IEC 61851: 6 A). Unterhalb dieser Schwelle pausiert das Überschussladen die Ladung komplett, statt mit zu wenig Strom weiterzuladen.'],
+                        ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => 'Maximaler Ladestrom (A)', 'minimum' => 6, 'maximum' => 63, 'suffix' => 'A'],
+                        ['type' => 'Label', 'caption' => 'Zuleitung/Absicherung dieses Ladepunkts — harte Obergrenze für jedes Stromlimit, das OCPPHub setzt (zusätzlich zum Hardware-Limit der Wallbox), unabhängig davon, was ein EMS anfordert.'],
                         [
                             'type'    => 'Select',
                             'name'    => 'ManagedBy',
@@ -157,6 +175,7 @@ class OCPPHubLadepunkt extends IPSModule
                                 self::MANAGEDBY_ALL
                             ),
                         ],
+                        ['type' => 'Label', 'caption' => '⚠️ Zwei-Regler-Warnung: Regelt bereits etwas anderes diese Wallbox — go-e Controller, Lastmanagement, Tibber Grid Rewards oder eine §14a-Steuerung —, darf OCPPHub nicht parallel Ladefreigabe/Stromlimit schreiben (beide Regler überschreiben sich sonst). Hier eintragen, wer die Hoheit hat: bei allem außer „Niemand" bleibt das eigenständige Überschussladen unten automatisch passiv.'],
                     ],
                 ],
                 [
@@ -164,18 +183,44 @@ class OCPPHubLadepunkt extends IPSModule
                     'caption' => '☀️ PV-Überschussladen (eigenständig, nur ohne aktives EMS)',
                     'items'   => [
                         ['type' => 'CheckBox', 'name' => 'EnableSurplusCharging', 'caption' => 'Aktivieren'],
-                        ['type' => 'NumberSpinner', 'name' => 'IntervalFast', 'caption' => 'Regelintervall (s)'],
-                        ['type' => 'NumberSpinner', 'name' => 'StorageSharePercent', 'caption' => 'Speicheranteil vom Überschuss (%)'],
-                        ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'digits' => 1, 'caption' => 'Speicherkapazität (kWh, 0 = unbekannt)'],
-                        ['type' => 'SelectInstance', 'name' => 'SurplusMeterID', 'caption' => 'Netzzähler erzwingen (leer = automatisch über MeterHub-Vertrag)'],
+                        ['type' => 'Label', 'caption' => 'Nur wirksam, wenn oben „Wer regelt?" auf „Niemand" steht UND kein aktives EMS installiert ist UND ein MeterHub-Zähler am Netzanschlusspunkt einen Echtzeit-Wert liefert. Ist EMS aktiv, hat es immer Vorrang — diese Option greift dann automatisch nicht. Sichtbarer Status erscheint als Variable „Überschussladen" (`surplus_status`), sobald diese Option angehakt ist.'],
+                        ['type' => 'NumberSpinner', 'name' => 'IntervalFast', 'caption' => 'Regelintervall (s, Fallback/Watchdog)', 'minimum' => 5, 'maximum' => 300, 'suffix' => 's'],
+                        ['type' => 'Label', 'caption' => 'Die Regelung rechnet primär EREIGNISGETRIEBEN neu, sobald die Wallbox eine frische Messung (MeterValues) meldet — dieser Timer ist nur der Fallback, falls mal keine Meldung kommt.'],
+                        ['type' => 'NumberSpinner', 'name' => 'StorageSharePercent', 'caption' => 'Anteil für Speicher (%)', 'minimum' => 0, 'maximum' => 100, 'suffix' => '%'],
+                        ['type' => 'Label', 'caption' => 'Dieser Anteil des Überschusses bleibt dem Speicher vorbehalten und wird von der Ampere-Berechnung fürs Laden abgezogen. 0 % = kompletter Überschuss geht in die Wallbox, 100 % = nichts geht in die Wallbox.'],
+                        ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'caption' => 'Speicherkapazität (kWh, 0 = kein Speicher/unbekannt)', 'minimum' => 0, 'maximum' => 200, 'digits' => 1, 'suffix' => 'kWh'],
+                        ['type' => 'Label', 'caption' => 'Aktuell nur informativ hinterlegt — die darauf aufbauende Phasenumschalt-Wartezeit (wie bei ChargerHub) ist bei OCPPHub noch nicht umgesetzt (Phasenumschaltung ist Stufe-2-Thema).'],
+                        ['type' => 'SelectInstance', 'name' => 'SurplusMeterID', 'caption' => 'Netzzähler erzwingen (leer = automatisch über MeterHub-Vertrag)', 'moduleID' => self::METERHUB_GUID],
                     ],
                 ],
+            ],
+            'actions' => [
+                ['type' => 'Button', 'caption' => '🔄 Übernehmen erzwingen (ohne Formularänderung)', 'onClick' => "IPS_ApplyChanges(\$id); echo '✅ ApplyChanges() ausgeführt.';"],
             ],
             'status' => [
                 ['code' => 102, 'icon' => 'active', 'caption' => 'Aktiv'],
                 ['code' => 104, 'icon' => 'inactive', 'caption' => 'Charge-Point-Identity fehlt'],
             ],
-        ]);
+        ];
+
+        if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
+            $form['elements'][] = [
+                'type'  => 'RowLayout',
+                'name'  => 'ReviewHint',
+                'items' => [
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub.'],
+                    ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUBL_DismissReviewHint($id);'],
+                ],
+            ];
+        }
+
+        return json_encode($form);
+    }
+
+    public function DismissReviewHint(): void
+    {
+        $this->WriteAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, true);
+        $this->UpdateFormField('ReviewHint', 'visible', false);
     }
 
     private function CreateProfiles(): void

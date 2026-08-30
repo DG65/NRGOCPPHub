@@ -17,6 +17,10 @@
 class OCPPHubKonfigurator extends IPSModule
 {
     private const LADEPUNKT_GUID = '{27A1625F-A006-4945-8A36-FFBAA38A5FB5}';
+
+    // Bei jedem Versions-Bump in library.json auch hier nachziehen
+    // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
+    private const VERSION = '0.1.7';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
 
     public function Create()
@@ -74,9 +78,10 @@ class OCPPHubKonfigurator extends IPSModule
         return json_encode([
             'elements' => [
                 [
-                    'type'    => 'ExpansionPanel',
-                    'caption' => '📖 Dokumentation & Hilfe',
-                    'items'   => [
+                    'type'     => 'ExpansionPanel',
+                    'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
+                    'expanded' => false,
+                    'items'    => [
                         ['type' => 'Label', 'caption' => 'Zeigt Wallboxen, die sich bereits mit ihrer Charge-Point-Identity beim OCPPHub-Splitter gemeldet haben, aber noch keine eigene Instanz haben.'],
                         ['type' => 'Label', 'caption' => 'Wallbox zuerst in ihrer eigenen OCPP-Konfiguration auf den Splitter-Endpunkt einstellen, dann hier „Erstellen" klicken.'],
                         ['type' => 'Label', 'caption' => 'Falls unten kein Splitter automatisch erkannt wird: rechts die passende OCPPHub-Splitter-Instanz manuell auswählen.'],

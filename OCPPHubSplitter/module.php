@@ -38,10 +38,16 @@ class OCPPHubSplitter extends IPSModule
     private const OCPP_CALLRESULT = 3;
     private const OCPP_CALLERROR  = 4;
 
+    // Bei jedem Versions-Bump in library.json auch hier nachziehen
+    // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
+    private const VERSION = '0.1.7';
+    private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+
     public function Create()
     {
         parent::Create();
 
+        $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
         $this->RegisterPropertyBoolean('Active', true);
         // Basic-Auth optional (leerer Nutzername = kein Schutz). Zugangsdaten-
         // Konvention (Verbund-Regel 7): Passwort nur als Formular-Eingabe
@@ -138,8 +144,19 @@ class OCPPHubSplitter extends IPSModule
 
     public function GetConfigurationForm()
     {
-        return json_encode([
+        $form = [
             'elements' => [
+                [
+                    'type'     => 'ExpansionPanel',
+                    'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
+                    'expanded' => false,
+                    'items'    => [
+                        ['type' => 'Label', 'caption' => 'Der Splitter ist das Central System: Wallboxen verbinden sich per WebSocket (OCPP 1.6J) hierher. Diese Instanz selbst zeigt keine einzelne Wallbox — dafür je eine „OCPPHub Ladepunkt"-Instanz anlegen (am einfachsten über „OCPPHub Konfigurator", der bereits verbundene, noch nicht angelegte Wallboxen anzeigt).'],
+                        ['type' => 'Label', 'caption' => '🔌 In der OCPP-Konfiguration der Wallbox als Backend-URL eintragen: ' . $this->hookPath() . '/<Charge-Point-Identity> — <Charge-Point-Identity> ist ein frei wählbarer Name, den die Wallbox selbst mitschickt (z. B. „WB1"), muss NICHT vorher hier angelegt werden.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Stufe 1 (aktueller Stand): Kernprotokoll (Boot/Heartbeat/Status/Start/Stop/MeterValues) + eigenständiges PV-Überschussladen. Noch KEIN RFID-Zwang — jede Karte/jedes Anstecken wird angenommen. Kundenverwaltung, Tarife, Reservierung folgen in einer späteren Version.'],
+                        ['type' => 'Label', 'caption' => '⚠️ Ungetestet gegen die meisten OCPP-1.6J-Wallboxen außer go-e — bei anderen Herstellern bitte Rückmeldung über GitHub geben, falls etwas nicht passt (Measurand-Namen/Einheiten in MeterValues, ChargingRateUnit bei SetChargingProfile).'],
+                    ],
+                ],
                 [
                     'type'    => 'CheckBox',
                     'name'    => 'Active',
@@ -153,6 +170,7 @@ class OCPPHubSplitter extends IPSModule
                     'type'    => 'ExpansionPanel',
                     'caption' => '🔐 Basic-Auth (optional)',
                     'items'   => [
+                        ['type' => 'Label', 'caption' => 'Nur nötig, falls Symcon aus einem nicht vollständig vertrauenswürdigen Netz erreichbar ist. Leerer Benutzername = kein Basic-Auth, jede Wallbox darf sich verbinden. Zugangsdaten-Konvention (Verbund-Regel 7): das Passwort wird nach der Übernahme sofort gehasht gespeichert und dieses Feld hier automatisch geleert — beim erneuten Öffnen steht hier also nie das bestehende Passwort.'],
                         [
                             'type'    => 'ValidationTextBox',
                             'name'    => 'BasicAuthUsername',
@@ -166,11 +184,35 @@ class OCPPHubSplitter extends IPSModule
                     ],
                 ],
             ],
+            'actions' => [
+                ['type' => 'Button', 'caption' => '🔄 Übernehmen erzwingen (ohne Formularänderung)', 'onClick' => "IPS_ApplyChanges(\$id); echo '✅ ApplyChanges() ausgeführt.';"],
+            ],
             'status' => [
                 ['code' => 102, 'icon' => 'active', 'caption' => 'Aktiv'],
                 ['code' => 104, 'icon' => 'inactive', 'caption' => 'Deaktiviert'],
             ],
-        ]);
+        ];
+
+        // GitHub-Rückmeldungshinweis (Verbund-Konvention, noch kein
+        // Forum-Beitrag online), einmalig ausblendbar.
+        if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
+            $form['elements'][] = [
+                'type'  => 'RowLayout',
+                'name'  => 'ReviewHint',
+                'items' => [
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub.'],
+                    ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUB_DismissReviewHint($id);'],
+                ],
+            ];
+        }
+
+        return json_encode($form);
+    }
+
+    public function DismissReviewHint(): void
+    {
+        $this->WriteAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, true);
+        $this->UpdateFormField('ReviewHint', 'visible', false);
     }
 
     private function hookPath(): string
