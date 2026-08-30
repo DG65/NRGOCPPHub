@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 (30.08.2026)
+
+**Splitter 0.2.3**: Dietmar wollte den idTag einer aufgelegten Karte nachschlagen,
+fand aber das Debug-Fenster schon wieder geschlossen — `SendDebug()`-Ausgaben sind
+nur live sichtbar, solange das Debug-Fenster offen ist, und danach unwiederbringlich
+weg. Fix: `checkIdTag()` schreibt jede Kartenauflage (Authorize/StartTransaction)
+zusätzlich dauerhaft ins Symcon-Systemlog (`IPS_LogMessage`) — idTag + Ergebnis
+(Accepted/Blocked/…) bleiben damit auch nachträglich nachschlagbar, z. B. um eine neue
+Karte in der Abrechnung-Instanz anzulegen.
+
 ## 0.2.9 (30.08.2026)
 
 **Splitter 0.2.2**: Betriebsart-Auswahlfeld war zu schmal, die Auswahltexte

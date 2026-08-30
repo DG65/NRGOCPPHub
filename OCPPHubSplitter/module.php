@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.2';
+    private const VERSION = '0.2.3';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.1';
+    private const NEWS_VERSION = '0.2.3';
     private const NEWS_ITEMS = [
+        'Jede Kartenauflage (Authorize) wird jetzt zusätzlich ins dauerhafte Symcon-Systemlog geschrieben — vorher nur per SendDebug sichtbar, also unwiederbringlich weg, sobald das Debug-Fenster geschlossen war. Praktisch z. B. um den idTag einer neuen Karte nachträglich fürs Anlegen in der Abrechnung-Instanz nachzuschlagen.',
         'Kritischer Fix: jede MeterValues-Nachricht (Leistung/Energie/SoC) ließ den Splitter mit einem Fatal Error abstürzen — dadurch kamen power/energy_total NIE an, unabhängig von der Wallbox. Ursache: json_decode() ohne Assoziativ-Modus bei verschachtelten OCPP-Nachrichten. Betraf jede Wallbox, live an WB2 gefunden.',
         'Stufe 2: neues Betriebsart-Auswahlfeld (① Einzelnutzer / ② Mehrere Nutzer). Bei ② wird jede Kartenauflage zentral gegen die neue „OCPPHub Abrechnung"-Instanz geprüft (Kunden, Zugänge, Verbrauchslimits) — die legt sich automatisch selbst an.',
         'Reservierung (ReserveNow/CancelReservation) hinzugekommen, unabhängig von der Betriebsart nutzbar — Backend-Funktionen liegen am Ladepunkt (OHUBL_Reserve/CancelReservation).',
@@ -555,7 +556,19 @@ class OCPPHubSplitter extends IPSModule
     // Zentrale Prüfung, verwendet sowohl bei Authorize als auch bei
     // StartTransaction (manche Wallboxen überspringen Authorize.req und
     // verlassen sich allein auf das idTagInfo in StartTransaction.conf).
+    // Schreibt jede Kartenauflage ins dauerhafte Symcon-Systemlog (nicht nur
+    // SendDebug, das nur bei geöffnetem Debug-Fenster live sichtbar und
+    // danach unwiederbringlich weg ist) — damit ein idTag auch nachträglich
+    // im Log nachschlagbar ist, z. B. um eine neue Karte in der Abrechnung-
+    // Instanz anzulegen.
     private function checkIdTag(string $cpid, string $idTag): string
+    {
+        $status = $this->checkIdTagInternal($cpid, $idTag);
+        IPS_LogMessage('OCPPHub', 'Authorize [' . $cpid . ']: idTag="' . $idTag . '" -> ' . $status);
+        return $status;
+    }
+
+    private function checkIdTagInternal(string $cpid, string $idTag): string
     {
         $ladepunktId = $this->findLadepunkt($cpid);
 
