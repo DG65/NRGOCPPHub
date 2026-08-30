@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.6 (30.08.2026)
+
+Fix (Dietmar hinterfragte zu Recht, ob das Überschussladen so funktionieren kann —
+ChargerHub-Gegenprüfung am echten Code bestätigte einen sicherheitsrelevanten Fehler):
+
+- **Frische-Problem behoben**: die eigene Ladeleistung (`power`) kam bisher nur
+  asynchron rein (Wallbox-eigenes MeterValues-Intervall, bislang faktisch bis zu
+  mehreren Minuten), die Überschussregelung rechnete damit mit veralteten/fehlenden
+  Werten — reproduziert die Selbstregelschwingung, die die Rückaddierung eigentlich
+  verhindern soll. Jetzt: Splitter fordert nach BootNotification per
+  `ChangeConfiguration` ein kurzes `MeterValueSampleInterval` (10s) an, Ladepunkt
+  regelt zusätzlich ereignisgetrieben bei jedem MeterValues nach (Timer bleibt nur
+  Fallback), und setzt bei zu alten Messwerten (>30s) aus statt zu raten.
+- **Phasenzahl-Default korrigiert**: `1` → `3` (sicherheitsrelevant — ein zu niedrig
+  angenommener Wert hätte zu Netzbezug führen können).
+- NaN/Inf-Wache bei MeterValues-Verarbeitung ergänzt.
+
+Details/Begründung: `.docs/architektur.md` „Gegenprüfung mit ChargerHub am echten
+Code". Noch offen (vermerkt, nicht sicherheitskritisch): Request/Response-Korrelation
+für SetChargingProfile, feineres 1-A-Totband, Cross-Hub-Konkurrenzprüfung mit
+ChargerHub.
+
 ## 0.1.5 (30.08.2026)
 
 Fix (Dashboard-Fund, während sie die Steuerungs-UI bauen): `OHUB_GetFunctions()`

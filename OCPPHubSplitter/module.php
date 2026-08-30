@@ -352,6 +352,14 @@ class OCPPHubSplitter extends IPSModule
         }
 
         $this->sendRaw($cpid, [self::OCPP_CALLRESULT, $uniqueId, $response]);
+
+        if ($action === 'BootNotification') {
+            // ERST die BootNotification.conf raus (oben), DANACH die
+            // ChangeConfiguration-Aufrufe — nicht umgekehrt, manche
+            // Wallbox-Firmware (u. a. Testgerät go-e) erwartet die Antwort
+            // auf ihren eigenen Aufruf vor weiteren CALLs vom Central System.
+            $this->requestFastMeterValues($cpid);
+        }
     }
 
     private function onBootNotification(string $cpid, array $payload): array
@@ -368,12 +376,7 @@ class OCPPHubSplitter extends IPSModule
         return [
             'status'      => 'Accepted',
             'currentTime' => gmdate('Y-m-d\TH:i:s\Z'),
-            // MeterValues-Intervall — Lehre aus der Recherche zum offiziellen
-            // Symcon-Modul: ohne aktives Hochsetzen "Datenausbeute gering".
-            // Stufe 1 setzt hier fest 300s, ein ChangeConfiguration-Aufruf
-            // beim Boot auf 10-30s (Regelbetrieb) folgt in einer späteren
-            // Stufe.
-            'interval' => 300,
+            'interval'    => 300, // Heartbeat-Intervall (s), NICHT MeterValues.
         ];
     }
 
@@ -528,6 +531,23 @@ class OCPPHubSplitter extends IPSModule
     private function sendCall(string $cpid, string $action, array $payload): void
     {
         $this->sendRaw($cpid, [self::OCPP_CALL, uniqid('ohub_', true), $action, $payload]);
+    }
+
+    // Erzwingt kurze MeterValues-Intervalle (ChargerHub-Empfehlung
+    // 30.08.2026, nach Prüfung des Live-Tests): ohne das kommt die eigene
+    // Ladeleistung nur selten rein — die Überschussregelung in
+    // OCPPHubLadepunkt::Update() rechnet dann mit veralteten Werten (siehe
+    // dortige „Frische-Wache") bzw. setzt aus. MeterValuesSampledData wird
+    // zusätzlich explizit gesetzt (Lehre aus der Recherche zum offiziellen
+    // Symcon-Modul: „Datenausbeute gering", u. a. weil MeterValues nur bei
+    // Statuswechsel/vollen kWh kam). Antworten (CALLRESULT/CALLERROR)
+    // werden aktuell nur geloggt (siehe handleCall) — falls eine Wallbox
+    // einen Konfigurationsschlüssel ablehnt, bleibt das vorerst nur im
+    // Debug sichtbar, keine automatische Fallback-Logik in Stufe 1.
+    private function requestFastMeterValues(string $cpid): void
+    {
+        $this->sendCall($cpid, 'ChangeConfiguration', ['key' => 'MeterValueSampleInterval', 'value' => '10']);
+        $this->sendCall($cpid, 'ChangeConfiguration', ['key' => 'MeterValuesSampledData', 'value' => 'Power.Active.Import,Energy.Active.Import.Register']);
     }
 
     private function sendRaw(string $cpid, array $frame): void

@@ -177,6 +177,44 @@ transportunabhängig formuliert und braucht nur zwei Stellglieder (`ctl_enable`,
   etwaige Kompensation (Gebühr erlassen o. ä.) ist eine spätere geschäftliche
   Entscheidung, kein Architekturthema.
 
+### Gegenprüfung mit ChargerHub am echten Code (Live-Test-Fund, 30.08.2026)
+
+Dietmar hinterfragte zu Recht, ob die reine Doku-Zusammenfassung oben zum Portieren
+reicht — Gegenprüfung mit der ChargerHub-Sitzung direkt am Code (0.9.53) ergab einen
+echten, sicherheitsrelevanten Fehler plus mehrere Feinheiten, die in der
+Zusammenfassung fehlten:
+
+- **Frische-Problem (der eigentliche Fund, jetzt gefixt)**: Bei ChargerHub kommt
+  `power` aus einem SYNCHRONEN Modbus-Poll innerhalb desselben `Update()`-Zyklus, der
+  auch die Überschussrechnung aufruft — immer frisch. Bei OCPPHub kommt `power`
+  dagegen nur asynchron rein, wenn die Wallbox von sich aus eine MeterValues-Nachricht
+  schickt. Mit dem ursprünglichen `interval: 300` (fälschlich als MeterValues-Intervall
+  verstanden, tatsächlich das Heartbeat-Intervall) und ohne `ChangeConfiguration` hätte
+  die Überschussschleife bis zu mehrere Minuten mit veralteter/fehlender eigener
+  Ladeleistung gerechnet — reproduziert exakt die Selbstregelschwingung, die die
+  Rückaddierung eigentlich verhindern soll, nur mit der Meldeverzögerung der Wallbox
+  als Periode statt dem Regelintervall. Behoben (Splitter `requestFastMeterValues()`
+  nach BootNotification, Ladepunkt `LastMeterValuesAt`-Frische-Wache in `Update()`,
+  ereignisgetriebene Neuberechnung bei jedem MeterValues statt rein zeitgesteuert,
+  Timer bleibt Fallback/Watchdog).
+- **Phasenzahl-Default korrigiert**: war `1`, jetzt `3` — ChargerHub-Konvention „aus
+  `ctl_phase_mode`, wenn vorhanden, sonst 3 annehmen". Sicherheitsrelevant: wird real
+  3-phasig geladen und mit 1 gerechnet, kommt ein zu hohes Stromlimit raus →
+  Netzbezug. Der umgekehrte Fehler lädt nur konservativer, nie mit Netzbezug.
+  `ctl_phase_mode` selbst bleibt Stufe-2-TODO (Phasenumschaltung).
+- **NaN/Inf-Wache ergänzt** bei `UpdateMeterValues()` — ChargerHub verwirft
+  NaN/Inf-Werte grundsätzlich (dort: Modbus-Füllwerte), bei uns relevant für kaputte
+  MeterValues-Payloads.
+- **Noch NICHT umgesetzt, vermerkt für später** (siehe „Vermerkte, noch nicht
+  vertiefte Punkte"): 1-A-Totband mit Float-Marge vor dem Runden (aktuell nur
+  Integer-Vergleich nach dem Cast, eine gröbere Näherung), `floor()` statt Runden ist
+  durch den bestehenden `(int)`-Cast bei positiven Werten bereits gegeben, ausstehende
+  `SetChargingProfile.conf` abwarten statt bei jedem Zyklus neu zu senden (aktuell nur
+  Werteänderung als Schutz vor Spam, keine echte Request/Response-Korrelation),
+  Beobachtungszähler-Semantik für die künftige Phasenumschaltung, Cross-Hub-
+  Konkurrenzprüfung ChargerHub↔OCPPHub über die `GetFunctions`-Verträge (ChargerHub
+  hat angeboten, das spiegelbildlich mitzubauen, sobald wir soweit sind).
+
 ### Splitter-interne Lastverteilung (mehrere eigene Ladepunkte gleichzeitig)
 
 Vertiefung 30.08.2026 (Dietmar): bisher ist `SurplusChargeControl()` pro Ladepunkt
@@ -514,6 +552,19 @@ Splitter-ID aus ihrer Discovery-Hilfsfunktion.
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils
 betroffenen Umsetzung nachziehen:
 
+- **SetChargingProfile-Korrelation**: ausstehende `.conf`-Antwort abwarten statt bei
+  jedem Regelzyklus erneut zu senden (ChargerHub-Empfehlung, siehe „Gegenprüfung mit
+  ChargerHub am echten Code"). Aktuell nur durch „nur bei Werteänderung senden"
+  behelfsmäßig entschärft, keine echte Request/Response-Korrelationstabelle.
+- **1-A-Totband mit Float-Marge**: aktuell nur Integer-Vergleich nach dem `(int)`-Cast
+  auf `ctl_curr_limit` — eine gröbere Näherung an ChargerHubs echtes Totband
+  (Vergleich vor dem Runden), kann bei Werten nahe einer Ganzzahlgrenze theoretisch
+  öfter senden als nötig.
+- **Cross-Hub-Konkurrenzprüfung ChargerHub↔OCPPHub**: beide Module sollten sich bei
+  Überschussladen gegenseitig als Konkurrenz sehen (gleiche Wallbox ggf. doppelt
+  angebunden, oder zwei Wallboxen an zwei Hubs), über die `GetFunctions`-Verträge
+  gelöst statt über modul-eigene Instanzlisten. ChargerHub hat angeboten, das
+  spiegelbildlich mitzubauen, sobald wir soweit sind — noch nicht angestoßen.
 - **Backup/Export der Abrechnungsdaten**: Kunden-/Transaktionsdaten sind jetzt
   steuerrelevant (Dienstwagen-Nachweis). CSV-Export existiert als Berichtsformat, aber
   keine Aussage, ob Symcons eigenes Backup ausreicht oder ein eigener periodischer

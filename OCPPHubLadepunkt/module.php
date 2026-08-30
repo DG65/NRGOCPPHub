@@ -23,6 +23,12 @@ class OCPPHubLadepunkt extends IPSModule
 
     private const MIN_CURRENT_HARD = 6; // A — kleinster IEC-61851-Ladestrom
 
+    // Frische-Wache Überschussladen (ChargerHub-Empfehlung 30.08.2026): ist
+    // die letzte MeterValues-Meldung älter, wird nicht mehr geregelt. Passt
+    // zum angestrebten MeterValueSampleInterval von 10s (siehe Splitter
+    // onBootNotification/ChangeConfiguration) mit reichlich Marge.
+    private const MAX_METER_VALUES_AGE_SECONDS = 30;
+
     private const MANAGEDBY_ALL = ['none', 'ems', 'goe-controller', 'tibber', 'p14a', 'marketer', 'other'];
     private const MANAGEDBY_LABELS = [
         'none'           => 'Niemand — frei / manuell (Standard)',
@@ -72,6 +78,9 @@ class OCPPHubLadepunkt extends IPSModule
 
         $this->RegisterAttributeInteger('LastTransactionId', 0);
         $this->RegisterAttributeInteger('MeterStartWh', 0);
+        // Frische-Wache fürs Überschussladen (ChargerHub-Empfehlung
+        // 30.08.2026) — siehe UpdateMeterValues()/Update().
+        $this->RegisterAttributeInteger('LastMeterValuesAt', 0);
         // Tages-Override „heute Vollladen trotz PV-Vorrang" (Backend-Funktion
         // für Dashboard, siehe OHUB_SetDailyOverride am Splitter). Reset auf
         // "aus" übernimmt OCPPHub SELBST anhand von DailyOverrideDate (siehe
@@ -303,8 +312,22 @@ class OCPPHubLadepunkt extends IPSModule
 
     public function UpdateMeterValues(?float $powerW, ?float $energyWh): void
     {
+        // NaN/Inf-Wache (ChargerHub-Empfehlung 30.08.2026, dort für Modbus-
+        // Füllwerte, bei uns für kaputte MeterValues-Payloads relevant).
+        if ($powerW !== null && !is_finite($powerW)) {
+            $powerW = null;
+        }
+        if ($energyWh !== null && !is_finite($energyWh)) {
+            $energyWh = null;
+        }
+
         if ($powerW !== null) {
             $this->SetValue('power', $powerW);
+            // Zeitstempel für die Frische-Wache in Update() — ChargerHub-
+            // Empfehlung: eigene Ladeleistung nur nutzen, wenn sie nicht zu
+            // alt ist (bei uns der Normalfall bei Verbindungsproblemen,
+            // anders als bei ChargerHubs synchronem Modbus-Poll).
+            $this->WriteAttributeInteger('LastMeterValuesAt', time());
         }
         if ($energyWh !== null) {
             $this->SetValue('energy_total', $energyWh / 1000.0);
@@ -312,6 +335,13 @@ class OCPPHubLadepunkt extends IPSModule
             if ($meterStart > 0 && $energyWh > $meterStart) {
                 $this->SetValue('energy_session', ($energyWh - $meterStart) / 1000.0);
             }
+        }
+
+        // Ereignisgetrieben nachregeln (ChargerHub-Empfehlung): der Timer
+        // bleibt nur Fallback/Watchdog, die eigentliche Reaktion auf frische
+        // Messwerte soll nicht auf den nächsten Timer-Tick warten.
+        if ($powerW !== null) {
+            $this->Update();
         }
     }
 
@@ -436,6 +466,21 @@ class OCPPHubLadepunkt extends IPSModule
             return;
         }
 
+        // Frische-Wache (ChargerHub-Empfehlung 30.08.2026): bei ChargerHub
+        // kommt die eigene Ladeleistung synchron aus demselben Poll-Zyklus,
+        // ist also immer frisch. Bei OCPPHub kommt sie asynchron per
+        // MeterValues von der Wallbox — bei Verbindungsproblemen der
+        // Normalfall, dass sie fehlt/veraltet. Lieber NICHT regeln als mit
+        // einem stalen Wert rechnen (das reproduziert sonst genau die
+        // Selbstregelschwingung, die die Rückaddierung eigentlich verhindern
+        // soll, nur mit der Meldeverzögerung der Wallbox als Periode statt
+        // dem Regelintervall).
+        $lastMeterValuesAt = $this->ReadAttributeInteger('LastMeterValuesAt');
+        if ($lastMeterValuesAt === 0 || (time() - $lastMeterValuesAt) > self::MAX_METER_VALUES_AGE_SECONDS) {
+            $this->SetValue('surplus_status', 'Messwerte veraltet — Regelung ausgesetzt');
+            return;
+        }
+
         $surplusW = $this->FindGridSurplusW();
         if ($surplusW === null) {
             $this->SetValue('surplus_status', 'Kein Netzzähler gefunden (MeterHub-Vertrag)');
@@ -450,7 +495,14 @@ class OCPPHubLadepunkt extends IPSModule
         // (live erlitten in ChargerHub 0.9.50, siehe architektur.md).
         $surplusW += $this->GetValue('power');
 
-        $phases = 1; // Phasenumschaltung noch nicht implementiert (Stufe 2 TODO)
+        // Phasenzahl: noch nicht aus ctl_phase_mode ablesbar (Ident existiert
+        // noch nicht, Phasenumschaltung ist Stufe-2-TODO) — Default bewusst
+        // 3, NICHT 1 (ChargerHub-Empfehlung, sicherheitsrelevant): wird
+        // tatsächlich 3-phasig geladen und wir rechnen mit 1, käme ein zu
+        // hohes Stromlimit raus → Netzbezug statt Überschussladen. Der
+        // umgekehrte Fehler (3 angenommen, real 1-phasig) lädt nur
+        // konservativer, nie mit Netzbezug.
+        $phases = 3;
         $ampere = max(0, $surplusW) / (230 * $phases);
         $minCurrent = $this->ReadPropertyInteger('MinCurrent');
         $maxCurrent = $this->ReadPropertyInteger('MaxCurrent');
