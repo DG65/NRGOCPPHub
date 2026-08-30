@@ -41,7 +41,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.1';
+    private const VERSION = '0.2.2';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -228,6 +228,7 @@ class OCPPHubSplitter extends IPSModule
                     'type'    => 'Select',
                     'name'    => 'Betriebsart',
                     'caption' => 'Betriebsart',
+                    'width'   => '560px',
                     'options' => [
                         ['caption' => '① Einzelnutzer — kein RFID-Zwang, jede Karte wird angenommen', 'value' => 1],
                         ['caption' => '② Mehrere Nutzer — zentrale Autorisierung über die Abrechnung-Instanz', 'value' => 2],

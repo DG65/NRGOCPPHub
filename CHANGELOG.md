@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.9 (30.08.2026)
+
+**Splitter 0.2.2**: Betriebsart-Auswahlfeld war zu schmal, die Auswahltexte
+("② Mehrere Nutzer — zentrale Autorisierung über die Abrechnung-Instanz") wurden
+abgeschnitten. Fix: `width` auf `560px` gesetzt.
+
 ## 0.2.8 (30.08.2026)
 
 Dietmar: 450px/1800px waren noch zu breit, außerdem sollte der gerade aktive Reiter
