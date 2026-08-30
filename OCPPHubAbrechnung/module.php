@@ -17,7 +17,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.6';
+    private const VERSION = '0.2.7';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     private const NEWS_VERSION = '0.2.6';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
@@ -280,8 +280,8 @@ class OCPPHubAbrechnung extends IPSModule
     // vier WIDTH_NARROW (zusammen = WIDTH_FULL), aufgeklappt nimmt der aktive Reiter
     // WIDTH_FULL allein ein.
     private const PANEL_NAMES = ['Fahrzeuge', 'Gruppen', 'Kunden', 'Zugaenge'];
-    private const WIDTH_NARROW = '480px';
-    private const WIDTH_FULL = '1920px';
+    private const WIDTH_NARROW = '450px';
+    private const WIDTH_FULL = '1800px';
 
     private function panelWidth(string $name, string $activePanel): string
     {

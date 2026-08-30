@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7 (30.08.2026)
+
+Feinjustierung nach Dietmars Rückmeldung: `WIDTH_NARROW`/`WIDTH_FULL` von 480px/1920px
+auf 450px/1800px reduziert (480/1920 waren auf seinem Bildschirm zu breit).
+
 ## 0.2.6 (30.08.2026)
 
 Dietmar wollte beide Effekte aus 0.2.5 zusammen statt nur einen: die vier Reiter sollen
