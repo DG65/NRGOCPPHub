@@ -51,12 +51,29 @@ Vorlage, falls an anderer Stelle im Modul dieselbe Frage aufkommt.
    angelegt): Karten-/Nutzerverwaltung (idTag ↔ Name ↔ optional Fahrzeug), Tarife,
    Berichte, CSV-Export. Korrektur 30.08.2026 (Dietmar): ursprünglich als „optional"
    entworfen, das ist falsch — Abrechnung ist Kernzweck des Moduls, siehe CLAUDE.md.
-   „Obligatorisch" heißt: die Instanz/Funktion existiert immer im Modul. Das
-   **Konfigurationsformular** zeigt sie deswegen NICHT zwangsläufig an — siehe
-   „Formular-Struktur" unten: der Alleinnutzer ohne Abrechnungsbedarf sieht davon nichts,
-   bis er es aktiv aufklappt.
+   „Obligatorisch" heißt: die Instanz/Funktion existiert immer im Modul.
+   **Umsetzung Stufe 2 (30.08.2026)**: Kunden/Zugänge/Fahrzeuge/Gruppen implementiert
+   (Tarife/Berichte bleiben Stufe 3). Anders als ursprünglich geplant zeigt diese
+   Instanz ihre Felder IMMER (eigene Konsolenseite, kein einblendbares Panel im
+   Splitter-Formular — Symcon kennt kein Cross-Instance-Panel-Einblenden) — sie wirkt
+   sich aber nur aus, solange am Splitter Betriebsart ② gewählt ist, siehe
+   „Formular-Struktur".
 
 ## Formular-Struktur (Konfigurationsformular)
+
+**Umsetzung Stufe 2 (30.08.2026) — Anpassung ggü. dem ursprünglichen Entwurf unten**:
+Kundenverwaltung lebt als eigene Instanz „OCPPHub Abrechnung" (wird vom Splitter
+automatisch angelegt, siehe „Instanzmodell" Punkt 4), NICHT als eingeblendetes Panel
+innerhalb des Splitter-Formulars — Symcon hat kein Konzept für „ein anderes Formular
+blendet Panels in meinem Formular ein", jede Instanz hat ihre eigene Konsolenseite. Das
+**Betriebsart-Auswahlfeld bleibt am Splitter**, schaltet aber nur noch das VERHALTEN
+frei (Authorize prüft echt vs. immer Accepted, Limits/Reservierung wirken), nicht mehr
+Formular-Panels — die Abrechnung-Instanz existiert und zeigt ihre Felder immer,
+unabhängig von der gewählten Betriebsart (wirkt sich nur bei ② tatsächlich aus).
+Reservierung ist UNABHÄNGIG von der Betriebsart nutzbar (liegt am Ladepunkt). Der
+Rest der ursprünglichen Beschreibung (Reihenfolge Basis/Steuerung/Betriebsart,
+Herunterstufen ohne Datenverlust) gilt inhaltlich weiter, nur eben über zwei Instanzen
+statt eine verteilt.
 
 Vorgabe 30.08.2026 (Dietmar): der einfache Alleinnutzer (eine Wallbox, kein
 Karten-/Abrechnungsbedarf) darf nicht von Kundendatenbank/Tarif-Komplexität erschlagen
@@ -337,6 +354,19 @@ dazu bei Gelegenheit ansprechen, sobald Umsetzung ansteht (noch nicht dringend).
 
 ## Reservierung
 
+**Umgesetzt Stufe 2 (30.08.2026)**: `OHUBL_Reserve(string $IdTag, string $UntilIso):
+bool` / `OHUBL_CancelReservation()` am Ladepunkt (Dashboard braucht nur die Ladepunkt-
+ID, wie beim Backend-Funktionen-Muster). Splitter vergibt intern die
+`reservationId` (`OHUB_ReserveNow`/`OHUB_CancelReservation`, von Dashboard nicht direkt
+zu nutzen). **Vereinfachung ggü. dem ursprünglichen Entwurf**: `reserved_by` zeigt
+aktuell den rohen idTag, nicht den aufgelösten Kundennamen aus der Abrechnung-Instanz —
+spätere Verfeinerung möglich, ohne den Vertrag zu ändern (rein interne Darstellung).
+Durchsetzung unabhängig von der Betriebsart: `OCPPHubSplitter::checkIdTag()` prüft die
+Reservierung VOR der Betriebsart-abhängigen RFID-Autorisierung. Bekannte Lücke: eine
+abgelaufene Reservierung räumt sich nur bei der NÄCHSTEN Autorisierungsprüfung auf
+(`GetActiveReservationIdTag()`), nicht durch einen eigenen Timer — `reserved_until`
+kann bis dahin kosmetisch veraltet angezeigt bleiben.
+
 Ergänzung 30.08.2026 (Dietmar): echter OCPP-1.6-Kernbefehl (`ReserveNow`/
 `CancelReservation`), bisher nicht eingeplant. Sinnvoll bei einer gemeinsam genutzten
 Wallbox (Familie, Dienstwagen-Pool): „Ladepunkt ist ab 18 Uhr für mich reserviert."
@@ -379,9 +409,13 @@ hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT i
   Entscheidung nach Debatte ChargerHub/Tessie/Dashboard: EIN Korrelationsmechanismus im
   Verbund statt mehrerer konkurrierender. Die Zeitkorrelation beim Anstecken macht
   ausschließlich Dashboards `AssignVehicles()`. Tessie ruft Hubs NICHT direkt auf.
-  **Für Dashboard zu erledigen** (angefragt 30.08.2026): `AssignVehicles()` iteriert
-  bisher vermutlich nur über ChargerHub-Instanzen — muss OCPPHub-Ladepunkte mit
-  einsammeln.
+  **Erledigt (Dashboard, 30.08.2026, Commit f737df2)**: `AssignVehicles()` brauchte
+  keine Änderung — deren `normalizeDeviceCategory()` mappt `function==='charger'`
+  bereits quellenneutral, OCPPHub-Ladepunkte flossen also schon immer in die
+  Zeitkorrelation ein. Einzige echte Lücke war der Rücksync des ermittelten
+  Fahrzeugnamens (fest auf `CHUB_SetVehicleName()` verdrahtet) — dispatcht jetzt nach
+  `$wallbox['transport']`: `'ocpp'` → `OHUBL_SetVehicleName()`, sonst weiter
+  `CHUB_SetVehicleName()`, je hinter eigenem `function_exists()`.
 - **Auto-Löschung beim Abstecken**: `vehicle_name` wird geleert, sobald `vehicle_plugged`
   auf `false` geht — NUR bei tatsächlich erkanntem Status (nicht bei unbekanntem OCPP-
   Status-String, sonst würde ein einfach nicht verstandener Status fälschlich als „kein
@@ -420,6 +454,15 @@ hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT i
   (Stufe 2/3), nicht ein eigener Direktkanal wie ChargerHubs go-e-MQTT-Kartenzähler.
 
 ## Authentifizierung (RFID & Alternativen)
+
+**Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string
+$idTag): array` — echte Prüfung (Zugang existiert/aktiv/nicht abgelaufen/Zeitfenster,
+Kunde existiert/aktiv/nicht über Limit), aufgerufen von `checkIdTag()` im Splitter bei
+Authorize UND StartTransaction (manche Wallboxen überspringen Authorize.req). NUR
+wirksam bei Betriebsart ②, siehe „Formular-Struktur". **Vereinfachung ggü. dem
+ursprünglichen Entwurf**: Zeitfenster am Zugang nur als Uhrzeit-von-bis (kein
+Wochentags-Filter, kein Formel-Fluchtweg wie beim späteren Tarifmodell) — reicht für
+Stufe 2, kann additiv erweitert werden.
 
 Klarstellung 30.08.2026 (Dietmar): unbegrenzt viele RFIDs müssen abrechenbar sein, nicht
 nur die Handvoll, die eine einzelne Wallbox lokal speichern kann. Recherche-Ergebnis:

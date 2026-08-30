@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0 (30.08.2026)
+
+**Stufe 2** (siehe `.docs/pflichtenheft.md` „Ausbaustufen"), auf Dietmars Wunsch in
+einem Zug gebaut. **UNGETESTET** — im Gegensatz zu Stufe 1 noch nicht live verifiziert.
+
+- **Neue Instanz OCPPHub Abrechnung**: Kunden ↔ Zugänge (Karten) ↔ optional Fahrzeug,
+  optional Gruppe, Verbrauchslimits (Woche/Monat/Jahr) je Kunde UND je Gruppe. Wird vom
+  Splitter automatisch angelegt (obligatorischer Bestandteil, siehe README/architektur.md).
+- **Betriebsart-Auswahlfeld am Splitter** (① Einzelnutzer / ② Mehrere Nutzer) — bei ②
+  wird jede Kartenauflage über `OCPPHubAbrechnung::CheckAuthorization()` echt geprüft
+  (Zugang aktiv/nicht abgelaufen/Zeitfenster, Kunde aktiv/nicht über Limit), sonst wie
+  bisher immer „Accepted". Geprüft sowohl bei Authorize als auch bei StartTransaction.
+- **idTag-Direktzuordnung**: bei erfolgreicher Autorisierung mit bekanntem Fahrzeug wird
+  `vehicle_name` sofort gesetzt (Vorrang vor Dashboards Zeitkorrelation, wie mit
+  ChargerHub/Dashboard abgestimmt).
+- **Reservierung**: `OHUBL_Reserve()`/`OHUBL_CancelReservation()` am Ladepunkt, neue
+  Variablen `reserved_by`/`reserved_until`. Wirkt unabhängig von der Betriebsart — eine
+  aktive Reservierung blockiert jede Kartenauflage mit abweichendem idTag.
+- Verbrauch je abgeschlossener Transaktion wird bei Betriebsart ② dem Kunden gutgeschrieben
+  (`OHUBA_RecordConsumption`) — Grundlage für die Limit-Prüfung.
+
+Bewusst noch nicht enthalten (Stufe 3): Tarife/Kostenberechnung, Berichte/CSV-Export,
+Reservierungsgebühr. Bekannte Vereinfachungen: `reserved_by` zeigt den rohen idTag statt
+des Kundennamens; abgelaufene Reservierungen räumen sich erst bei der nächsten
+Autorisierungsprüfung auf, nicht per eigenem Timer.
+
 ## 0.1.10 (30.08.2026)
 
 Fahrzeug-Zuordnung und SOC nach Rücksprache mit ChargerHub 1:1 nachgebaut (Dietmars

@@ -33,6 +33,7 @@ class OCPPHubSplitter extends IPSModule
     private const WEBHOOK_CONTROL_GUID = '{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}';
 
     private const LADEPUNKT_GUID = '{27A1625F-A006-4945-8A36-FFBAA38A5FB5}';
+    private const ABRECHNUNG_GUID = '{64980198-6B36-45D5-A84F-A0EAE9CCC63A}';
 
     private const OCPP_CALL       = 2;
     private const OCPP_CALLRESULT = 3;
@@ -40,19 +41,17 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.10';
+    private const VERSION = '0.2.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.10';
+    private const NEWS_VERSION = '0.2.0';
     private const NEWS_ITEMS = [
-        'MeterValues erkennt jetzt zusätzlich den OCPP-Measurand „SoC" (Fahrzeug-Ladestand), falls die Wallbox ihn überträgt — landet in der neuen vehicle_soc-Variable am Ladepunkt.',
-        'Wichtiger Fix: die Zuordnung Ladepunkt↔Splitter lief bisher über die Objektbaum-Position (Symcons Kategorie-Struktur in der Konsole) — verschiebt man eine Ladepunkt-Instanz dort in eine andere Kategorie, fand der Splitter sie nicht mehr (weder für Steuerbefehle noch für den Dashboard-Vertrag). Jetzt eine explizite Pflicht-Zuordnung je Ladepunkt-Instanz, unabhängig von der Konsolen-Organisation. Bereits angelegte Ladepunkt-Instanzen bitte einmal öffnen und „OCPPHub-Splitter" nachtragen.',
-        'Erste installierbare Fassung: OCPP-1.6J-Kernprotokoll läuft (BootNotification, Heartbeat, StatusNotification, Authorize — noch immer „Accepted", StartTransaction, StopTransaction, MeterValues).',
-        'Nach jedem Verbindungsaufbau wird das MeterValues-Intervall der Wallbox automatisch auf 10s verkürzt (ChangeConfiguration) — sonst rechnet das Überschussladen an der Ladepunkt-Instanz mit veralteten Werten.',
-        'Noch kein RFID-Zwang, keine Kundenverwaltung, keine Tarife/Reservierung — kommt in einer späteren Version.',
+        'Stufe 2: neues Betriebsart-Auswahlfeld (① Einzelnutzer / ② Mehrere Nutzer). Bei ② wird jede Kartenauflage zentral gegen die neue „OCPPHub Abrechnung"-Instanz geprüft (Kunden, Zugänge, Verbrauchslimits) — die legt sich automatisch selbst an.',
+        'Reservierung (ReserveNow/CancelReservation) hinzugekommen, unabhängig von der Betriebsart nutzbar — Backend-Funktionen liegen am Ladepunkt (OHUBL_Reserve/CancelReservation).',
+        'idTag-Direktzuordnung: ist eine Karte bereits einem Fahrzeug zugeordnet, wird der Fahrzeugname bei Betriebsart ② jetzt sofort gesetzt, ohne auf Dashboards Zeitkorrelation zu warten.',
     ];
 
     public function Create()
@@ -62,6 +61,15 @@ class OCPPHubSplitter extends IPSModule
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterPropertyBoolean('Active', true);
+        // Betriebsart (Stufe 2, siehe .docs/architektur.md „Formular-Struktur"):
+        // 1 = Einzelnutzer (Default, kein RFID-Zwang), 2 = Mehrere Nutzer
+        // (zentrale Autorisierung über die Abrechnung-Instanz). Ersetzt die
+        // ursprünglich als Splitter-Formular-Panels geplanten Einzelschalter
+        // — die Kundenverwaltung selbst lebt als eigene Instanz (siehe
+        // ensureAbrechnung()), diese Property schaltet nur das VERHALTEN
+        // (Authorize/Limits/Reservierung) frei, keine Formular-Panels.
+        $this->RegisterPropertyInteger('Betriebsart', 1);
+        $this->RegisterAttributeInteger('AbrechnungID', 0);
         // Basic-Auth optional (leerer Nutzername = kein Schutz). Zugangsdaten-
         // Konvention (Verbund-Regel 7): Passwort nur als Formular-Eingabe
         // (Property), nach Übernahme gehasht ins Attribut, Property geleert.
@@ -72,6 +80,10 @@ class OCPPHubSplitter extends IPSModule
         // Fortlaufende OCPP-TransactionId je Splitter (nicht je Ladepunkt —
         // OCPP verlangt nur Eindeutigkeit, keine Ladepunkt-Bindung).
         $this->RegisterAttributeInteger('NextTransactionId', 1);
+        // OCPP verlangt beim Abbrechen einer Reservierung dieselbe
+        // reservationId, mit der sie angelegt wurde — siehe ReserveNow()/
+        // CancelReservation().
+        $this->RegisterAttributeInteger('NextReservationId', 1);
 
         // Zuletzt gesehene, noch nicht als Ladepunkt-Instanz angelegte
         // Charge-Point-Identities — vom Konfigurator gelesen.
@@ -116,6 +128,11 @@ class OCPPHubSplitter extends IPSModule
         // symcon/SymconMisc/libs/WebHookModule.php).
         if (IPS_GetKernelRunlevel() === KR_READY) {
             $this->RegisterHook($this->hookPath());
+            // Abrechnung-Instanz ist "obligatorischer" Bestandteil (siehe
+            // .docs/architektur.md „Instanzmodell") — existiert unabhängig
+            // von der gewählten Betriebsart, nur im Kernel-Ready-Zustand
+            // anlegen (IPS_CreateInstance() sonst evtl. noch nicht sicher).
+            $this->ensureAbrechnung();
         }
 
         $this->SetStatus($this->ReadPropertyBoolean('Active') ? 102 : 104);
@@ -124,6 +141,26 @@ class OCPPHubSplitter extends IPSModule
             @IPS_SetProperty($this->InstanceID, 'BasicAuthPassword', '');
             @IPS_ApplyChanges($this->InstanceID);
         }
+    }
+
+    // Legt bei Erstanlage eine OCPPHub-Abrechnung-Instanz an, falls noch
+    // keine (gültige) referenziert ist — "obligatorischer" Bestandteil,
+    // siehe .docs/architektur.md. Nur EINE je Splitter.
+    private function ensureAbrechnung(): int
+    {
+        $existing = $this->ReadAttributeInteger('AbrechnungID');
+        if ($existing > 0 && @IPS_InstanceExists($existing)) {
+            return $existing;
+        }
+        $newId = @IPS_CreateInstance(self::ABRECHNUNG_GUID);
+        if (!$newId) {
+            return 0;
+        }
+        @IPS_SetParent($newId, $this->InstanceID);
+        @IPS_SetName($newId, IPS_GetName($this->InstanceID) . ' Abrechnung');
+        @IPS_ApplyChanges($newId);
+        $this->WriteAttributeInteger('AbrechnungID', $newId);
+        return $newId;
     }
 
     // Trägt diese Instanz als Ziel für $Hook in die "Hooks"-Property der
@@ -167,7 +204,7 @@ class OCPPHubSplitter extends IPSModule
                         ['type' => 'Label', 'caption' => 'Was diese Instanz macht: Der Splitter ist das OCPP-„Central System" — die Gegenstelle, zu der sich Wallboxen per WebSocket verbinden. Er nimmt beliebig viele gleichzeitige Wallbox-Verbindungen entgegen, unterscheidet sie anhand ihrer Charge-Point-Identity (dem letzten Pfadstück der URL) und leitet jede eingehende OCPP-Nachricht an die passende „OCPPHub Ladepunkt"-Instanz weiter. Diese Splitter-Instanz selbst zeigt keine einzelne Wallbox und keine Ladeleistung — dafür ist ausschließlich die Ladepunkt-Instanz zuständig.'],
                         ['type' => 'Label', 'caption' => '📦 Instanzmodell im Überblick: Splitter (diese Instanz, genau einmal) → mehrere „OCPPHub Ladepunkt"-Instanzen (eine je Wallbox/Connector) → optional „OCPPHub Konfigurator" (praktisch fürs Ersteinrichten, zeigt bereits verbundene, aber noch nicht angelegte Wallboxen zum Ein-Klick-Anlegen). Jede Ladepunkt-Instanz muss im eigenen Formular explizit auf DIESEN Splitter zeigen (Feld „OCPPHub-Splitter") — das ist Pflicht und wird NICHT automatisch aus der Objektbaum-Position abgeleitet, weil sich Instanzen in der Konsole frei in andere Kategorien verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
                         ['type' => 'Label', 'caption' => '🔌 Wallbox einrichten: in deren eigener OCPP-Konfiguration als Backend-/Server-URL eintragen: ' . $this->hookPath() . '/<Charge-Point-Identity>. <Charge-Point-Identity> ist ein frei wählbarer Name, den die Wallbox selbst bei jeder Nachricht mitschickt (z. B. „WB1") — er muss NICHT vorher hier angelegt werden, sondern taucht nach dem ersten Verbindungsversuch automatisch im „OCPPHub Konfigurator" auf. Subprotokoll ist „ocpp1.6", Nachrichtenformat OCPP-J (JSON über WebSocket) — kein separater Port, kein externer Prozess, Symcon übernimmt den WebSocket-Handshake komplett selbst über seinen eingebauten Hook-Mechanismus.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang Stufe 1 (aktueller Stand): vollständiges OCPP-1.6J-Kernprotokoll (BootNotification, Heartbeat, StatusNotification, Authorize, StartTransaction, StopTransaction, MeterValues) plus eigenständiges PV-Überschussladen als Fallback ohne EMS. Bewusst NOCH NICHT enthalten: RFID-Pflicht (jede Karte/jedes Anstecken wird zurzeit angenommen), Kundenverwaltung, Tarife/Abrechnung, Reservierung, Lastverteilung über mehrere eigene Ladepunkte hinweg — das kommt stufenweise in späteren Versionen (siehe `.docs/pflichtenheft.md` im Repo für den vollständigen Plan).'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang (aktueller Stand): vollständiges OCPP-1.6J-Kernprotokoll, eigenständiges PV-Überschussladen als Fallback ohne EMS, Reservierung, sowie ab Betriebsart ② zentrale RFID-Autorisierung mit Kundenverwaltung/Verbrauchslimits (siehe „OCPPHub Abrechnung"-Instanz). Bewusst NOCH NICHT enthalten: Tarife/Kostenberechnung, Berichte/CSV-Export, Reservierungsgebühr, Lastverteilung über mehrere eigene Ladepunkte hinweg — das ist Stufe 3 (siehe `.docs/pflichtenheft.md`).'],
                         ['type' => 'Label', 'caption' => '🔎 Fehlersuche: Meldet sich eine Wallbox nicht, zuerst die Debug-Ausgabe dieser Instanz aktivieren (Konsole → diese Instanz → Debug-Meldungen) und einen Verbindungsversuch der Wallbox abwarten — jede eingehende Anfrage wird dort mit Methode und Pfad protokolliert, bevor irgendetwas geprüft wird. Kommt gar nichts an: URL/Pfad an der Wallbox prüfen. Kommt etwas an, wird aber abgelehnt: meist Basic-Auth (siehe unten) oder ein noch nicht verstandenes OCPP-Detail dieser Wallbox — dann bitte über GitHub melden.'],
                         ['type' => 'Label', 'caption' => '⚠️ Ungetestet gegen die meisten OCPP-1.6J-Wallboxen außer go-e — bei anderen Herstellern bitte Rückmeldung über GitHub geben, falls etwas nicht passt (Measurand-Namen/Einheiten in MeterValues, ChargingRateUnit bei SetChargingProfile).'],
                         ['type' => 'Label', 'caption' => '• go-e Gemini/HOME+: OCPP 1.6J ab Firmware 56.1 (besser ≥56.8), Aktivierung per App, WSS + HTTP-Basic-Auth empfohlen. Referenz-/Testhardware dieses Moduls, siehe „Was ist neu" oben für den aktuellen Live-Test-Stand.'],
@@ -186,6 +223,16 @@ class OCPPHubSplitter extends IPSModule
                     'type'    => 'Label',
                     'caption' => 'WebSocket-Endpunkt für Wallboxen: ' . $this->hookPath() . '/<Charge-Point-Identity>',
                 ],
+                [
+                    'type'    => 'Select',
+                    'name'    => 'Betriebsart',
+                    'caption' => 'Betriebsart',
+                    'options' => [
+                        ['caption' => '① Einzelnutzer — kein RFID-Zwang, jede Karte wird angenommen', 'value' => 1],
+                        ['caption' => '② Mehrere Nutzer — zentrale Autorisierung über die Abrechnung-Instanz', 'value' => 2],
+                    ],
+                ],
+                ['type' => 'Label', 'caption' => 'ℹ️ Bei ① werden Kundenverwaltung/Verbrauchslimits in der „OCPPHub Abrechnung"-Instanz zwar schon angelegt (sie existiert immer), aber NICHT ausgewertet — jede Karte lädt ungeprüft. Bei ② wird jede Kartenauflage gegen die dort gepflegten Zugänge geprüft. Reservierungen (siehe Ladepunkt-Instanz) werden unabhängig von der Betriebsart durchgesetzt, sobald eine aktiv ist.'],
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => '🔐 Basic-Auth (optional)',
@@ -487,26 +534,73 @@ class OCPPHubSplitter extends IPSModule
 
     private function onAuthorize(string $cpid, array $payload): array
     {
-        // Stufe 1 (Betriebsart „Einzelnutzer"): kein RFID-Zwang, jede Karte
-        // wird angenommen. Zentrale Whitelist-Prüfung kommt mit Betriebsart
-        // ②, siehe .docs/architektur.md „Authentifizierung".
-        return ['idTagInfo' => ['status' => 'Accepted']];
+        $idTag = (string)($payload['idTag'] ?? '');
+        return ['idTagInfo' => ['status' => $this->checkIdTag($cpid, $idTag)]];
+    }
+
+    // Zentrale Prüfung, verwendet sowohl bei Authorize als auch bei
+    // StartTransaction (manche Wallboxen überspringen Authorize.req und
+    // verlassen sich allein auf das idTagInfo in StartTransaction.conf).
+    private function checkIdTag(string $cpid, string $idTag): string
+    {
+        $ladepunktId = $this->findLadepunkt($cpid);
+
+        // Reservierung: außerhalb des berechtigten idTags -> Blocked (siehe
+        // .docs/architektur.md „Reservierung"). Geht der Prüfung unten vor,
+        // auch bei Betriebsart ①, weil eine Reservierung nur sinnvoll ist,
+        // wenn sie auch durchgesetzt wird.
+        if ($ladepunktId !== 0) {
+            $reservedIdTag = OHUBL_GetActiveReservationIdTag($ladepunktId);
+            if ($reservedIdTag !== '' && $reservedIdTag !== $idTag) {
+                return 'Blocked';
+            }
+        }
+
+        // Stufe 1 / Betriebsart ① (Einzelnutzer): kein RFID-Zwang, jede
+        // Karte wird angenommen. Zentrale Whitelist-Prüfung nur bei
+        // Betriebsart ②, siehe .docs/architektur.md „Authentifizierung".
+        if ($this->ReadPropertyInteger('Betriebsart') !== 2) {
+            return 'Accepted';
+        }
+
+        $abrechnungId = $this->ensureAbrechnung();
+        if ($abrechnungId === 0) {
+            // Abrechnung-Instanz konnte nicht angelegt werden — fail-open,
+            // damit ein interner Fehler nicht sämtliches Laden blockiert
+            // (dieselbe Abwägung wie beim Offline-Fallback, siehe
+            // architektur.md „Verfügbarkeit / Offline-Verhalten").
+            return 'Accepted';
+        }
+        $result = OHUBA_CheckAuthorization($abrechnungId, $idTag);
+        $status = (string)($result['status'] ?? 'Invalid');
+
+        // idTag-Direktzuordnung (Vorrang vor Dashboards Zeitkorrelation,
+        // mit Dashboard abgestimmt, siehe architektur.md „Fahrzeug-
+        // Zuordnung & SOC") — bei erfolgreicher Autorisierung mit
+        // bekanntem Fahrzeug sofort setzen.
+        if ($status === 'Accepted' && $ladepunktId !== 0 && !empty($result['vehicleName'])) {
+            OHUBL_SetVehicleName($ladepunktId, (string)$result['vehicleName']);
+        }
+
+        return $status;
     }
 
     private function onStartTransaction(string $cpid, array $payload): array
     {
         $transactionId = $this->nextTransactionId();
+        $idTag = (string)($payload['idTag'] ?? '');
+        $status = $this->checkIdTag($cpid, $idTag);
         $ladepunktId = $this->findLadepunkt($cpid);
         if ($ladepunktId !== 0) {
             OHUBL_StartTransaction(
                 $ladepunktId,
                 $transactionId,
-                (string)($payload['idTag'] ?? ''),
+                $idTag,
                 (int)($payload['meterStart'] ?? 0)
             );
         }
         return [
-            'idTagInfo'     => ['status' => 'Accepted'],
+            'idTagInfo'     => ['status' => $status],
             'transactionId' => $transactionId,
         ];
     }
@@ -515,11 +609,26 @@ class OCPPHubSplitter extends IPSModule
     {
         $ladepunktId = $this->findLadepunkt($cpid);
         if ($ladepunktId !== 0) {
+            $meterStop = (int)($payload['meterStop'] ?? 0);
+            $meterStart = OHUBL_GetMeterStartWh($ladepunktId);
             OHUBL_StopTransaction(
                 $ladepunktId,
                 (int)($payload['transactionId'] ?? 0),
-                (int)($payload['meterStop'] ?? 0)
+                $meterStop
             );
+
+            // Verbrauch dem Kunden gutschreiben (Stufe 2, für die
+            // Limit-Prüfung in checkIdTag()/OHUBA_CheckAuthorization()).
+            // idTag ist in StopTransaction.req laut OCPP-1.6-Spezifikation
+            // OPTIONAL — falls die Wallbox es nicht mitschickt, auf den bei
+            // StartTransaction gemerkten idTag zurückfallen.
+            if ($this->ReadPropertyInteger('Betriebsart') === 2 && $meterStop > $meterStart) {
+                $idTag = (string)($payload['idTag'] ?? '') ?: OHUBL_GetLastIdTag($ladepunktId);
+                $abrechnungId = $this->ensureAbrechnung();
+                if ($idTag !== '' && $abrechnungId > 0) {
+                    OHUBA_RecordConsumption($abrechnungId, $idTag, ($meterStop - $meterStart) / 1000.0, time());
+                }
+            }
         }
         return ['idTagInfo' => ['status' => 'Accepted']];
     }
@@ -653,6 +762,35 @@ class OCPPHubSplitter extends IPSModule
                 ],
             ],
         ]);
+    }
+
+    // Reservierung (Stufe 2, siehe .docs/architektur.md „Reservierung") —
+    // aufgerufen von OCPPHubLadepunkt::Reserve()/CancelReservation(). Gibt
+    // die vergebene reservationId zurück, die der Ladepunkt für ein
+    // späteres CancelReservation() vorhält (OCPP verlangt die reservationId
+    // beim Abbrechen).
+    public function ReserveNow(string $cpid, string $idTag, string $expiryIso): int
+    {
+        $reservationId = $this->nextReservationId();
+        $this->sendCall($cpid, 'ReserveNow', [
+            'connectorId'   => 0,
+            'expiryDate'    => $expiryIso,
+            'idTag'         => $idTag,
+            'reservationId' => $reservationId,
+        ]);
+        return $reservationId;
+    }
+
+    public function CancelReservation(string $cpid, int $reservationId): void
+    {
+        $this->sendCall($cpid, 'CancelReservation', ['reservationId' => $reservationId]);
+    }
+
+    private function nextReservationId(): int
+    {
+        $id = $this->ReadAttributeInteger('NextReservationId');
+        $this->WriteAttributeInteger('NextReservationId', $id + 1);
+        return $id;
     }
 
     private function sendCall(string $cpid, string $action, array $payload): void

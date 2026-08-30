@@ -1,7 +1,7 @@
 # OCPPHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Status](https://img.shields.io/badge/Status-Stufe_1_ungetestet-orange)
+![Status](https://img.shields.io/badge/Status-Stufe_2_teilw._live_getestet-orange)
 ![Symcon Version](https://img.shields.io/badge/Symcon_Version-9.0%2B-blue)
 
 OCPP-1.6J-Central-System für IP-Symcon: Wallboxen beliebiger Hersteller verbinden sich
@@ -19,21 +19,26 @@ Regelungslogik und keine Symcon-Integration. Details und Quellen: `.docs/recherc
 
 ## Status
 
-Stufe 1 (siehe `.docs/pflichtenheft.md` „Ausbaustufen") geschrieben, **UNGETESTET** —
-weder gegen einen OCPP-Emulator noch gegen eine echte Wallbox verifiziert (nächster
-Schritt laut `.docs/architektur.md` „Test-Strategie"). Enthält:
+**Stufe 1** (siehe `.docs/pflichtenheft.md` „Ausbaustufen") ist live an Dietmars WB1
+verifiziert (30.08.2026) — Kernprotokoll und PV-Überschussladen laufen. **Stufe 2** ist
+geschrieben, aber noch **UNGETESTET**. Enthält:
 
 - **OCPPHub Splitter**: nimmt WebSocket-Verbindungen über einen Symcon-Hook entgegen
   (kein externer Daemon), Kernprotokoll (BootNotification, Heartbeat, StatusNotification,
-  Authorize — Stufe 1 immer „Accepted", StartTransaction, StopTransaction, MeterValues),
-  sendet RemoteStart/-Stop/SetChargingProfile, `OHUB_GetFunctions`-Vertrag.
+  Authorize, StartTransaction, StopTransaction, MeterValues), sendet RemoteStart/-Stop/
+  SetChargingProfile/ReserveNow/CancelReservation, `OHUB_GetFunctions`-Vertrag,
+  Betriebsart-Auswahl (① Einzelnutzer / ② Mehrere Nutzer).
 - **OCPPHub Ladepunkt**: Variablen (Ident-Vokabular wie ChargerHub), eigenständiges
-  PV-Überschussladen als EMS-loser Fallback (Logik aus ChargerHub portiert).
+  PV-Überschussladen als EMS-loser Fallback (Logik aus ChargerHub portiert und mit
+  ChargerHub gegengeprüft), Reservierung, Fahrzeug-Zuordnung (analog ChargerHub).
 - **OCPPHub Konfigurator**: listet gesehene, noch nicht angelegte Charge-Point-Identities.
+- **OCPPHub Abrechnung** *(neu, Stufe 2)*: Kunden/Zugänge (Karten)/Fahrzeuge/Gruppen mit
+  Verbrauchslimits — wird vom Splitter automatisch angelegt, wirkt sich nur bei
+  Betriebsart ② aus.
 
-Bewusst NICHT in Stufe 1: RFID-Pflicht/Kundenverwaltung/Tarife/Reservierung/
-Verbrauchslimits (Betriebsart ②/③), Phasenumschaltung, Lastverteilung über mehrere
-eigene Ladepunkte. Details/Begründung: `.docs/architektur.md`.
+Bewusst NICHT in Stufe 2: Tarife/Kostenberechnung, Berichte/CSV-Export,
+Reservierungsgebühr, Phasenumschaltung, Lastverteilung über mehrere eigene Ladepunkte —
+das ist Stufe 3. Details/Begründung: `.docs/architektur.md`.
 
 Dokumentation:
 

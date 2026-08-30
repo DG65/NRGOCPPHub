@@ -26,20 +26,16 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.10';
+    private const VERSION = '0.2.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.10';
+    private const NEWS_VERSION = '0.2.0';
     private const NEWS_ITEMS = [
-        'Fahrzeug-Zuordnung: OHUBL_SetVehicleName() als dummer Setter (analog ChargerHub), vehicle_name wird beim Abstecken automatisch geleert. Die eigentliche Zeitkorrelation macht weiterhin ausschließlich Dashboard — OCPPHub rät selbst nichts.',
-        'Neue Variable vehicle_soc: wird befüllt, falls die Wallbox den OCPP-Measurand „SoC" überträgt (nicht garantiert) — noch kein Vertragsfeld, erst nach Bestätigung an echter Hardware.',
-        'Wichtiger Fix: neues Pflichtfeld „OCPPHub-Splitter" — die Zuordnung zum Splitter lief bisher über die Objektbaum-Position und ging beim Verschieben der Instanz in eine andere Konsolen-Kategorie verloren (Steuerbefehle und Dashboard-Vertrag funktionierten dann nicht mehr, ohne sichtbare Fehlermeldung). Bitte bei bereits angelegten Instanzen einmal öffnen und den Splitter manuell auswählen.',
-        'Eigenständiges PV-Überschussladen reagiert jetzt sofort auf neue Messwerte (nicht nur per Timer) und setzt aus, wenn Messwerte älter als 30s sind, statt mit veralteten Werten weiterzurechnen.',
-        'Sicherer Phasenzahl-Default (3 statt 1) — verhindert ungewollten Netzbezug, solange die Phasenumschaltung noch nicht implementiert ist.',
-        'Neue Backend-Funktionen für Dashboard: OHUBL_ManualStart/ManualStop/SetDailyOverride (die eigentliche Bedienoberfläche baut Dashboard).',
+        'Stufe 2: Reservierung hinzugekommen — OHUBL_Reserve($idTag, $bisWann)/OHUBL_CancelReservation(), sichtbar in den neuen Variablen reserved_by/reserved_until. Eine aktive Reservierung blockiert jede Kartenauflage mit einem anderen idTag, unabhängig von der Splitter-Betriebsart.',
+        'RFID-Autorisierung/Verbrauchslimits (Betriebsart ② am Splitter) wirken sich jetzt aus — vorher wurde jede Karte unabhängig von der Kundenverwaltung angenommen.',
     ];
 
     // Frische-Wache Überschussladen (ChargerHub-Empfehlung 30.08.2026): ist
@@ -112,6 +108,15 @@ class OCPPHubLadepunkt extends IPSModule
 
         $this->RegisterAttributeInteger('LastTransactionId', 0);
         $this->RegisterAttributeInteger('MeterStartWh', 0);
+        // idTag der laufenden Transaktion — StopTransaction.req liefert
+        // idTag laut OCPP-1.6-Spezifikation nur OPTIONAL, Splitter fällt
+        // bei fehlendem Feld hierauf zurück (siehe OHUB_onStopTransaction).
+        $this->RegisterAttributeString('LastIdTag', '');
+        // Reservierung (Stufe 2) — siehe Reserve()/CancelReservation()/
+        // GetActiveReservationIdTag().
+        $this->RegisterAttributeString('ReservedIdTag', '');
+        $this->RegisterAttributeInteger('ReservedUntilTs', 0);
+        $this->RegisterAttributeInteger('ReservationId', 0);
         // Frische-Wache fürs Überschussladen (ChargerHub-Empfehlung
         // 30.08.2026) — siehe UpdateMeterValues()/Update().
         $this->RegisterAttributeInteger('LastMeterValuesAt', 0);
@@ -174,7 +179,9 @@ class OCPPHubLadepunkt extends IPSModule
                         ['type' => 'Label', 'caption' => 'Was diese Instanz macht: eine „OCPPHub Ladepunkt"-Instanz je Wallbox/Connector — sie hält die sichtbaren Messwerte und Steuervariablen (Ladeleistung, Energiezähler, Status, Ladefreigabe, Stromlimit) und trägt optional das eigenständige PV-Überschussladen. Die eigentliche OCPP-Kommunikation läuft komplett über den zugeordneten Splitter; diese Instanz selbst hält keine WebSocket-Verbindung.'],
                         ['type' => 'Label', 'caption' => '🆔 Charge-Point-Identity: muss exakt zu dem Namen passen, den die Wallbox selbst in ihrer eigenen OCPP-Konfiguration als letztes Pfadstück der Backend-URL mitschickt (Groß-/Kleinschreibung zählt). Am einfachsten über „OCPPHub Konfigurator" anlegen — der zeigt bereits verbundene Wallboxen an und füllt dieses Feld beim Erstellen automatisch korrekt aus, inklusive der Splitter-Zuordnung unten.'],
                         ['type' => 'Label', 'caption' => '⚠️ „OCPPHub-Splitter" unten ist ein Pflichtfeld, auch wenn die Instanz automatisch über den Konfigurator angelegt wurde und dort schon vorausgefüllt sein sollte. Ohne diese Zuordnung findet der Splitter diesen Ladepunkt weder für eingehende OCPP-Nachrichten noch für Steuerbefehle (Ladefreigabe, Stromlimit) noch für den Dashboard-Vertrag — Symcons Position dieser Instanz im Objektbaum (welcher Kategorie/welchem Ordner sie in der Konsole zugeordnet ist) reicht dafür ausdrücklich NICHT, weil sich Instanzen dort frei verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang Stufe 1 (aktueller Stand): kein RFID-Zwang — jede Ladung wird angenommen, unabhängig von Karte/Nutzer, keine Kundenverwaltung, keine Tarife/Abrechnung, keine Reservierung. Die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
+                        ['type' => 'Label', 'caption' => '🎫 RFID-Autorisierung/Verbrauchslimits: wird zentral in der „OCPPHub Abrechnung"-Instanz gepflegt, gilt aber nur, wenn am Splitter „② Mehrere Nutzer" ausgewählt ist — bei „① Einzelnutzer" wird jede Karte angenommen, unabhängig davon, was dort hinterlegt ist.'],
+                        ['type' => 'Label', 'caption' => '🔒 Reservierung: unabhängig von der Splitter-Betriebsart nutzbar (Backend-Funktionen `OHUBL_Reserve`/`OHUBL_CancelReservation`, Dashboard baut die Bedienoberfläche). Solange eine Reservierung aktiv ist, wird jede Kartenauflage mit einem ANDEREN idTag abgelehnt — sichtbar in `reserved_by`/`reserved_until`.'],
                     ],
                 ],
                 [
@@ -351,6 +358,10 @@ class OCPPHubLadepunkt extends IPSModule
         } else {
             $this->MaintainVariable('surplus_status', 'Überschussladen', VARIABLETYPE_STRING, '', 80, false);
         }
+
+        // Reservierung (Stufe 2) — siehe Reserve()/CancelReservation().
+        $this->MaintainVariable('reserved_by', 'Reserviert für', VARIABLETYPE_STRING, '', 90, true);
+        $this->MaintainVariable('reserved_until', 'Reserviert bis', VARIABLETYPE_STRING, '', 100, true);
     }
 
     // Property zuerst, Objektbaum-Position nur als Rückfall (siehe FIX-
@@ -440,8 +451,23 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $this->WriteAttributeInteger('LastTransactionId', $transactionId);
         $this->WriteAttributeInteger('MeterStartWh', $meterStartWh);
+        $this->WriteAttributeString('LastIdTag', $idTag);
         $this->SetValue('energy_session', 0.0);
         $this->SendDebug('OCPPHub StartTransaction', "id=$transactionId idTag=$idTag meterStart=$meterStartWh", 0);
+    }
+
+    // Für den Splitter: Rückfall-idTag, falls StopTransaction.req es nicht
+    // mitschickt (laut Spezifikation optional).
+    public function GetLastIdTag(): string
+    {
+        return $this->ReadAttributeString('LastIdTag');
+    }
+
+    // Für den Splitter: Meterstand zu Sitzungsbeginn, für die Verbrauchs-
+    // Gutschrift bei StopTransaction (siehe OHUB_onStopTransaction).
+    public function GetMeterStartWh(): int
+    {
+        return $this->ReadAttributeInteger('MeterStartWh');
     }
 
     public function StopTransaction(int $transactionId, int $meterStopWh): void
@@ -536,6 +562,75 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $this->WriteAttributeBoolean('DailyOverride', $Active);
         $this->WriteAttributeString('DailyOverrideDate', $Active ? date('Y-m-d') : '');
+    }
+
+    // ---------------------------------------------------------------------
+    // Reservierung (Stufe 2, siehe .docs/architektur.md „Reservierung").
+    // Nur ab Betriebsart ② am Splitter sinnvoll, technisch aber unabhängig
+    // durchsetzbar — Splitter prüft die Reservierung VOR der Betriebsart-
+    // abhängigen Autorisierung (siehe OCPPHubSplitter::checkIdTag()).
+    // ---------------------------------------------------------------------
+
+    // $UntilIso: z. B. "2026-08-30 18:00". Vereinfachung Stufe 2 (noch
+    // nicht über die Kundenverwaltung aufgelöst): `reserved_by` zeigt den
+    // idTag selbst, keinen Kundennamen — spätere Verfeinerung möglich, ohne
+    // den Vertrag zu brechen (rein interne Darstellung).
+    public function Reserve(string $IdTag, string $UntilIso): bool
+    {
+        $untilTs = strtotime($UntilIso);
+        if ($IdTag === '' || $untilTs === false || $untilTs <= time()) {
+            return false;
+        }
+        $splitterId = $this->resolveSplitterId();
+        $cpid = $this->ReadPropertyString('CPID');
+        if ($splitterId <= 0 || $cpid === '') {
+            return false;
+        }
+        $reservationId = OHUB_ReserveNow($splitterId, $cpid, $IdTag, $UntilIso);
+
+        $this->WriteAttributeString('ReservedIdTag', $IdTag);
+        $this->WriteAttributeInteger('ReservedUntilTs', $untilTs);
+        $this->WriteAttributeInteger('ReservationId', $reservationId);
+        $this->SetValue('reserved_by', $IdTag);
+        $this->SetValue('reserved_until', date('Y-m-d H:i', $untilTs));
+        return true;
+    }
+
+    public function CancelReservation(): void
+    {
+        $splitterId = $this->resolveSplitterId();
+        $cpid = $this->ReadPropertyString('CPID');
+        if ($splitterId > 0 && $cpid !== '') {
+            OHUB_CancelReservation($splitterId, $cpid, $this->ReadAttributeInteger('ReservationId'));
+        }
+        $this->clearReservation();
+    }
+
+    // Für den Splitter (checkIdTag()): liefert den berechtigten idTag,
+    // solange die Reservierung noch läuft, sonst leer — räumt eine
+    // abgelaufene Reservierung dabei gleich mit auf (Anzeige-Variablen
+    // sonst bis zum nächsten Update()-Zyklus veraltet, siehe TODO in
+    // architektur.md „Vermerkte, noch nicht vertiefte Punkte").
+    public function GetActiveReservationIdTag(): string
+    {
+        $until = $this->ReadAttributeInteger('ReservedUntilTs');
+        if ($until === 0) {
+            return '';
+        }
+        if ($until < time()) {
+            $this->clearReservation();
+            return '';
+        }
+        return $this->ReadAttributeString('ReservedIdTag');
+    }
+
+    private function clearReservation(): void
+    {
+        $this->WriteAttributeString('ReservedIdTag', '');
+        $this->WriteAttributeInteger('ReservedUntilTs', 0);
+        $this->WriteAttributeInteger('ReservationId', 0);
+        $this->SetValue('reserved_by', '');
+        $this->SetValue('reserved_until', '');
     }
 
     // Verbund-Vertrag — ein Eintrag, feldgleich zu CHUB_GetFunctions 1.2

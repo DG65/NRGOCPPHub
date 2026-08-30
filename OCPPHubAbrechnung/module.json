@@ -1,0 +1,15 @@
+{
+  "id": "{64980198-6B36-45D5-A84F-A0EAE9CCC63A}",
+  "name": "OCPPHub Abrechnung",
+  "type": 3,
+  "vendor": "",
+  "aliases": [
+    "NRG-Stack OCPPHub Abrechnung",
+    "OCPP-Kundenverwaltung"
+  ],
+  "url": "https://github.com/DG65/NRGOCPPHub",
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "OHUBA"
+}
