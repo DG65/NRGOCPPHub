@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.3 (30.08.2026)
+
+Fix (Live-Test-Fund, Dietmar): Debug zeigte, die Anfrage erreicht OCPPHub
+korrekt (`GET /hook/ocpphub/16316/WB1`), wird aber mit leerem Nutzernamen
+abgelehnt, obwohl der go-e Zugangsdaten sendet. Ursache: `$_SERVER
+['PHP_AUTH_USER']`/`['PHP_AUTH_PW']` werden nicht in jeder PHP-/Webserver-
+Konfiguration automatisch aus dem `Authorization`-Header befüllt (bekannte
+PHP-Falle, u. a. bei bestimmten FastCGI-/Reverse-Proxy-Aufbauten wie im
+Docker-Betrieb). Neue `getBasicAuthCredentials()` liest als Fallback den
+rohen `Authorization`-Header selbst und dekodiert ihn. Zusätzlich loggt eine
+abgelehnte Basic-Auth-Prüfung jetzt auch, ob überhaupt ein
+`Authorization`-Header ankam (weitere Diagnosehilfe, falls das Problem
+tiefer liegt).
+
 ## 0.1.2 (30.08.2026)
 
 Fix (Live-Test-Fund, Dietmar): go-e meldete „Verbindungsautorisierung: nicht

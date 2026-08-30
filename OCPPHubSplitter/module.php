@@ -256,13 +256,43 @@ class OCPPHubSplitter extends IPSModule
             $this->SendDebug('OCPPHub', 'Basic-Auth-Nutzername gesetzt, aber kein Passwort hinterlegt — Zugriff vorerst ungeprüft erlaubt.', 0);
             return true;
         }
-        $gotUser = $_SERVER['PHP_AUTH_USER'] ?? '';
-        $gotPass = $_SERVER['PHP_AUTH_PW'] ?? '';
+        [$gotUser, $gotPass] = $this->getBasicAuthCredentials();
         $ok = hash_equals($user, $gotUser) && password_verify($gotPass, $hash);
         if (!$ok) {
-            $this->SendDebug('OCPPHub', 'Basic-Auth abgelehnt (erhaltener Nutzername: "' . $gotUser . '").', 0);
+            $headerPresent = ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '') !== '';
+            $this->SendDebug(
+                'OCPPHub',
+                'Basic-Auth abgelehnt (erhaltener Nutzername: "' . $gotUser . '", '
+                    . 'Authorization-Header überhaupt vorhanden: ' . ($headerPresent ? 'ja' : 'nein') . ').',
+                0
+            );
         }
         return $ok;
+    }
+
+    // Live-Fund 30.08.2026: $_SERVER['PHP_AUTH_USER']/['PHP_AUTH_PW'] werden
+    // NICHT in jeder PHP-/Webserver-Konfiguration automatisch aus dem
+    // Authorization-Header befüllt (bekannte PHP-Falle, u. a. bei bestimmten
+    // FastCGI-/Reverse-Proxy-Aufbauten wie in Docker-Betrieb) — der go-e
+    // sendet die Zugangsdaten korrekt, sie kamen bei uns aber leer an, weil
+    // wir nur PHP_AUTH_USER/-PW gelesen haben. Fallback: rohen
+    // Authorization-Header selbst dekodieren.
+    private function getBasicAuthCredentials(): array
+    {
+        $user = $_SERVER['PHP_AUTH_USER'] ?? '';
+        if ($user !== '') {
+            return [$user, $_SERVER['PHP_AUTH_PW'] ?? ''];
+        }
+        $header = $_SERVER['HTTP_AUTHORIZATION']
+            ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+            ?? (function_exists('apache_request_headers') ? (@apache_request_headers()['Authorization'] ?? '') : '');
+        if (stripos($header, 'Basic ') === 0) {
+            $decoded = base64_decode(trim(substr($header, 6)), true);
+            if ($decoded !== false && strpos($decoded, ':') !== false) {
+                return explode(':', $decoded, 2);
+            }
+        }
+        return ['', ''];
     }
 
     private function rememberSeenChargePoint(string $cpid): void
