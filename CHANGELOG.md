@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.1 (31.08.2026)
+
+Live-Test-Fund: Dietmars neu angelegter Zugang blieb dauerhaft `Invalid`, obwohl die
+Daten sichtbar gespeichert waren. Ursache per Live-Zugriff gefunden: es existierten
+**zwei** OCPPHub-Abrechnung-Instanzen — die vom Splitter automatisch angelegte (direktes
+Kind des Splitters, `ensureAbrechnung()` fragt IMMER nur diese) war leer; Dietmar hatte
+seine Daten in eine zweite, manuell an anderer Stelle angelegte Instanz eingetragen, die
+vom Splitter nie konsultiert wird. Daten wurden live in die richtige Instanz kopiert.
+
+- **Splitter 0.2.4**: Warnhinweis im Formular (bei der Betriebsart) — „OCPPHub
+  Abrechnung" wird automatisch als direktes Kind DIESER Splitter-Instanz angelegt,
+  niemals selbst zusätzlich eine solche Instanz anlegen.
+- **Abrechnung 0.2.9**: Neue Selbstdiagnose — prüft beim Formularaufbau, ob die eigene
+  Instanz tatsächlich direktes Kind einer OCPPHub-Splitter-Instanz ist
+  (`hasSplitterParent()`). Falls nicht, erscheint ganz oben im Formular ein
+  unübersehbarer Warnhinweis, dass diese Instanz von keinem Splitter verwendet wird und
+  gelöscht werden sollte.
+
 ## 0.3.0 (30.08.2026)
 
 **Splitter 0.2.3**: Dietmar wollte den idTag einer aufgelegten Karte nachschlagen,

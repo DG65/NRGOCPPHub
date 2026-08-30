@@ -17,11 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.8';
+    private const VERSION = '0.2.9';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.8';
+    private const NEWS_VERSION = '0.2.9';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
+    private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        'Warnhinweis hinzugekommen, falls diese Instanz NICHT als direktes Kind eines OCPPHub-Splitters angelegt ist — dann wird sie vom Splitter nicht verwendet und hat keine Funktion (Duplikat/Fehlanlage).',
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
         'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier gleich breite Reiter, die zusammen die volle Formularbreite ausfüllen. Ziehharmonika: der geöffnete Reiter nimmt selbst die volle Breite ein, rückt dabei ganz nach rechts, und die anderen klappen automatisch zu.',
     ];
@@ -274,6 +276,15 @@ class OCPPHubAbrechnung extends IPSModule
             array_unshift($form['elements'], $banner);
         }
 
+        if (!$this->hasSplitterParent()) {
+            array_unshift($form['elements'], [
+                'type'  => 'RowLayout',
+                'items' => [
+                    ['type' => 'Label', 'caption' => '⚠️ Diese Instanz ist NICHT direktes Kind einer OCPPHub-Splitter-Instanz. Der Splitter benutzt ausschließlich seine EIGENE, selbst angelegte „OCPPHub Abrechnung"-Instanz (im Objektbaum direkt unter ihm) — diese hier wurde offenbar manuell erstellt und wird darum von KEINEM Splitter jemals abgefragt. Eingaben hier haben keinerlei Wirkung. Bitte deine Daten stattdessen in der Instanz unter deinem OCPPHub-Splitter eintragen und diese hier löschen.'],
+                ],
+            ]);
+        }
+
         return json_encode($form);
     }
 
@@ -330,6 +341,21 @@ class OCPPHubAbrechnung extends IPSModule
     {
         $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
         $this->UpdateFormField('NewsPanel', 'visible', false);
+    }
+
+    // Diese Instanz hat nur dann eine Funktion, wenn sie ein direktes Kind
+    // einer OCPPHub-Splitter-Instanz ist (siehe ensureAbrechnung() im
+    // Splitter — er erstellt/verwendet ausschließlich diese eine Instanz,
+    // sucht nicht anderswo). Eine manuell woanders angelegte Abrechnung-
+    // Instanz wird von KEINEM Splitter je konsultiert (live gefunden
+    // 31.08.2026, siehe .docs/architektur.md „Instanzmodell").
+    private function hasSplitterParent(): bool
+    {
+        $parentId = @IPS_GetParent($this->InstanceID);
+        if ($parentId === 0 || !@IPS_InstanceExists($parentId)) {
+            return false;
+        }
+        return (IPS_GetInstance($parentId)['ModuleInfo']['ModuleID'] ?? '') === self::SPLITTER_GUID;
     }
 
     // ---------------------------------------------------------------------

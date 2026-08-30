@@ -52,6 +52,18 @@ Vorlage, falls an anderer Stelle im Modul dieselbe Frage aufkommt.
    Berichte, CSV-Export. Korrektur 30.08.2026 (Dietmar): ursprünglich als „optional"
    entworfen, das ist falsch — Abrechnung ist Kernzweck des Moduls, siehe CLAUDE.md.
    „Obligatorisch" heißt: die Instanz/Funktion existiert immer im Modul.
+   **Live-Fund 31.08.2026 (Dietmar, Stufe-2-Test)**: `ensureAbrechnung()` im Splitter
+   verwendet AUSSCHLIESSLICH seine eigene, per Attribut gemerkte Kind-Instanz — sucht
+   NICHT nach anderswo existierenden Abrechnung-Instanzen. Legt jemand manuell (z. B.
+   über die Modulverwaltung) eine zweite „OCPPHub Abrechnung"-Instanz an, egal wo im
+   Objektbaum, wird diese vom Splitter NIE konsultiert — alle darin gepflegten
+   Karten/Kunden bleiben wirkungslos, ohne jede Fehlermeldung (stiller Blindgang). Genau
+   das ist Dietmar live passiert: er hatte eine zweite, manuell angelegte Instanz
+   gepflegt, während der Splitter seine eigene (leere) Instanz abfragte. Fix: (a)
+   Splitter-Formular warnt jetzt explizit davor, manuell eine zweite Instanz anzulegen;
+   (b) Abrechnung-Formular prüft beim Aufbau selbst (`hasSplitterParent()`), ob es
+   direktes Kind einer OCPPHub-Splitter-Instanz ist, und zeigt sonst ganz oben einen
+   unübersehbaren Warnhinweis samt Löschempfehlung.
    **Umsetzung Stufe 2 (30.08.2026)**: Kunden/Zugänge/Fahrzeuge/Gruppen implementiert
    (Tarife/Berichte bleiben Stufe 3). Anders als ursprünglich geplant zeigt diese
    Instanz ihre Felder IMMER (eigene Konsolenseite, kein einblendbares Panel im

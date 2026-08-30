@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.3';
+    private const VERSION = '0.2.4';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.3';
+    private const NEWS_VERSION = '0.2.4';
     private const NEWS_ITEMS = [
+        'Warnhinweis ergänzt: „OCPPHub Abrechnung" wird automatisch als Kind DIESER Splitter-Instanz angelegt — niemals selbst zusätzlich eine solche Instanz anlegen, eine zweite wird nie verwendet (live gefunden: Karten/Kunden in einer manuell angelegten zweiten Instanz blieben wirkungslos).',
         'Jede Kartenauflage (Authorize) wird jetzt zusätzlich ins dauerhafte Symcon-Systemlog geschrieben — vorher nur per SendDebug sichtbar, also unwiederbringlich weg, sobald das Debug-Fenster geschlossen war. Praktisch z. B. um den idTag einer neuen Karte nachträglich fürs Anlegen in der Abrechnung-Instanz nachzuschlagen.',
         'Kritischer Fix: jede MeterValues-Nachricht (Leistung/Energie/SoC) ließ den Splitter mit einem Fatal Error abstürzen — dadurch kamen power/energy_total NIE an, unabhängig von der Wallbox. Ursache: json_decode() ohne Assoziativ-Modus bei verschachtelten OCPP-Nachrichten. Betraf jede Wallbox, live an WB2 gefunden.',
         'Stufe 2: neues Betriebsart-Auswahlfeld (① Einzelnutzer / ② Mehrere Nutzer). Bei ② wird jede Kartenauflage zentral gegen die neue „OCPPHub Abrechnung"-Instanz geprüft (Kunden, Zugänge, Verbrauchslimits) — die legt sich automatisch selbst an.',
@@ -236,6 +237,7 @@ class OCPPHubSplitter extends IPSModule
                     ],
                 ],
                 ['type' => 'Label', 'caption' => 'ℹ️ Bei ① werden Kundenverwaltung/Verbrauchslimits in der „OCPPHub Abrechnung"-Instanz zwar schon angelegt (sie existiert immer), aber NICHT ausgewertet — jede Karte lädt ungeprüft. Bei ② wird jede Kartenauflage gegen die dort gepflegten Zugänge geprüft. Reservierungen (siehe Ladepunkt-Instanz) werden unabhängig von der Betriebsart durchgesetzt, sobald eine aktiv ist.'],
+                ['type' => 'Label', 'caption' => '⚠️ „OCPPHub Abrechnung" wird automatisch als DIREKTES KIND DIESER Splitter-Instanz angelegt (im Objektbaum darunter zu finden) — ein bewusst ungewöhnliches Muster (sonst legt bei uns keine Instanz von sich aus eine Konfigurationsinstanz unter sich selbst an), aber Standard in OCPPHub. Lege NIEMALS selbst zusätzlich eine „OCPPHub Abrechnung"-Instanz an (z. B. über die Modulverwaltung) — eine solche zweite Instanz wird von diesem Splitter nie verwendet, egal wo im Baum sie liegt, und jede darin gepflegte Karte/jeder Kunde bleibt wirkungslos.'],
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => '🔐 Basic-Auth (optional)',
