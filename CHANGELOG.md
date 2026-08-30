@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.8 (30.08.2026)
+
+Dietmar: 450px/1800px waren noch zu breit, außerdem sollte der gerade aktive Reiter
+immer ganz rechts stehen (statt an seiner festen Ursprungsposition).
+
+- **Breite weiter reduziert** auf 400px (eingeklappt) / 1600px (aufgeklappt).
+- **Aktiver Reiter rückt ans rechte Ende**: die vier Panels werden jetzt aus einer
+  benannten Definition (`$panelDefs`) gebaut und je nach `ActiveAccordionPanel` neu
+  sortiert — die drei nicht-aktiven behalten ihre relative Reihenfolge, der aktive
+  Reiter wird ans Ende der Liste (= ganz rechts) verschoben. Da `UpdateFormField` die
+  Reihenfolge von Elementen innerhalb eines `RowLayout` nicht ändern kann (nur
+  Eigenschaften bestehender Elemente), ruft `OHUBA_OnPanelToggle()` jetzt stattdessen
+  `ReloadForm()` auf — das Formular wird bei jedem Klick komplett aus
+  `GetConfigurationForm()` neu aufgebaut, inklusive neuer Reihenfolge.
+
 ## 0.2.7 (30.08.2026)
 
 Feinjustierung nach Dietmars Rückmeldung: `WIDTH_NARROW`/`WIDTH_FULL` von 480px/1920px

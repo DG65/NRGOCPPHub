@@ -17,13 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.7';
+    private const VERSION = '0.2.8';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.6';
+    private const NEWS_VERSION = '0.2.8';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const NEWS_ITEMS = [
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
-        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier gleich breite Reiter, die zusammen die volle Formularbreite ausfüllen (Ziehharmonika: der geöffnete Reiter nimmt dann selbst die volle Breite ein, die anderen klappen automatisch zu).',
+        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier gleich breite Reiter, die zusammen die volle Formularbreite ausfüllen. Ziehharmonika: der geöffnete Reiter nimmt selbst die volle Breite ein, rückt dabei ganz nach rechts, und die anderen klappen automatisch zu.',
     ];
 
     public function Create()
@@ -113,6 +113,126 @@ class OCPPHubAbrechnung extends IPSModule
             $kundenOptions[] = ['caption' => $k['name'], 'value' => (int)$k['id']];
         }
 
+        // Panels je Name gebaut, damit der aktive Reiter unten (Reihenfolge) ans Ende
+        // (= ganz rechts) verschoben werden kann, statt seine feste Position zu behalten.
+        $panelDefs = [
+            'Fahrzeuge' => [
+                'type'     => 'ExpansionPanel',
+                'name'     => 'PanelFahrzeuge',
+                'caption'  => '🚙 Fahrzeuge',
+                'expanded' => $activePanel === 'Fahrzeuge',
+                'width'    => $this->panelWidth('Fahrzeuge', $activePanel),
+                'onClick'  => 'OHUBA_OnPanelToggle($id, \'Fahrzeuge\');',
+                'items'    => [
+                    ['type' => 'Label', 'width' => '540px', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
+                    [
+                        'type'     => 'List',
+                        'name'     => 'Fahrzeuge',
+                        'caption'  => 'Fahrzeuge',
+                        'rowCount' => 5,
+                        'add'      => true,
+                        'delete'   => true,
+                        'columns'  => [
+                            ['caption' => 'Tessie-Fahrzeug', 'name' => 'tessieInstanceId', 'width' => '180px', 'add' => 0, 'edit' => ['type' => 'SelectInstance', 'moduleID' => self::TESSIE_VEHICLE_GUID]],
+                            ['caption' => 'Anzeigename (falls kein Tessie-Fahrzeug)', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Kennzeichen', 'name' => 'kennzeichen', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ],
+                        'values' => $fahrzeuge,
+                    ],
+                ],
+            ],
+            'Gruppen' => [
+                'type'     => 'ExpansionPanel',
+                'name'     => 'PanelGruppen',
+                'caption'  => '👥 Gruppen',
+                'expanded' => $activePanel === 'Gruppen',
+                'width'    => $this->panelWidth('Gruppen', $activePanel),
+                'onClick'  => 'OHUBA_OnPanelToggle($id, \'Gruppen\');',
+                'items'    => [
+                    ['type' => 'Label', 'width' => '540px', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
+                    [
+                        'type'     => 'List',
+                        'name'     => 'Gruppen',
+                        'caption'  => 'Gruppen',
+                        'rowCount' => 5,
+                        'add'      => true,
+                        'delete'   => true,
+                        'columns'  => [
+                            ['caption' => 'Name', 'name' => 'name', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Woche', 'name' => 'maxKwhWeek', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Monat', 'name' => 'maxKwhMonth', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Jahr', 'name' => 'maxKwhYear', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                        ],
+                        'values' => $gruppen,
+                    ],
+                ],
+            ],
+            'Kunden' => [
+                'type'     => 'ExpansionPanel',
+                'name'     => 'PanelKunden',
+                'caption'  => '🙋 Kunden',
+                'expanded' => $activePanel === 'Kunden',
+                'width'    => $this->panelWidth('Kunden', $activePanel),
+                'onClick'  => 'OHUBA_OnPanelToggle($id, \'Kunden\');',
+                'items'    => [
+                    [
+                        'type'     => 'List',
+                        'name'     => 'Kunden',
+                        'caption'  => 'Kunden',
+                        'rowCount' => 6,
+                        'add'      => true,
+                        'delete'   => true,
+                        'columns'  => [
+                            ['caption' => 'Name', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Aktiv', 'name' => 'active', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                            ['caption' => 'Gruppe', 'name' => 'groupId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $gruppenOptions]],
+                            ['caption' => 'Limit/Woche (kWh, 0=aus)', 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Limit/Monat (kWh, 0=aus)', 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Limit/Jahr (kWh, 0=aus)', 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                        ],
+                        'values' => $kunden,
+                    ],
+                ],
+            ],
+            'Zugaenge' => [
+                'type'     => 'ExpansionPanel',
+                'name'     => 'PanelZugaenge',
+                'caption'  => '🪪 Zugänge (Karten)',
+                'expanded' => $activePanel === 'Zugaenge',
+                'width'    => $this->panelWidth('Zugaenge', $activePanel),
+                'onClick'  => 'OHUBA_OnPanelToggle($id, \'Zugaenge\');',
+                'items'    => [
+                    [
+                        'type'     => 'List',
+                        'name'     => 'Zugaenge',
+                        'caption'  => 'Zugänge',
+                        'rowCount' => 8,
+                        'add'      => true,
+                        'delete'   => true,
+                        'columns'  => [
+                            ['caption' => 'idTag (Karte)', 'name' => 'idTag', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Anzeigename', 'name' => 'name', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Kunde', 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
+                            ['caption' => 'Fahrzeug', 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
+                            ['caption' => 'Aktiv', 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                            ['caption' => 'Gültig bis (JJJJ-MM-TT, leer=unbegrenzt)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Erlaubt ab (HH:MM, leer=immer)', 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Erlaubt bis (HH:MM, leer=immer)', 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ],
+                        'values' => $this->getZugaenge(),
+                    ],
+                ],
+            ],
+        ];
+
+        // Aktiver Reiter wandert ans Ende der Reihenfolge (= ganz rechts), die übrigen
+        // drei behalten ihre relative Reihenfolge zueinander bei.
+        $panelOrder = self::PANEL_NAMES;
+        if ($activePanel !== '' && in_array($activePanel, $panelOrder, true)) {
+            $panelOrder = array_values(array_diff($panelOrder, [$activePanel]));
+            $panelOrder[] = $activePanel;
+        }
+
         $form = [
             'elements' => [
                 [
@@ -130,115 +250,7 @@ class OCPPHubAbrechnung extends IPSModule
                 ],
                 [
                     'type'  => 'RowLayout',
-                    'items' => [
-                        [
-                            'type'     => 'ExpansionPanel',
-                            'name'     => 'PanelFahrzeuge',
-                            'caption'  => '🚙 Fahrzeuge',
-                            'expanded' => $activePanel === 'Fahrzeuge',
-                            'width'    => $this->panelWidth('Fahrzeuge', $activePanel),
-                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Fahrzeuge\');',
-                            'items'    => [
-                                ['type' => 'Label', 'width' => '540px', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
-                                [
-                                    'type'     => 'List',
-                                    'name'     => 'Fahrzeuge',
-                                    'caption'  => 'Fahrzeuge',
-                                    'rowCount' => 5,
-                                    'add'      => true,
-                                    'delete'   => true,
-                                    'columns'  => [
-                                        ['caption' => 'Tessie-Fahrzeug', 'name' => 'tessieInstanceId', 'width' => '180px', 'add' => 0, 'edit' => ['type' => 'SelectInstance', 'moduleID' => self::TESSIE_VEHICLE_GUID]],
-                                        ['caption' => 'Anzeigename (falls kein Tessie-Fahrzeug)', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Kennzeichen', 'name' => 'kennzeichen', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                    ],
-                                    'values' => $fahrzeuge,
-                                ],
-                            ],
-                        ],
-                        [
-                            'type'     => 'ExpansionPanel',
-                            'name'     => 'PanelGruppen',
-                            'caption'  => '👥 Gruppen',
-                            'expanded' => $activePanel === 'Gruppen',
-                            'width'    => $this->panelWidth('Gruppen', $activePanel),
-                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Gruppen\');',
-                            'items'    => [
-                                ['type' => 'Label', 'width' => '540px', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
-                                [
-                                    'type'     => 'List',
-                                    'name'     => 'Gruppen',
-                                    'caption'  => 'Gruppen',
-                                    'rowCount' => 5,
-                                    'add'      => true,
-                                    'delete'   => true,
-                                    'columns'  => [
-                                        ['caption' => 'Name', 'name' => 'name', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Woche', 'name' => 'maxKwhWeek', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                        ['caption' => 'Monat', 'name' => 'maxKwhMonth', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                        ['caption' => 'Jahr', 'name' => 'maxKwhYear', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                    ],
-                                    'values' => $gruppen,
-                                ],
-                            ],
-                        ],
-                        [
-                            'type'     => 'ExpansionPanel',
-                            'name'     => 'PanelKunden',
-                            'caption'  => '🙋 Kunden',
-                            'expanded' => $activePanel === 'Kunden',
-                            'width'    => $this->panelWidth('Kunden', $activePanel),
-                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Kunden\');',
-                            'items'    => [
-                                [
-                                    'type'     => 'List',
-                                    'name'     => 'Kunden',
-                                    'caption'  => 'Kunden',
-                                    'rowCount' => 6,
-                                    'add'      => true,
-                                    'delete'   => true,
-                                    'columns'  => [
-                                        ['caption' => 'Name', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Aktiv', 'name' => 'active', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                                        ['caption' => 'Gruppe', 'name' => 'groupId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $gruppenOptions]],
-                                        ['caption' => 'Limit/Woche (kWh, 0=aus)', 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                        ['caption' => 'Limit/Monat (kWh, 0=aus)', 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                        ['caption' => 'Limit/Jahr (kWh, 0=aus)', 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                    ],
-                                    'values' => $kunden,
-                                ],
-                            ],
-                        ],
-                        [
-                            'type'     => 'ExpansionPanel',
-                            'name'     => 'PanelZugaenge',
-                            'caption'  => '🪪 Zugänge (Karten)',
-                            'expanded' => $activePanel === 'Zugaenge',
-                            'width'    => $this->panelWidth('Zugaenge', $activePanel),
-                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Zugaenge\');',
-                            'items'    => [
-                                [
-                                    'type'     => 'List',
-                                    'name'     => 'Zugaenge',
-                                    'caption'  => 'Zugänge',
-                                    'rowCount' => 8,
-                                    'add'      => true,
-                                    'delete'   => true,
-                                    'columns'  => [
-                                        ['caption' => 'idTag (Karte)', 'name' => 'idTag', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Anzeigename', 'name' => 'name', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Kunde', 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
-                                        ['caption' => 'Fahrzeug', 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
-                                        ['caption' => 'Aktiv', 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                                        ['caption' => 'Gültig bis (JJJJ-MM-TT, leer=unbegrenzt)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Erlaubt ab (HH:MM, leer=immer)', 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                        ['caption' => 'Erlaubt bis (HH:MM, leer=immer)', 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                    ],
-                                    'values' => $this->getZugaenge(),
-                                ],
-                            ],
-                        ],
-                    ],
+                    'items' => array_map(fn ($name) => $panelDefs[$name], $panelOrder),
                 ],
             ],
             'status' => [
@@ -280,24 +292,25 @@ class OCPPHubAbrechnung extends IPSModule
     // vier WIDTH_NARROW (zusammen = WIDTH_FULL), aufgeklappt nimmt der aktive Reiter
     // WIDTH_FULL allein ein.
     private const PANEL_NAMES = ['Fahrzeuge', 'Gruppen', 'Kunden', 'Zugaenge'];
-    private const WIDTH_NARROW = '450px';
-    private const WIDTH_FULL = '1800px';
+    private const WIDTH_NARROW = '400px';
+    private const WIDTH_FULL = '1600px';
 
     private function panelWidth(string $name, string $activePanel): string
     {
         return $name === $activePanel ? self::WIDTH_FULL : self::WIDTH_NARROW;
     }
 
+    // Reihenfolge der Reiter hängt vom aktiven Panel ab (siehe $panelOrder in
+    // GetConfigurationForm) — UpdateFormField kann die Reihenfolge von Elementen
+    // innerhalb eines RowLayout nicht nachträglich ändern, nur Eigenschaften
+    // bestehender Elemente. Darum hier ReloadForm() statt gezielter UpdateFormField-
+    // Aufrufe: das Formular wird komplett aus GetConfigurationForm() neu aufgebaut.
     public function OnPanelToggle(string $Panel): void
     {
         $current = $this->ReadAttributeString('ActiveAccordionPanel');
         $newActive = $current === $Panel ? '' : $Panel;
         $this->WriteAttributeString('ActiveAccordionPanel', $newActive);
-
-        foreach (self::PANEL_NAMES as $name) {
-            $this->UpdateFormField('Panel' . $name, 'expanded', $name === $newActive);
-            $this->UpdateFormField('Panel' . $name, 'width', $this->panelWidth($name, $newActive));
-        }
+        $this->ReloadForm();
     }
 
     private function newsBanner(): ?array
