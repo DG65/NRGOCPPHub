@@ -360,7 +360,14 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
         return [
-            'contractVersion'   => '1.0',
+            'contractVersion'   => '1.1',
+            // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
+            // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
+            // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
+            // Splitter-ID als instanceID für Konsumenten NICHT, jeder Eintrag
+            // braucht seine EIGENE (Ladepunkt-)Instanz-ID für Steuerungs-
+            // aufrufe wie OHUBL_ManualStart(). Additiv, kein Bruch.
+            'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
             'powerID'           => $this->GetIDForIdent('power'),

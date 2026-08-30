@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.5 (30.08.2026)
+
+Fix (Dashboard-Fund, während sie die Steuerungs-UI bauen): `OHUB_GetFunctions()`
+sammelt die Verträge ALLER eigenen Ladepunkte über den Splitter ein — Dashboards
+generische Discovery hätte dadurch fälschlich die Splitter-ID statt der jeweiligen
+Ladepunkt-ID für Steuerungsaufrufe (`OHUBL_ManualStart()` etc.) verwendet.
+`OHUBL_GetContractEntry()` trägt jetzt zusätzlich `instanceID` (die eigene
+Ladepunkt-Instanz-ID) — `OHUB_GetFunctions`-Vertrag additiv auf 1.1 angehoben.
+
 ## 0.1.4 (30.08.2026)
 
 Fix (Live-Test-Fund, Dietmar): OCPP-Kernprotokoll läuft bereits sauber

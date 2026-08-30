@@ -498,6 +498,17 @@ Feldgleich zu `CHUB_GetFunctions` 1.2 (siehe ChargerHub-README-Feldtabelle) + ad
 z. B. `transport: 'ocpp'`, `ocppVersion`. contractVersion eigenständig ab 1.0. MIT DER
 EMS-SITZUNG ABSTIMMEN, bevor irgendetwas veröffentlicht wird.
 
+**1.1 (Dashboard-Fund im Live-Test, 30.08.2026): `instanceID` additiv ergänzt.**
+`OHUB_GetFunctions()` sammelt (Splitter-Methode) über `IPS_GetChildrenIDs()` die
+Verträge ALLER eigenen Ladepunkt-Instanzen ein und gibt sie als eine gemeinsame Liste
+zurück — anders als bei ChargerHub (1 Instanz = 1 Wallbox, Splitter-Konzept gibt es
+dort nicht) reicht die Splitter-ID als `instanceID` für Konsumenten NICHT: jeder
+Eintrag braucht seine EIGENE (Ladepunkt-)Instanz-ID, sonst adressieren
+Steuerungsaufrufe wie `OHUBL_ManualStart()` die falsche Instanz. Jeder Eintrag trägt
+jetzt `instanceID` = die eigene Ladepunkt-Instanz-ID (`OCPPHubLadepunkt::
+GetContractEntry()`). Dashboard liest dieses Feld bevorzugt statt der generischen
+Splitter-ID aus ihrer Discovery-Hilfsfunktion.
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils
