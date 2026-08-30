@@ -17,7 +17,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.0';
+    private const VERSION = '0.2.1';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     private const NEWS_VERSION = '0.2.0';
     private const NEWS_ITEMS = [

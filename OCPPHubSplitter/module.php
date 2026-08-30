@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.0';
+    private const VERSION = '0.2.1';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.0';
+    private const NEWS_VERSION = '0.2.1';
     private const NEWS_ITEMS = [
+        'Kritischer Fix: jede MeterValues-Nachricht (Leistung/Energie/SoC) ließ den Splitter mit einem Fatal Error abstürzen — dadurch kamen power/energy_total NIE an, unabhängig von der Wallbox. Ursache: json_decode() ohne Assoziativ-Modus bei verschachtelten OCPP-Nachrichten. Betraf jede Wallbox, live an WB2 gefunden.',
         'Stufe 2: neues Betriebsart-Auswahlfeld (① Einzelnutzer / ② Mehrere Nutzer). Bei ② wird jede Kartenauflage zentral gegen die neue „OCPPHub Abrechnung"-Instanz geprüft (Kunden, Zugänge, Verbrauchslimits) — die legt sich automatisch selbst an.',
         'Reservierung (ReserveNow/CancelReservation) hinzugekommen, unabhängig von der Betriebsart nutzbar — Backend-Funktionen liegen am Ladepunkt (OHUBL_Reserve/CancelReservation).',
         'idTag-Direktzuordnung: ist eine Karte bereits einem Fahrzeug zugeordnet, wird der Fahrzeugname bei Betriebsart ② jetzt sofort gesetzt, ohne auf Dashboards Zeitkorrelation zu warten.',
@@ -360,7 +361,19 @@ class OCPPHubSplitter extends IPSModule
         $this->SendDebug('OCPPHub Receive [' . $cpid . ']', $raw, 0);
         $this->rememberSeenChargePoint($cpid);
 
-        $message = json_decode($raw);
+        // FIX 30.08.2026 (Live-Fund WB2, Fatal Error bei jedem MeterValues):
+        // json_decode() OHNE den Assoziativ-Parameter lässt verschachtelte
+        // JSON-Objekte als stdClass statt als Array durch. Der äußere OCPP-
+        // J-Frame ist ein JSON-Array (dekodiert immer als PHP-Array), aber
+        // das payload-Element selbst UND jedes verschachtelte Objekt darin
+        // (meterValue[]/sampledValue[] bei MeterValues) wären sonst
+        // stdClass — der spätere `(array)$payload`-Cast in handleCall()
+        // konvertiert nur die OBERSTE Ebene, nicht die verschachtelten
+        // Objekte darin. Betraf nur MeterValues (einzige Nachricht mit
+        // verschachtelten Objekten) — Authorize/StartTransaction/
+        // StopTransaction/BootNotification haben nur flache Payloads und
+        // liefen deshalb unbemerkt weiter.
+        $message = json_decode($raw, true);
         if (!is_array($message) || count($message) < 3) {
             $this->SendDebug('OCPPHub', 'Ungültiges OCPP-J-Frame: ' . $raw, 0);
             return;

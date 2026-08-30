@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.1 (30.08.2026)
+
+**Kritischer Fix** (Dashboard-Diagnose + eigener Live-Zugriff auf Dietmars Instanz):
+jede MeterValues-Nachricht ließ den Splitter mit `Fatal error: Cannot use object of
+type stdClass as array` abstürzen — betraf JEDE Wallbox, nicht nur die live getestete.
+Live gefunden an WB2 (beide Wallboxen inzwischen über OCPP verbunden), Log zeigte den
+Absturz alle ~5s bei jeder eingehenden Messung.
+
+Ursache: `json_decode($raw)` ohne den Assoziativ-Parameter lässt verschachtelte
+JSON-Objekte als `stdClass` statt als Array durch. Der äußere OCPP-J-Frame ist ein
+JSON-Array (dekodiert immer als PHP-Array), aber alles darin Verschachtelte (bei
+MeterValues: `meterValue[]`/`sampledValue[]`) blieb `stdClass` — der spätere
+`(array)`-Cast auf das payload-Element konvertiert nur die oberste Ebene. Andere
+Nachrichten (Authorize/StartTransaction/StopTransaction/BootNotification) haben nur
+flache Payloads und liefen deshalb unbemerkt weiter — nur MeterValues hat verschachtelte
+Objekte.
+
+Fix: `json_decode($raw, true)` — alles konsequent als Array statt gemischt
+Array/stdClass. Das erklärt rückwirkend auch, warum Dashboard bei der OCPP-Wallbox nie
+Leistung/Fahrzeugzuordnung zeigte — es lag nie an der Wallbox-Konfiguration oder an
+Dashboards Anzeige, sondern daran, dass die Werte serverseitig nie ankamen.
+
 ## 0.2.0 (30.08.2026)
 
 **Stufe 2** (siehe `.docs/pflichtenheft.md` „Ausbaustufen"), auf Dietmars Wunsch in
