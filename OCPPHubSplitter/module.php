@@ -79,22 +79,16 @@ class OCPPHubSplitter extends IPSModule
     {
         parent::ApplyChanges();
 
-        // Zugangsdaten-Konvention (Verbund-Regel 7): Klartext-Passwort aus
-        // der Formulareingabe sofort hashen und die Property leeren, statt
-        // dauerhaft im Klartext zu halten.
+        // Zugangsdaten-Konvention (Verbund-Regel 7): Klartext-Passwort aus der
+        // Formulareingabe hashen. FIX 30.08.2026 (Live-Fund): das Leeren der
+        // Property lief vorher über einen rekursiven ApplyChanges()-Aufruf,
+        // der die Funktion per return() VORZEITIG verließ — RegisterHook()
+        // und SetStatus() liefen dadurch nie, wenn gerade ein Passwort gesetzt
+        // wurde. Jetzt: Hook-Registrierung und Status laufen IMMER zuerst,
+        // das Leeren der Property ist nur noch ein harmloser Nachlauf danach.
         $plainPassword = $this->ReadPropertyString('BasicAuthPassword');
         if ($plainPassword !== '') {
             $this->WriteAttributeString('BasicAuthPasswordHash', password_hash($plainPassword, PASSWORD_DEFAULT));
-            // ACHTUNG ungetestet: rekursiver ApplyChanges()-Aufruf über das
-            // Leeren der Property. Bekanntes Community-Muster fürs
-            // "einmal-lesen-dann-leeren"-Verhalten, aber an dieser Stelle
-            // noch nicht an einer echten IPS-Instanz verifiziert — vor
-            // Live-Betrieb prüfen, dass daraus keine Endlosschleife wird
-            // (sollte terminieren, weil der zweite Durchlauf mit leerem
-            // Passwort hier gar nicht mehr eingreift).
-            @IPS_SetProperty($this->InstanceID, 'BasicAuthPassword', '');
-            @IPS_ApplyChanges($this->InstanceID);
-            return;
         }
 
         // Nur im laufenden Kernel-Betrieb registrieren — direkt beim Symcon-
@@ -106,6 +100,11 @@ class OCPPHubSplitter extends IPSModule
         }
 
         $this->SetStatus($this->ReadPropertyBoolean('Active') ? 102 : 104);
+
+        if ($plainPassword !== '') {
+            @IPS_SetProperty($this->InstanceID, 'BasicAuthPassword', '');
+            @IPS_ApplyChanges($this->InstanceID);
+        }
     }
 
     // Trägt diese Instanz als Ziel für $Hook in die "Hooks"-Property der
@@ -185,12 +184,20 @@ class OCPPHubSplitter extends IPSModule
 
     protected function ProcessHookData()
     {
+        // Ganz am Anfang, VOR jeder Prüfung — Diagnosehilfe (Live-Fund
+        // 30.08.2026: bei einer abgelehnten Verbindung gab es bislang gar
+        // keine Debug-Ausgabe, unklar ob die Anfrage OCPPHub überhaupt
+        // erreicht hat).
+        $this->SendDebug('OCPPHub Hook', ($_SERVER['REQUEST_METHOD'] ?? '?') . ' ' . ($_SERVER['REQUEST_URI'] ?? '?'), 0);
+
         if (!$this->ReadPropertyBoolean('Active')) {
+            $this->SendDebug('OCPPHub', 'Instanz inaktiv — Anfrage ignoriert.', 0);
             return;
         }
 
         $raw = file_get_contents('php://input');
         if ($raw === '' || $raw === false) {
+            $this->SendDebug('OCPPHub', 'Leerer Anfrage-Body (evtl. reiner WebSocket-Handshake ohne Daten-Frame).', 0);
             return;
         }
 
@@ -241,9 +248,21 @@ class OCPPHubSplitter extends IPSModule
             return true;
         }
         $hash = $this->ReadAttributeString('BasicAuthPasswordHash');
+        if ($hash === '') {
+            // Nutzername gesetzt, aber (noch) kein Passwort übernommen — NICHT
+            // stillschweigend jede Verbindung sperren (das wäre ein Total-
+            // Lockout ohne jede sichtbare Fehlermeldung), sondern vorerst
+            // durchlassen und sichtbar loggen.
+            $this->SendDebug('OCPPHub', 'Basic-Auth-Nutzername gesetzt, aber kein Passwort hinterlegt — Zugriff vorerst ungeprüft erlaubt.', 0);
+            return true;
+        }
         $gotUser = $_SERVER['PHP_AUTH_USER'] ?? '';
         $gotPass = $_SERVER['PHP_AUTH_PW'] ?? '';
-        return $hash !== '' && hash_equals($user, $gotUser) && password_verify($gotPass, $hash);
+        $ok = hash_equals($user, $gotUser) && password_verify($gotPass, $hash);
+        if (!$ok) {
+            $this->SendDebug('OCPPHub', 'Basic-Auth abgelehnt (erhaltener Nutzername: "' . $gotUser . '").', 0);
+        }
+        return $ok;
     }
 
     private function rememberSeenChargePoint(string $cpid): void

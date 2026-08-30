@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.2 (30.08.2026)
+
+Fix (Live-Test-Fund, Dietmar): go-e meldete „Verbindungsautorisierung: nicht
+akzeptiert" ohne jede Debug-Ausgabe. Gefundener Fehler in `ApplyChanges()`:
+wenn ein Basic-Auth-Passwort gesetzt wurde, verließ die Funktion sich per
+`return()` vorzeitig, BEVOR `RegisterHook()`/`SetStatus()` liefen — der Hook
+wurde dadurch nie (neu) registriert. Behoben: Hook-Registrierung und Status
+laufen jetzt immer zuerst, das Leeren der Passwort-Property danach ist nur
+noch ein harmloser Nachlauf. Zusätzlich: ein gesetzter Basic-Auth-Nutzername
+ohne (noch) gehashtes Passwort sperrt nicht mehr stillschweigend jede
+Verbindung, sondern lässt vorerst durch und loggt sichtbar. Ganz am Anfang
+von `ProcessHookData()` zusätzlich eine Debug-Zeile vor jeder Prüfung, damit
+künftig erkennbar ist, ob eine Anfrage OCPPHub überhaupt erreicht.
+
 ## 0.1.1 (30.08.2026)
 
 Fix (Live-Test-Fund, Dietmar): Instanzanlage des Splitters brach mit `Fatal error:
