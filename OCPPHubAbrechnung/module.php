@@ -17,13 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.4';
+    private const VERSION = '0.2.5';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.4';
+    private const NEWS_VERSION = '0.2.5';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const NEWS_ITEMS = [
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
-        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier Reiter nebeneinander — Klick öffnet die jeweilige Liste.',
+        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier Reiter nebeneinander (Ziehharmonika: Öffnen eines Reiters klappt die anderen automatisch zu).',
     ];
 
     public function Create()
@@ -131,10 +131,12 @@ class OCPPHubAbrechnung extends IPSModule
                     'items' => [
                         [
                             'type'     => 'ExpansionPanel',
+                            'name'     => 'PanelFahrzeuge',
                             'caption'  => '🚙 Fahrzeuge',
                             'expanded' => false,
+                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Fahrzeuge\');',
                             'items'    => [
-                                ['type' => 'Label', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
+                                ['type' => 'Label', 'width' => '540px', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
                                 [
                                     'type'     => 'List',
                                     'name'     => 'Fahrzeuge',
@@ -153,10 +155,12 @@ class OCPPHubAbrechnung extends IPSModule
                         ],
                         [
                             'type'     => 'ExpansionPanel',
+                            'name'     => 'PanelGruppen',
                             'caption'  => '👥 Gruppen',
                             'expanded' => false,
+                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Gruppen\');',
                             'items'    => [
-                                ['type' => 'Label', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
+                                ['type' => 'Label', 'width' => '540px', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
                                 [
                                     'type'     => 'List',
                                     'name'     => 'Gruppen',
@@ -176,8 +180,10 @@ class OCPPHubAbrechnung extends IPSModule
                         ],
                         [
                             'type'     => 'ExpansionPanel',
+                            'name'     => 'PanelKunden',
                             'caption'  => '🙋 Kunden',
                             'expanded' => false,
+                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Kunden\');',
                             'items'    => [
                                 [
                                     'type'     => 'List',
@@ -200,8 +206,10 @@ class OCPPHubAbrechnung extends IPSModule
                         ],
                         [
                             'type'     => 'ExpansionPanel',
+                            'name'     => 'PanelZugaenge',
                             'caption'  => '🪪 Zugänge (Karten)',
                             'expanded' => false,
+                            'onClick'  => 'OHUBA_OnPanelToggle($id, \'Zugaenge\');',
                             'items'    => [
                                 [
                                     'type'     => 'List',
@@ -255,6 +263,21 @@ class OCPPHubAbrechnung extends IPSModule
     {
         $this->WriteAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, true);
         $this->UpdateFormField('ReviewHint', 'visible', false);
+    }
+
+    // Ziehharmonika-Verhalten für die vier Reiter Fahrzeuge/Gruppen/Kunden/Zugänge:
+    // ExpansionPanel liefert kein eigenes onClick-Gruppierungskonzept, onClick feuert
+    // sowohl beim Auf- als auch beim Zuklappen — darum hier keine Fallunterscheidung
+    // nötig, es werden bei JEDEM Klick einfach alle ANDEREN drei zugeklappt.
+    private const PANEL_NAMES = ['Fahrzeuge', 'Gruppen', 'Kunden', 'Zugaenge'];
+
+    public function OnPanelToggle(string $Panel): void
+    {
+        foreach (self::PANEL_NAMES as $name) {
+            if ($name !== $Panel) {
+                $this->UpdateFormField('Panel' . $name, 'expanded', false);
+            }
+        }
     }
 
     private function newsBanner(): ?array

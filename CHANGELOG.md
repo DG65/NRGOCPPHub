@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.5 (30.08.2026)
+
+Dietmar schickte Screenshots aller vier Reiter: je nachdem, WELCHER Reiter geöffnet
+wurde, verhielt sich die Zeile anders — mal öffnete sich das Panel in voller Breite und
+die anderen drei rutschten in eine eigene Zeile darunter (Fahrzeuge, Zugänge), mal blieb
+das geöffnete Panel zwischen den weiterhin schmalen Reitern in derselben Zeile stehen
+(Gruppen, Kunden). Ursache gefunden: der Erklärtext in Fahrzeuge/Gruppen hatte keine
+feste Breite — ein längerer, nicht umgebrochener Fließtext lässt den Browser die
+„natürliche" Breite des ganzen Panels an der Textlänge bemessen (bei Fahrzeuge fast die
+komplette Formularbreite), nicht an der eigentlich benötigten Listenbreite. Zusätzlich
+wollte Dietmar echtes Ziehharmonika-Verhalten: Öffnen eines Reiters soll die anderen
+automatisch zuklappen.
+
+- **Erklärtexte auf feste Breite begrenzt** (540px, Fahrzeuge/Gruppen) — Panelgröße
+  richtet sich jetzt überall nach dem tatsächlichen Platzbedarf (Liste bzw. begrenzter
+  Text), nicht nach unbegrenzt langem Fließtext.
+- **Ziehharmonika-Verhalten**: alle vier `ExpansionPanel`s bekommen einen `onClick`-
+  Handler (`OHUBA_OnPanelToggle()`) — bei jedem Klick auf einen Reiter werden die
+  jeweils anderen drei per `UpdateFormField(..., 'expanded', false)` zugeklappt. Es ist
+  zu jedem Zeitpunkt höchstens ein Reiter offen.
+
 ## 0.2.4 (30.08.2026)
 
 Korrektur zu 0.2.3: Dietmar stellte klar, dass er nicht vier verbreiterte Panels wollte,
