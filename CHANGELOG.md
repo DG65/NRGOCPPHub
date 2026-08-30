@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.2 (31.08.2026)
+
+**Kritischer Fix** (Dashboard-Sitzung fand den exakten Stacktrace beim Debuggen eines
+scheinbaren Netzwerkfehlers): Klick auf „Laden starten" ließ den Ladepunkt mit
+`ArgumentCountError: Too few arguments to function OHUB_RemoteStart(), 2 passed ... and
+exactly 3 expected` abstürzen — jeder manuelle Ladestart über Dashboard/`ctl_enable`
+schlug fehl.
+
+Ursache (live per `ReflectionFunction` verifiziert): `OCPPHubSplitter::RemoteStart()`
+deklariert `string $idTag = 'symcon'` mit PHP-Standardwert, aber **Symcons generierte
+globale Instanzfunktion (`OHUB_RemoteStart($InstanceID, ...)`) ignoriert PHP-
+Standardwerte auf Parametern komplett** — alle drei Parameter sind in der generierten
+Funktion zwingend, unabhängig vom Default im Quellcode. `OCPPHubLadepunkt` rief
+`OHUB_RemoteStart($splitterId, $cpid)` mit nur 2 Argumenten auf und verließ sich auf den
+(wirkungslosen) Default.
+
+Fix: dritter Parameter (`'symcon'`) wird jetzt explizit übergeben; die PHP-Standardwerte
+auf `RemoteStart()` (Splitter) und `ManualStart()` (Ladepunkt, derselbe Fehlertyp,
+bisher folgenlos weil kein interner Aufrufer den Parameter je wegließ) wurden ganz
+entfernt, damit derselbe Fehler nicht wieder passieren kann. Nebenbei entdeckter
+Symcon-Fallstrick, verbundweit relevant — an die EMS-Sitzung (SUITE.md-Pflege)
+gemeldet.
+
 ## 0.3.1 (31.08.2026)
 
 Live-Test-Fund: Dietmars neu angelegter Zugang blieb dauerhaft `Invalid`, obwohl die

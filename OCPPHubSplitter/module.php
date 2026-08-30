@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.4';
+    private const VERSION = '0.2.5';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.4';
+    private const NEWS_VERSION = '0.2.5';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Dashboard-Fund, Live-Test): manueller Ladestart über Dashboard/ctl_enable schlug mit einem PHP-Fatal-Error ab. Ursache: Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern — ein Aufruf mit nur 2 statt 3 Argumenten löste einen ArgumentCountError aus. Standardwert aus dem Quellcode entfernt, damit das nicht wieder passiert.',
         'Warnhinweis ergänzt: „OCPPHub Abrechnung" wird automatisch als Kind DIESER Splitter-Instanz angelegt — niemals selbst zusätzlich eine solche Instanz anlegen, eine zweite wird nie verwendet (live gefunden: Karten/Kunden in einer manuell angelegten zweiten Instanz blieben wirkungslos).',
         'Jede Kartenauflage (Authorize) wird jetzt zusätzlich ins dauerhafte Symcon-Systemlog geschrieben — vorher nur per SendDebug sichtbar, also unwiederbringlich weg, sobald das Debug-Fenster geschlossen war. Praktisch z. B. um den idTag einer neuen Karte nachträglich fürs Anlegen in der Abrechnung-Instanz nachzuschlagen.',
         'Kritischer Fix: jede MeterValues-Nachricht (Leistung/Energie/SoC) ließ den Splitter mit einem Fatal Error abstürzen — dadurch kamen power/energy_total NIE an, unabhängig von der Wallbox. Ursache: json_decode() ohne Assoziativ-Modus bei verschachtelten OCPP-Nachrichten. Betraf jede Wallbox, live an WB2 gefunden.',
@@ -756,7 +757,15 @@ class OCPPHubSplitter extends IPSModule
     // „Bedienung: Backend-Funktion für Dashboard".
     // ---------------------------------------------------------------------
 
-    public function RemoteStart(string $cpid, string $idTag = 'symcon'): void
+    // KEIN Standardwert auf $idTag (bewusst, Live-Bug 31.08.2026, Dashboard-Fund):
+    // Symcons generierte globale Funktion (`OHUB_RemoteStart($InstanceID, ...)`)
+    // ignoriert PHP-Standardwerte auf Instanzmethoden-Parametern komplett
+    // (verifiziert per ReflectionFunction auf der generierten Funktion — jeder
+    // Parameter ist dort zwingend, unabhängig vom hier deklarierten Default) —
+    // ein Aufrufer, der sich auf einen Default verlässt, bekommt einen
+    // ArgumentCountError. Jeder Aufrufer muss $idTag explizit übergeben
+    // (z. B. 'symcon' für manuell/EMS-ausgelöste Starts ohne echte Karte).
+    public function RemoteStart(string $cpid, string $idTag): void
     {
         $this->sendCall($cpid, 'RemoteStartTransaction', ['idTag' => $idTag]);
     }

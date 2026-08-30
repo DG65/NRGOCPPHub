@@ -26,14 +26,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.1';
+    private const VERSION = '0.2.2';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.0';
+    private const NEWS_VERSION = '0.2.2';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Dashboard-Fund, Live-Test): „Laden starten" schlug am Ladepunkt mit einem PHP-Fatal-Error ab (ArgumentCountError) — Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern, ein fehlender dritter Parameter ließ jeden manuellen Ladestart über Dashboard/ctl_enable scheitern.',
         'Stufe 2: Reservierung hinzugekommen — OHUBL_Reserve($idTag, $bisWann)/OHUBL_CancelReservation(), sichtbar in den neuen Variablen reserved_by/reserved_until. Eine aktive Reservierung blockiert jede Kartenauflage mit einem anderen idTag, unabhängig von der Splitter-Betriebsart.',
         'RFID-Autorisierung/Verbrauchslimits (Betriebsart ② am Splitter) wirken sich jetzt aus — vorher wurde jede Karte unabhängig von der Kundenverwaltung angenommen.',
     ];
@@ -385,7 +386,10 @@ class OCPPHubLadepunkt extends IPSModule
                 $this->SetValue($Ident, (bool)$Value);
                 if ($splitterId > 0 && $cpid !== '') {
                     if ($Value) {
-                        OHUB_RemoteStart($splitterId, $cpid);
+                        // 'symcon' = manuell/über Dashboard ausgelöst, keine echte
+                        // Karte (siehe Kommentar an RemoteStart() im Splitter, warum
+                        // dieser dritte Parameter zwingend mitgegeben werden muss).
+                        OHUB_RemoteStart($splitterId, $cpid, 'symcon');
                     } else {
                         OHUB_RemoteStop($splitterId, $cpid, $this->ReadAttributeInteger('LastTransactionId'));
                     }
@@ -543,11 +547,14 @@ class OCPPHubLadepunkt extends IPSModule
     // Splitter-ID-Auflösung.
     // ---------------------------------------------------------------------
 
-    public function ManualStart(int $ZugangID = 0): void
+    // KEIN Standardwert auf $ZugangID (siehe RemoteStart()-Kommentar im Splitter:
+    // Symcons generierte globale Funktion ignoriert PHP-Standardwerte auf
+    // Instanzmethoden-Parametern, jeder Aufrufer muss ihn explizit mitgeben).
+    // $ZugangID selbst wird aktuell noch nicht ausgewertet (keine idTag-Auflösung
+    // über die Abrechnung-Instanz) — derselbe Weg wie ein Klick auf ctl_enable,
+    // löst intern RemoteStartTransaction über den Splitter aus (idTag 'symcon').
+    public function ManualStart(int $ZugangID): void
     {
-        // Stufe 1: $ZugangID wird noch ignoriert (kein Kundenverwaltung-
-        // Vertrag vorhanden) — derselbe Weg wie ein Klick auf ctl_enable,
-        // löst intern RemoteStartTransaction über den Splitter aus.
         IPS_RequestAction($this->InstanceID, 'ctl_enable', true);
     }
 

@@ -289,7 +289,7 @@ Backend. Ursprünglich als eigene Kachel entworfen (siehe Git-Historie dieses
 Abschnitts), jetzt umgebaut: OCPPHub stellt die nötige Funktionalität als reine
 Backend-Funktion bereit, Dashboard baut die eigentliche Bedienoberfläche darüber.
 
-- `OHUBL_ManualStart(int $LadepunktID, int $ZugangID = 0)` / `OHUBL_ManualStop(int
+- `OHUBL_ManualStart(int $LadepunktID, int $ZugangID)` / `OHUBL_ManualStop(int
   $LadepunktID)` — **Korrektur 30.08.2026**: liegen auf der Ladepunkt-Instanz selbst,
   nicht auf dem Splitter (ursprünglich `OHUB_*` mit Splitter als Zielinstanz entworfen —
   hätte Dashboard gezwungen, zusätzlich die Splitter-ID aufzulösen, obwohl genau das
@@ -303,6 +303,16 @@ Backend-Funktion bereit, Dashboard baut die eigentliche Bedienoberfläche darüb
   der rollenbasierten Konsole am Ende rauskommt — die eigentliche Zugriffskontrolle
   „wer darf das auslösen" ist Dashboards/WebFronts Berechtigungsfrage, keine von
   OCPPHub zu lösende.
+- **Live-Bug 31.08.2026 (Dashboard-Fund, exakter Stacktrace)**: `ArgumentCountError`
+  beim manuellen Ladestart über Dashboard/`ctl_enable` — `OCPPHubLadepunkt` rief
+  `OHUB_RemoteStart($splitterId, $cpid)` mit nur 2 Argumenten auf, verlassend auf den
+  PHP-Standardwert `string $idTag = 'symcon'` im Splitter. Per `ReflectionFunction`
+  live verifiziert: **Symcons generierte globale Instanzfunktion ignoriert PHP-
+  Standardwerte auf Parametern komplett** — jeder Parameter ist dort zwingend,
+  unabhängig vom Default im Quellcode. Fix: dritter Parameter wird jetzt immer explizit
+  übergeben, alle PHP-Standardwerte auf öffentlichen Vertragsmethoden (`RemoteStart()`,
+  `ManualStart()`) entfernt, um den Fehler nicht zu wiederholen — verbundweit relevanter
+  Symcon-Fallstrick, an EMS/SUITE.md gemeldet.
 - `OHUBL_SetDailyOverride(int $LadepunktID, bool $Active)` — ebenfalls auf der
   Ladepunkt-Instanz. Tages-Override „heute Vollladen trotz PV-Vorrang", setzt die
   Vorrangkaskade („Steuerung /
