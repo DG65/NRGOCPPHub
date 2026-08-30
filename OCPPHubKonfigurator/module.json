@@ -1,0 +1,17 @@
+{
+  "id": "{FABC8306-1A0A-4BE4-9C3A-948ECFD28760}",
+  "name": "OCPPHub Konfigurator",
+  "type": 5,
+  "vendor": "",
+  "aliases": [
+    "NRG-Stack OCPPHub Konfigurator",
+    "OCPP-Wallbox Suche"
+  ],
+  "url": "https://github.com/DG65/NRGOCPPHub",
+  "parentRequirements": [
+    "{6ED0496A-EDD0-4600-9549-04D18B8387F5}"
+  ],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "OHUBK"
+}

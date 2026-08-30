@@ -1,10 +1,11 @@
 <?php
 /**
- * check-standalone.php — Prüft die Eigenständigkeit dieses Moduls (ChargerHub).
+ * check-standalone.php — Prüft die Eigenständigkeit dieses Moduls (OCPPHub).
  *
  * Grundregel des Modul-Verbunds: Kein Modul darf ein anderes voraussetzen.
- * Jeder Aufruf einer fremden Modulfunktion (MHUB_*, PVF_*, HEISHA_* ...) muss
- * deshalb innerhalb derselben Funktion durch function_exists() abgesichert sein.
+ * Jeder Aufruf einer fremden Modulfunktion (MHUB_*, IHUB_*, CHUB_*, STRUKT_*,
+ * TIBBERGR_*, EMS_* ...) muss deshalb innerhalb derselben Funktion durch
+ * function_exists() abgesichert sein.
  *
  * Warum das kein Stilthema ist: Ein Aufruf einer nicht vorhandenen Funktion ist
  * in PHP ein FATAL ERROR. Das vorangestellte @ unterdrückt ihn NICHT — es
@@ -23,10 +24,10 @@
  */
 
 // Präfixe der Partnermodule im Verbund. Neue Partner hier ergänzen.
-// Präfixe der Partnermodule. CHUB/CHUBD sind die EIGENEN Präfixe dieses Repos
-// und gehören daher NICHT in die Liste — sonst meldet das Skript die eigenen
-// Funktionen als ungeschützte Fremdaufrufe.
-const FOREIGN_PREFIXES = ['IHUB', 'IHUBD', 'IHUBNRG', 'IHUBMON', 'IHUBTILE', 'MHUB', 'MHUBD', 'PVF', 'HEISHA', 'SGW', 'TIBBERGR', 'TESSIE', 'EMS', 'GWET'];
+// OHUB/OHUBL/OHUBK sind die EIGENEN Präfixe dieses Repos (Splitter/
+// Ladepunkt/Konfigurator) und gehören daher NICHT in die Liste — sonst
+// meldet das Skript die eigenen Funktionen als ungeschützte Fremdaufrufe.
+const FOREIGN_PREFIXES = ['IHUB', 'IHUBD', 'IHUBNRG', 'IHUBMON', 'IHUBTILE', 'MHUB', 'MHUBD', 'CHUB', 'CHUBD', 'PVF', 'HEISHA', 'SGW', 'TIBBERGR', 'TESSIE', 'EMS', 'GWET', 'STRUKT', 'STBX'];
 
 $root = dirname(__DIR__);
 $rx   = '/\b((' . implode('|', FOREIGN_PREFIXES) . ')_[A-Za-z_][A-Za-z0-9_]*)\s*\(/';

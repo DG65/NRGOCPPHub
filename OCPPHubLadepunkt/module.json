@@ -1,0 +1,17 @@
+{
+  "id": "{27A1625F-A006-4945-8A36-FFBAA38A5FB5}",
+  "name": "OCPPHub Ladepunkt",
+  "type": 3,
+  "vendor": "",
+  "aliases": [
+    "NRG-Stack OCPPHub Ladepunkt",
+    "OCPP-Wallbox"
+  ],
+  "url": "https://github.com/DG65/NRGOCPPHub",
+  "parentRequirements": [
+    "{6ED0496A-EDD0-4600-9549-04D18B8387F5}"
+  ],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "OHUBL"
+}

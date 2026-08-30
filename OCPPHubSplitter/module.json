@@ -1,0 +1,17 @@
+{
+  "id": "{81D3E328-9E12-43A9-825A-F7888530868C}",
+  "name": "OCPPHub Splitter",
+  "type": 2,
+  "vendor": "",
+  "aliases": [
+    "NRG-Stack OCPPHub Splitter",
+    "OCPP Central System (Wallboxen)"
+  ],
+  "url": "https://github.com/DG65/NRGOCPPHub",
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [
+    "{6ED0496A-EDD0-4600-9549-04D18B8387F5}"
+  ],
+  "prefix": "OHUB"
+}

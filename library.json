@@ -1,0 +1,12 @@
+{
+  "id": "{0E3AE3BE-27FE-4432-B577-A03198BBDC67}",
+  "author": "DG65",
+  "name": "NRG-Stack OCPPHub",
+  "url": "https://github.com/DG65/NRGOCPPHub",
+  "compatibility": {
+    "version": "9.0"
+  },
+  "version": "0.1.0",
+  "build": 1,
+  "date": 1788076800
+}
