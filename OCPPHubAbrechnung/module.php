@@ -17,13 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.2';
+    private const VERSION = '0.2.3';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.2';
+    private const NEWS_VERSION = '0.2.3';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const NEWS_ITEMS = [
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
-        'Fahrzeuge und Gruppen stehen im Formular nun nebeneinander.',
+        'Fahrzeuge/Gruppen und Kunden/Zugänge stehen im Formular jeweils nebeneinander, verbreitert für bessere Übersicht.',
     ];
 
     public function Create()
@@ -133,6 +133,7 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'caption'  => '🚙 Fahrzeuge',
                             'expanded' => false,
+                            'width'    => '600px',
                             'items'    => [
                                 ['type' => 'Label', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
                                 [
@@ -155,6 +156,7 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'caption'  => '👥 Gruppen',
                             'expanded' => false,
+                            'width'    => '450px',
                             'items'    => [
                                 ['type' => 'Label', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
                                 [
@@ -177,52 +179,59 @@ class OCPPHubAbrechnung extends IPSModule
                     ],
                 ],
                 [
-                    'type'     => 'ExpansionPanel',
-                    'caption'  => '🙋 Kunden',
-                    'expanded' => true,
-                    'items'    => [
+                    'type'  => 'RowLayout',
+                    'items' => [
                         [
-                            'type'     => 'List',
-                            'name'     => 'Kunden',
-                            'caption'  => 'Kunden',
-                            'rowCount' => 6,
-                            'add'      => true,
-                            'delete'   => true,
-                            'columns'  => [
-                                ['caption' => 'Name', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Aktiv', 'name' => 'active', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                                ['caption' => 'Gruppe', 'name' => 'groupId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $gruppenOptions]],
-                                ['caption' => 'Limit/Woche (kWh, 0=aus)', 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                ['caption' => 'Limit/Monat (kWh, 0=aus)', 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                ['caption' => 'Limit/Jahr (kWh, 0=aus)', 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            'type'     => 'ExpansionPanel',
+                            'caption'  => '🙋 Kunden',
+                            'expanded' => true,
+                            'width'    => '900px',
+                            'items'    => [
+                                [
+                                    'type'     => 'List',
+                                    'name'     => 'Kunden',
+                                    'caption'  => 'Kunden',
+                                    'rowCount' => 6,
+                                    'add'      => true,
+                                    'delete'   => true,
+                                    'columns'  => [
+                                        ['caption' => 'Name', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Aktiv', 'name' => 'active', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                                        ['caption' => 'Gruppe', 'name' => 'groupId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $gruppenOptions]],
+                                        ['caption' => 'Limit/Woche (kWh, 0=aus)', 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                                        ['caption' => 'Limit/Monat (kWh, 0=aus)', 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                                        ['caption' => 'Limit/Jahr (kWh, 0=aus)', 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                                    ],
+                                    'values' => $kunden,
+                                ],
                             ],
-                            'values' => $kunden,
                         ],
-                    ],
-                ],
-                [
-                    'type'     => 'ExpansionPanel',
-                    'caption'  => '🪪 Zugänge (Karten)',
-                    'expanded' => true,
-                    'items'    => [
                         [
-                            'type'     => 'List',
-                            'name'     => 'Zugaenge',
-                            'caption'  => 'Zugänge',
-                            'rowCount' => 8,
-                            'add'      => true,
-                            'delete'   => true,
-                            'columns'  => [
-                                ['caption' => 'idTag (Karte)', 'name' => 'idTag', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Anzeigename', 'name' => 'name', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Kunde', 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
-                                ['caption' => 'Fahrzeug', 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
-                                ['caption' => 'Aktiv', 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                                ['caption' => 'Gültig bis (JJJJ-MM-TT, leer=unbegrenzt)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Erlaubt ab (HH:MM, leer=immer)', 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Erlaubt bis (HH:MM, leer=immer)', 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            'type'     => 'ExpansionPanel',
+                            'caption'  => '🪪 Zugänge (Karten)',
+                            'expanded' => true,
+                            'width'    => '1100px',
+                            'items'    => [
+                                [
+                                    'type'     => 'List',
+                                    'name'     => 'Zugaenge',
+                                    'caption'  => 'Zugänge',
+                                    'rowCount' => 8,
+                                    'add'      => true,
+                                    'delete'   => true,
+                                    'columns'  => [
+                                        ['caption' => 'idTag (Karte)', 'name' => 'idTag', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Anzeigename', 'name' => 'name', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Kunde', 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
+                                        ['caption' => 'Fahrzeug', 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
+                                        ['caption' => 'Aktiv', 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                                        ['caption' => 'Gültig bis (JJJJ-MM-TT, leer=unbegrenzt)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Erlaubt ab (HH:MM, leer=immer)', 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Erlaubt bis (HH:MM, leer=immer)', 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                    ],
+                                    'values' => $this->getZugaenge(),
+                                ],
                             ],
-                            'values' => $this->getZugaenge(),
                         ],
                     ],
                 ],

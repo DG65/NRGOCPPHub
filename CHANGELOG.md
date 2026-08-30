@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.3 (30.08.2026)
+
+Dietmar fand das Fahrzeuge/Gruppen-Nebeneinander aus 0.2.2 gut und wollte es
+konsequent zu Ende gedacht: auch Kunden und Zugänge nebeneinander, und alle vier
+Listen breiter, damit sie die verfügbare Formularbreite besser ausnutzen.
+
+- **Kunden/Zugänge jetzt ebenfalls in einer Zeile** (analog Fahrzeuge/Gruppen), statt
+  wie bisher gestapelt.
+- **Alle vier Panels verbreitert** (`width` auf jedem `ExpansionPanel` in der
+  `RowLayout`: Fahrzeuge 600px, Gruppen 450px, Kunden 900px, Zugänge 1100px — nach
+  Spaltenanzahl gestaffelt). Bewusst feste Pixelwerte statt Prozent: IP-Symcon 9.0 hat
+  einen bestätigten Darstellungsfehler bei Prozent-Breiten in `RowLayout` (Elemente
+  überlappen/stauchen sich), Fix laut Symcon-Entwickler erst für 9.1 angekündigt —
+  echte responsive 100%-Breite ist damit auf 9.0 nicht sauber möglich, feste Pixelwerte
+  sind der verifizierte Workaround. Kunden/Zugänge bleiben inhaltlich unverändert breit
+  (6 bzw. 8 Spalten) — bei schmalen Fenstern scrollt die jeweilige Liste intern, wie
+  bisher schon bei den einzeln stehenden Panels.
+
 ## 0.2.2 (30.08.2026)
 
 Dietmar wies darauf hin, dass die Fahrzeuge-Liste in OCPPHub Abrechnung bislang
