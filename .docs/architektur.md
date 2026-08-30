@@ -423,15 +423,25 @@ hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT i
   `vehicle_plugged` vorher IMMER, auch bei unbekanntem Status (dann fälschlich `false`)
   — jetzt nur noch bei erkanntem Status.
   Analog ChargerHubs `Update()`-Verhalten.
-- **Direktweg über idTag** (ChargerHub-Empfehlung, noch NICHT umsetzbar — braucht
-  Kundenverwaltung/Stufe 2): kommt eine Transaktion mit einem idTag rein, der in unserer
-  künftigen Kundenverwaltung einem Fahrzeug zugeordnet ist, ist das eine ECHTE
-  Identifikation statt Zeitkorrelation — dann `vehicle_name` direkt selbst setzen statt
-  auf Dashboard zu warten. Kein Verstoß gegen die Ein-Mechanismus-Regel (kein
-  Heuristik-Duplikat, sondern Wissen). Abstimmung mit Dashboard schon getroffen:
-  idTag-Zuordnung gewinnt gegen Zeitkorrelation — Dashboard überschreibt einen bereits
-  gesetzten, nicht-leeren `vehicle_name` nicht. TODO Stufe 2, sobald Kundenverwaltung
-  steht.
+- **Direktweg über idTag** (ChargerHub-Empfehlung, **umgesetzt in Stufe 2/0.2.0**): kommt
+  eine Transaktion mit einem idTag rein, der in der Kundenverwaltung (OCPPHub Abrechnung)
+  einem Fahrzeug zugeordnet ist, ist das eine ECHTE Identifikation statt Zeitkorrelation
+  — der Splitter setzt `vehicle_name` dann direkt selbst, statt auf Dashboard zu warten.
+  Kein Verstoß gegen die Ein-Mechanismus-Regel (kein Heuristik-Duplikat, sondern Wissen).
+  Abstimmung mit Dashboard: idTag-Zuordnung gewinnt gegen Zeitkorrelation — Dashboard
+  überschreibt einen bereits gesetzten, nicht-leeren `vehicle_name` nicht.
+- **Fahrzeuge-Liste in OCPPHub Abrechnung ↔ Tessie-Verknüpfung (0.2.2)**: Dietmars
+  Einwand am Live-Beispiel — die Fahrzeuge-Liste der Abrechnungs-Instanz (Anzeigename/
+  Kennzeichen) war rein freihändig getippt und hatte keinen Bezug zu Fahrzeugen, die im
+  Verbund über Tessie bereits bekannt sind ("Schneeflocke" #19532, "Kohlekasten"
+  #41537). Jede Fahrzeugzeile kann jetzt optional per `SelectInstance` (gefiltert auf
+  `TessieVehicle`, GUID `{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}`) mit einer echten
+  Tessie-Instanz verknüpft werden; ist verknüpft, gilt deren `IPS_GetName()` live als
+  Anzeigename (kein zweiter, potenziell veraltender Namensspeicher). Ohne Verknüpfung
+  bleibt das manuelle Namensfeld (deckt Fahrzeuge ab, die nicht per Tessie erfasst sind,
+  z. B. Fremd-/Firmenfahrzeuge) — bewusst kein Zwang zur Tessie-Abhängigkeit
+  (`function_exists` nicht nötig, da nur Symcon-Kernfunktionen `IPS_InstanceExists`/
+  `IPS_GetInstance`/`IPS_GetName` verwendet werden, kein Aufruf einer TESSIE_-Funktion).
 - **KEIN eigener SOC-Vertrag** (ChargerHub hat auch keinen — Modbus-Wallboxen liefern
   keinen Fahrzeug-SOC, SOC kommt vom Fahrzeug-Modul, z. B. `TESSIE_GetVehicleState`
   contractVersion 1.4, konsumiert von EMS/Dashboard). **Ausnahme, die bei uns anders

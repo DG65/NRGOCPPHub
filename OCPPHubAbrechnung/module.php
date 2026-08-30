@@ -17,11 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.1';
+    private const VERSION = '0.2.2';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.0';
+    private const NEWS_VERSION = '0.2.2';
+    private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const NEWS_ITEMS = [
-        'Neue Instanz: Kundenverwaltung für Betriebsart ② „Mehrere Nutzer" — Kunden, deren Zugänge (Karten), Fahrzeuge und Gruppen mit optionalen Verbrauchslimits.',
+        'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
+        'Fahrzeuge und Gruppen stehen im Formular nun nebeneinander.',
     ];
 
     public function Create()
@@ -97,7 +99,8 @@ class OCPPHubAbrechnung extends IPSModule
 
         $fahrzeugOptions = [['caption' => '— keins —', 'value' => 0]];
         foreach ($fahrzeuge as $f) {
-            $fahrzeugOptions[] = ['caption' => $f['name'] . ($f['kennzeichen'] !== '' ? ' (' . $f['kennzeichen'] . ')' : ''), 'value' => (int)$f['id']];
+            $fahrzeugName = $this->resolveFahrzeugName($f);
+            $fahrzeugOptions[] = ['caption' => $fahrzeugName . ($f['kennzeichen'] !== '' ? ' (' . $f['kennzeichen'] . ')' : ''), 'value' => (int)$f['id']];
         }
         $gruppenOptions = [['caption' => '— keine —', 'value' => 0]];
         foreach ($gruppen as $g) {
@@ -124,45 +127,52 @@ class OCPPHubAbrechnung extends IPSModule
                     ],
                 ],
                 [
-                    'type'     => 'ExpansionPanel',
-                    'caption'  => '🚙 Fahrzeuge',
-                    'expanded' => false,
-                    'items'    => [
+                    'type'  => 'RowLayout',
+                    'items' => [
                         [
-                            'type'     => 'List',
-                            'name'     => 'Fahrzeuge',
-                            'caption'  => 'Fahrzeuge',
-                            'rowCount' => 5,
-                            'add'      => true,
-                            'delete'   => true,
-                            'columns'  => [
-                                ['caption' => 'Anzeigename', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Kennzeichen', 'name' => 'kennzeichen', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            'type'     => 'ExpansionPanel',
+                            'caption'  => '🚙 Fahrzeuge',
+                            'expanded' => false,
+                            'items'    => [
+                                ['type' => 'Label', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
+                                [
+                                    'type'     => 'List',
+                                    'name'     => 'Fahrzeuge',
+                                    'caption'  => 'Fahrzeuge',
+                                    'rowCount' => 5,
+                                    'add'      => true,
+                                    'delete'   => true,
+                                    'columns'  => [
+                                        ['caption' => 'Tessie-Fahrzeug', 'name' => 'tessieInstanceId', 'width' => '180px', 'add' => 0, 'edit' => ['type' => 'SelectInstance', 'moduleID' => self::TESSIE_VEHICLE_GUID]],
+                                        ['caption' => 'Anzeigename (falls kein Tessie-Fahrzeug)', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Kennzeichen', 'name' => 'kennzeichen', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                    ],
+                                    'values' => $fahrzeuge,
+                                ],
                             ],
-                            'values' => $fahrzeuge,
                         ],
-                    ],
-                ],
-                [
-                    'type'     => 'ExpansionPanel',
-                    'caption'  => '👥 Gruppen',
-                    'expanded' => false,
-                    'items'    => [
-                        ['type' => 'Label', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
                         [
-                            'type'     => 'List',
-                            'name'     => 'Gruppen',
-                            'caption'  => 'Gruppen',
-                            'rowCount' => 5,
-                            'add'      => true,
-                            'delete'   => true,
-                            'columns'  => [
-                                ['caption' => 'Name', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                                ['caption' => 'Limit/Woche (kWh, 0=aus)', 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                ['caption' => 'Limit/Monat (kWh, 0=aus)', 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                                ['caption' => 'Limit/Jahr (kWh, 0=aus)', 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            'type'     => 'ExpansionPanel',
+                            'caption'  => '👥 Gruppen',
+                            'expanded' => false,
+                            'items'    => [
+                                ['type' => 'Label', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
+                                [
+                                    'type'     => 'List',
+                                    'name'     => 'Gruppen',
+                                    'caption'  => 'Gruppen',
+                                    'rowCount' => 5,
+                                    'add'      => true,
+                                    'delete'   => true,
+                                    'columns'  => [
+                                        ['caption' => 'Name', 'name' => 'name', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                                        ['caption' => 'Woche', 'name' => 'maxKwhWeek', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                                        ['caption' => 'Monat', 'name' => 'maxKwhMonth', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                                        ['caption' => 'Jahr', 'name' => 'maxKwhYear', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                                    ],
+                                    'values' => $gruppen,
+                                ],
                             ],
-                            'values' => $gruppen,
                         ],
                     ],
                 ],
@@ -300,6 +310,18 @@ class OCPPHubAbrechnung extends IPSModule
         return null;
     }
 
+    // Bei Verknüpfung mit einem Tessie-Fahrzeug (Betriebsart ②, Verbund-Kenntnis
+    // via TessieVehicle-Instanz) gilt dessen Name als Quelle der Wahrheit — kein
+    // doppelt gepflegter Text, immer aktuell. Ohne Verknüpfung: manuelles Feld.
+    private function resolveFahrzeugName(array $fahrzeug): string
+    {
+        $instanceId = (int)($fahrzeug['tessieInstanceId'] ?? 0);
+        if ($instanceId > 0 && @IPS_InstanceExists($instanceId) && IPS_GetInstance($instanceId)['ModuleInfo']['ModuleID'] === self::TESSIE_VEHICLE_GUID) {
+            return IPS_GetName($instanceId);
+        }
+        return (string)($fahrzeug['name'] ?? '');
+    }
+
     private function findZugangByIdTag(string $idTag): ?array
     {
         foreach ($this->getZugaenge() as $row) {
@@ -393,7 +415,9 @@ class OCPPHubAbrechnung extends IPSModule
         $vehicleName = '';
         if ($vehicleId > 0) {
             $fahrzeug = $this->findById($this->getFahrzeuge(), $vehicleId);
-            $vehicleName = $fahrzeug['name'] ?? '';
+            if ($fahrzeug !== null) {
+                $vehicleName = $this->resolveFahrzeugName($fahrzeug);
+            }
         }
 
         return [

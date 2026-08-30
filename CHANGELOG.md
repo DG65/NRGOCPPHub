@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.2 (30.08.2026)
+
+Dietmar wies darauf hin, dass die Fahrzeuge-Liste in OCPPHub Abrechnung bislang
+freihändig getippte Namen erwartete, obwohl seine echten Fahrzeuge im NRG-Stack-Verbund
+längst per Tessie bekannt sind ("Schneeflocke", "Kohlekasten") — die beiden Datenwelten
+hatten keine Verbindung.
+
+- **Fahrzeuge ↔ Tessie verknüpfbar**: neue Spalte „Tessie-Fahrzeug" (`SelectInstance`,
+  gefiltert auf `TessieVehicle`) in der Fahrzeuge-Liste von OCPPHub Abrechnung. Ist eine
+  Instanz verknüpft, gilt deren `IPS_GetName()` als Anzeigename (immer aktuell, kein
+  doppeltes Pflegen) — sonst weiterhin das manuelle Namensfeld. Wirkt überall dort, wo
+  bislang der freihändige Fahrzeugname verwendet wurde: Fahrzeug-Dropdown im Formular,
+  `CheckAuthorization()`s `vehicleName`-Rückgabe (und damit die idTag-Direktzuordnung
+  des `vehicle_name` am Ladepunkt).
+- **Fahrzeuge/Gruppen nebeneinander**: beide Panels stehen jetzt in einer `RowLayout`
+  statt gestapelt untereinander (Dietmars Vorschlag beim Live-Test der
+  Abrechnungs-Instanz).
+
 ## 0.2.1 (30.08.2026)
 
 **Kritischer Fix** (Dashboard-Diagnose + eigener Live-Zugriff auf Dietmars Instanz):
