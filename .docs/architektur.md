@@ -33,7 +33,18 @@ Vorlage, falls an anderer Stelle im Modul dieselbe Frage aufkommt.
    Dashboards Aufgabe, OCPPHub bleibt reines Backend — der manuelle Start/Stop-Weg
    (ursprünglich als eigene Kachel gedacht) wird stattdessen als Backend-Funktion
    angeboten, die Dashboard konsumiert (siehe „Bedienung: Backend-Funktion für
-   Dashboard").
+   Dashboard"). **FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
+   direkt an Dietmars Instanz)**: die Zuordnung Ladepunkt↔Splitter läuft NICHT über
+   Symcons Objektbaum-Position (`IPS_GetParent()`/`IPS_GetChildrenIDs()`) — Instanzen
+   lassen sich in der Konsole frei in andere Kategorien verschieben (Dietmar
+   organisiert seine Instanzen unter „Geräte / Module"), wodurch die Objektbaum-
+   Position von der tatsächlichen Splitter-Zugehörigkeit abweichen kann. Live
+   bestätigt: WB1 lag unter einer fremden Kategorie, `IPS_GetChildrenIDs()` auf den
+   Splitter lieferte leer — sowohl `OHUB_GetFunctions()` als auch die Steuerbefehle
+   (`ctl_enable`/`ctl_curr_limit`, die intern denselben Splitter finden müssen) waren
+   dadurch faktisch tot. Stattdessen jetzt: explizite Pflicht-Property `SplitterID` am
+   Ladepunkt (SelectInstance-Feld im Formular, vom Konfigurator beim Erstellen
+   automatisch vorbelegt), Objektbaum-Position bleibt nur Rückfall für Alt-Instanzen.
 3. **OCPPHub Konfigurator**: listet verbundene, noch nicht angelegte Ladepunkte.
 4. **OCPPHub Abrechnung** (eigene Instanz, **obligatorischer** Bestandteil des Moduls,
    nicht zubuchbar/abwählbar — wird vom Splitter bei Erstanlage automatisch mit

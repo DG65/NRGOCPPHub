@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.9 (30.08.2026)
+
+**Wichtiger Fix** (Dashboard-Diagnose, direkt an Dietmars laufender Instanz
+per Live-Zugriff nachgeprüft): die Zuordnung Ladepunkt↔Splitter lief bisher
+über Symcons Objektbaum-Position (`IPS_GetParent()`/`IPS_GetChildrenIDs()`)
+statt über eine explizite Property. Da sich Instanzen in der Konsole frei
+in andere Kategorien verschieben lassen (bei Dietmar unter „Geräte /
+Module" organisiert), konnte die Objektbaum-Position von der tatsächlichen
+Splitter-Zugehörigkeit abweichen — live bestätigt: WB1 lag unter einer
+fremden Kategorie, `OHUB_GetFunctions()` fand sie nicht mehr (deshalb blieb
+Dashboard leer), UND die internen Steuerbefehle (`ctl_enable`/
+`ctl_curr_limit`) fanden den Splitter ebenfalls nicht mehr.
+
+- Neues Pflichtfeld „OCPPHub-Splitter" (SelectInstance) am Ladepunkt —
+  Property statt Objektbaum-Abfrage, mit Objektbaum-Rückfall für
+  Alt-Instanzen.
+- Splitter (`findLadepunkt()`, `GetFunctions()`) und Konfigurator suchen
+  jetzt über `IPS_GetInstanceListByModuleID()` + Property-Filter statt
+  `IPS_GetChildrenIDs()`.
+- Konfigurator trägt die Splitter-Zuordnung neu angelegten Ladepunkt-
+  Instanzen automatisch mit ein.
+- **Bereits angelegte Ladepunkt-Instanzen (z. B. WB1) müssen einmal
+  geöffnet und „OCPPHub-Splitter" manuell gesetzt werden**, danach
+  funktioniert alles ohne weiteres Zutun.
+
+Außerdem (Dietmar: Formulartexte waren noch zu knapp gegenüber
+ChargerHub): alle drei Doku-Panels deutlich ausführlicher — Instanzmodell
+im Überblick, Fehlersuche-Anleitung, mehr Kontext zu jedem Feld, Basic-
+Auth-Verhalten im Detail.
+
 ## 0.1.8 (30.08.2026)
 
 Nachgezogen (Dietmar): zwei weitere fehlende Verbund-Formularkonventionen.

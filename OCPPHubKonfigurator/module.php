@@ -20,16 +20,17 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.8';
+    private const VERSION = '0.1.9';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.7';
+    private const NEWS_VERSION = '0.1.9';
     private const NEWS_ITEMS = [
         'Splitter-Zuordnung jetzt auch manuell wählbar (Auswahlfeld oben), falls die automatische Erkennung über die Instanz-Verschachtelung nicht greift.',
+        'Neu angelegte Ladepunkt-Instanzen bekommen ihre Splitter-Zuordnung jetzt direkt beim Erstellen korrekt mit — vorher musste sie am Ladepunkt selbst nachträglich gesetzt werden.',
     ];
 
     public function Create()
@@ -59,11 +60,20 @@ class OCPPHubKonfigurator extends IPSModule
     {
         $splitterId = $this->resolveSplitterId();
 
+        // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
+        // an Dietmars Instanz): IPS_GetChildrenIDs($splitterId) spiegelt
+        // NICHT zuverlässig die Splitter-Zuordnung (Objektbaum-Position ≠
+        // tatsächliche Splitter-Zugehörigkeit, siehe OCPPHubSplitter
+        // ownLadepunkte()-Kommentar). Alle Ladepunkt-Instanzen im System
+        // durchsuchen und über die SplitterID-Property filtern.
         $existing = [];
         if ($splitterId > 0) {
-            foreach (@IPS_GetChildrenIDs($splitterId) ?: [] as $childId) {
-                $instance = @IPS_GetInstance($childId);
-                if ($instance && $instance['ModuleInfo']['ModuleID'] === self::LADEPUNKT_GUID) {
+            foreach (@IPS_GetInstanceListByModuleID(self::LADEPUNKT_GUID) ?: [] as $childId) {
+                $explicitSplitterId = (int)@IPS_GetProperty($childId, 'SplitterID');
+                $matches = $explicitSplitterId > 0
+                    ? $explicitSplitterId === $splitterId
+                    : (int)(@IPS_GetParent($childId) ?: 0) === $splitterId;
+                if ($matches) {
                     $existing[@IPS_GetProperty($childId, 'CPID')] = $childId;
                 }
             }
@@ -80,7 +90,11 @@ class OCPPHubKonfigurator extends IPSModule
                     'create'     => [
                         'moduleID'      => self::LADEPUNKT_GUID,
                         'name'          => $cpid,
-                        'configuration' => ['CPID' => $cpid],
+                        // SplitterID direkt mitgeben (Pflichtfeld am
+                        // Ladepunkt, siehe dortiger FIX-Kommentar) — sonst
+                        // müsste man sie nach dem Erstellen von Hand
+                        // nachtragen.
+                        'configuration' => ['CPID' => $cpid, 'SplitterID' => $splitterId],
                     ],
                 ];
             }
@@ -93,9 +107,10 @@ class OCPPHubKonfigurator extends IPSModule
                     'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => 'Zeigt Wallboxen, die sich bereits mit ihrer Charge-Point-Identity beim OCPPHub-Splitter gemeldet haben, aber noch keine eigene Instanz haben.'],
-                        ['type' => 'Label', 'caption' => 'Wallbox zuerst in ihrer eigenen OCPP-Konfiguration auf den Splitter-Endpunkt einstellen, dann hier „Erstellen" klicken.'],
-                        ['type' => 'Label', 'caption' => 'Falls unten kein Splitter automatisch erkannt wird: rechts die passende OCPPHub-Splitter-Instanz manuell auswählen.'],
+                        ['type' => 'Label', 'caption' => 'Was diese Instanz macht: reine Ersteinrichtungs-Hilfe, keine eigene Funktion im laufenden Betrieb. Zeigt Charge-Point-Identities, die sich bereits per OCPP beim ausgewählten Splitter gemeldet haben, aber noch keine eigene „OCPPHub Ladepunkt"-Instanz haben — spart das manuelle Anlegen samt korrekter Splitter-Zuordnung.'],
+                        ['type' => 'Label', 'caption' => '1️⃣ Wallbox zuerst in ihrer eigenen OCPP-Konfiguration auf den Splitter-Endpunkt einstellen (Backend-URL, siehe Splitter-Instanz, Panel „Dokumentation & Hilfe" dort). Sobald sie sich einmal gemeldet hat, erscheint ihre Charge-Point-Identity unten in der Liste „Gesehene Wallboxen" — auch wenn die Verbindung danach wieder getrennt wird.'],
+                        ['type' => 'Label', 'caption' => '2️⃣ In der Zeile der gewünschten Wallbox auf „Erstellen" klicken. Das legt eine neue „OCPPHub Ladepunkt"-Instanz an, mit Charge-Point-Identity UND Splitter-Zuordnung bereits korrekt vorausgefüllt — im Ladepunkt-Formular ist danach nichts weiter zwingend nötig, es sei denn, Stromgrenzen oder PV-Überschussladen sollen von den Standardwerten abweichen.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Falls oben kein Splitter automatisch erkannt wird (Meldung „Kein OCPPHub-Splitter gefunden"): im Auswahlfeld „OCPPHub-Splitter" die passende Instanz manuell wählen. Das betrifft nur DIESE Konfigurator-Instanz — für jede einzeln erstellte Ladepunkt-Instanz ist die Splitter-Zuordnung dort im eigenen Formular ohnehin Pflicht (siehe deren Dokumentation).'],
                     ],
                 ],
                 [

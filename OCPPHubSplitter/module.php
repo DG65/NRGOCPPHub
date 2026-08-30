@@ -40,14 +40,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.8';
+    private const VERSION = '0.1.9';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.7';
+    private const NEWS_VERSION = '0.1.9';
     private const NEWS_ITEMS = [
+        'Wichtiger Fix: die Zuordnung Ladepunkt↔Splitter lief bisher über die Objektbaum-Position (Symcons Kategorie-Struktur in der Konsole) — verschiebt man eine Ladepunkt-Instanz dort in eine andere Kategorie, fand der Splitter sie nicht mehr (weder für Steuerbefehle noch für den Dashboard-Vertrag). Jetzt eine explizite Pflicht-Zuordnung je Ladepunkt-Instanz, unabhängig von der Konsolen-Organisation. Bereits angelegte Ladepunkt-Instanzen bitte einmal öffnen und „OCPPHub-Splitter" nachtragen.',
         'Erste installierbare Fassung: OCPP-1.6J-Kernprotokoll läuft (BootNotification, Heartbeat, StatusNotification, Authorize — noch immer „Accepted", StartTransaction, StopTransaction, MeterValues).',
         'Nach jedem Verbindungsaufbau wird das MeterValues-Intervall der Wallbox automatisch auf 10s verkürzt (ChangeConfiguration) — sonst rechnet das Überschussladen an der Ladepunkt-Instanz mit veralteten Werten.',
         'Noch kein RFID-Zwang, keine Kundenverwaltung, keine Tarife/Reservierung — kommt in einer späteren Version.',
@@ -162,14 +163,17 @@ class OCPPHubSplitter extends IPSModule
                     'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => 'Der Splitter ist das Central System: Wallboxen verbinden sich per WebSocket (OCPP 1.6J) hierher. Diese Instanz selbst zeigt keine einzelne Wallbox — dafür je eine „OCPPHub Ladepunkt"-Instanz anlegen (am einfachsten über „OCPPHub Konfigurator", der bereits verbundene, noch nicht angelegte Wallboxen anzeigt).'],
-                        ['type' => 'Label', 'caption' => '🔌 In der OCPP-Konfiguration der Wallbox als Backend-URL eintragen: ' . $this->hookPath() . '/<Charge-Point-Identity> — <Charge-Point-Identity> ist ein frei wählbarer Name, den die Wallbox selbst mitschickt (z. B. „WB1"), muss NICHT vorher hier angelegt werden.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Stufe 1 (aktueller Stand): Kernprotokoll (Boot/Heartbeat/Status/Start/Stop/MeterValues) + eigenständiges PV-Überschussladen. Noch KEIN RFID-Zwang — jede Karte/jedes Anstecken wird angenommen. Kundenverwaltung, Tarife, Reservierung folgen in einer späteren Version.'],
+                        ['type' => 'Label', 'caption' => 'Was diese Instanz macht: Der Splitter ist das OCPP-„Central System" — die Gegenstelle, zu der sich Wallboxen per WebSocket verbinden. Er nimmt beliebig viele gleichzeitige Wallbox-Verbindungen entgegen, unterscheidet sie anhand ihrer Charge-Point-Identity (dem letzten Pfadstück der URL) und leitet jede eingehende OCPP-Nachricht an die passende „OCPPHub Ladepunkt"-Instanz weiter. Diese Splitter-Instanz selbst zeigt keine einzelne Wallbox und keine Ladeleistung — dafür ist ausschließlich die Ladepunkt-Instanz zuständig.'],
+                        ['type' => 'Label', 'caption' => '📦 Instanzmodell im Überblick: Splitter (diese Instanz, genau einmal) → mehrere „OCPPHub Ladepunkt"-Instanzen (eine je Wallbox/Connector) → optional „OCPPHub Konfigurator" (praktisch fürs Ersteinrichten, zeigt bereits verbundene, aber noch nicht angelegte Wallboxen zum Ein-Klick-Anlegen). Jede Ladepunkt-Instanz muss im eigenen Formular explizit auf DIESEN Splitter zeigen (Feld „OCPPHub-Splitter") — das ist Pflicht und wird NICHT automatisch aus der Objektbaum-Position abgeleitet, weil sich Instanzen in der Konsole frei in andere Kategorien verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
+                        ['type' => 'Label', 'caption' => '🔌 Wallbox einrichten: in deren eigener OCPP-Konfiguration als Backend-/Server-URL eintragen: ' . $this->hookPath() . '/<Charge-Point-Identity>. <Charge-Point-Identity> ist ein frei wählbarer Name, den die Wallbox selbst bei jeder Nachricht mitschickt (z. B. „WB1") — er muss NICHT vorher hier angelegt werden, sondern taucht nach dem ersten Verbindungsversuch automatisch im „OCPPHub Konfigurator" auf. Subprotokoll ist „ocpp1.6", Nachrichtenformat OCPP-J (JSON über WebSocket) — kein separater Port, kein externer Prozess, Symcon übernimmt den WebSocket-Handshake komplett selbst über seinen eingebauten Hook-Mechanismus.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang Stufe 1 (aktueller Stand): vollständiges OCPP-1.6J-Kernprotokoll (BootNotification, Heartbeat, StatusNotification, Authorize, StartTransaction, StopTransaction, MeterValues) plus eigenständiges PV-Überschussladen als Fallback ohne EMS. Bewusst NOCH NICHT enthalten: RFID-Pflicht (jede Karte/jedes Anstecken wird zurzeit angenommen), Kundenverwaltung, Tarife/Abrechnung, Reservierung, Lastverteilung über mehrere eigene Ladepunkte hinweg — das kommt stufenweise in späteren Versionen (siehe `.docs/pflichtenheft.md` im Repo für den vollständigen Plan).'],
+                        ['type' => 'Label', 'caption' => '🔎 Fehlersuche: Meldet sich eine Wallbox nicht, zuerst die Debug-Ausgabe dieser Instanz aktivieren (Konsole → diese Instanz → Debug-Meldungen) und einen Verbindungsversuch der Wallbox abwarten — jede eingehende Anfrage wird dort mit Methode und Pfad protokolliert, bevor irgendetwas geprüft wird. Kommt gar nichts an: URL/Pfad an der Wallbox prüfen. Kommt etwas an, wird aber abgelehnt: meist Basic-Auth (siehe unten) oder ein noch nicht verstandenes OCPP-Detail dieser Wallbox — dann bitte über GitHub melden.'],
                         ['type' => 'Label', 'caption' => '⚠️ Ungetestet gegen die meisten OCPP-1.6J-Wallboxen außer go-e — bei anderen Herstellern bitte Rückmeldung über GitHub geben, falls etwas nicht passt (Measurand-Namen/Einheiten in MeterValues, ChargingRateUnit bei SetChargingProfile).'],
-                        ['type' => 'Label', 'caption' => '• go-e Gemini/HOME+: OCPP 1.6J ab Firmware 56.1 (besser ≥56.8), Aktivierung per App, WSS + HTTP-Basic-Auth empfohlen. Referenz-/Testhardware dieses Moduls.'],
+                        ['type' => 'Label', 'caption' => '• go-e Gemini/HOME+: OCPP 1.6J ab Firmware 56.1 (besser ≥56.8), Aktivierung per App, WSS + HTTP-Basic-Auth empfohlen. Referenz-/Testhardware dieses Moduls, siehe „Was ist neu" oben für den aktuellen Live-Test-Stand.'],
                         ['type' => 'Label', 'caption' => '• KEBA P30: OCPP 1.6 nur bei der x-series — die c-series kann kein OCPP (dort ChargerHub per Modbus/UDP nutzen).'],
                         ['type' => 'Label', 'caption' => '• Alfen Eve (Single/Double Pro-line): OCPP ist dort das native Primärprotokoll, sollte gut funktionieren — noch nicht selbst getestet.'],
                         ['type' => 'Label', 'caption' => '• Heidelberg Energy Control: kann KEIN OCPP (nur Modbus RTU) — dafür ChargerHub verwenden, nicht OCPPHub.'],
+                        ['type' => 'Label', 'caption' => '🧩 Verbund: OCPPHub ist das OCPP-Geschwistermodul zu ChargerHub (Modbus TCP) — beide melden Wallboxen über einen feldgleichen Vertrag (`OHUB_GetFunctions`/`CHUB_GetFunctions`) an EMS und Dashboard, sodass es für die konsumierenden Module keinen Unterschied macht, ob eine Wallbox per Modbus oder OCPP angebunden ist.'],
                     ],
                 ],
                 [
@@ -185,7 +189,9 @@ class OCPPHubSplitter extends IPSModule
                     'type'    => 'ExpansionPanel',
                     'caption' => '🔐 Basic-Auth (optional)',
                     'items'   => [
-                        ['type' => 'Label', 'caption' => 'Nur nötig, falls Symcon aus einem nicht vollständig vertrauenswürdigen Netz erreichbar ist. Leerer Benutzername = kein Basic-Auth, jede Wallbox darf sich verbinden. Zugangsdaten-Konvention (Verbund-Regel 7): das Passwort wird nach der Übernahme sofort gehasht gespeichert und dieses Feld hier automatisch geleert — beim erneuten Öffnen steht hier also nie das bestehende Passwort.'],
+                        ['type' => 'Label', 'caption' => 'Nur nötig, falls Symcon aus einem nicht vollständig vertrauenswürdigen Netz erreichbar ist (z. B. wenn der WebSocket-Endpunkt über eine Portweiterleitung von außerhalb erreichbar gemacht wird) — im reinen Heimnetz meist verzichtbar. Leerer Benutzername = kein Basic-Auth, jede Wallbox darf sich verbinden.'],
+                        ['type' => 'Label', 'caption' => 'Ist ein Benutzername gesetzt, muss die Wallbox in ihrer eigenen OCPP-Konfiguration genau denselben Benutzernamen und dasselbe Passwort für HTTP-Basic-Auth hinterlegen — sonst wird jede Verbindung mit HTTP 401 abgewiesen (sichtbar in der Debug-Ausgabe als „Basic-Auth abgelehnt").'],
+                        ['type' => 'Label', 'caption' => 'Zugangsdaten-Konvention (Verbund-Regel 7): das Passwort wird nach der Übernahme sofort gehasht gespeichert und dieses Feld hier automatisch geleert — beim erneuten Öffnen steht hier also nie das bestehende Passwort im Klartext, auch nicht für Dich selbst. Zum Ändern einfach ein neues eintragen; leer lassen behält das bisherige Passwort bei.'],
                         [
                             'type'    => 'ValidationTextBox',
                             'name'    => 'BasicAuthUsername',
@@ -554,16 +560,44 @@ class OCPPHubSplitter extends IPSModule
 
     private function findLadepunkt(string $cpid): int
     {
-        foreach (@IPS_GetChildrenIDs($this->InstanceID) ?: [] as $childId) {
-            $instance = @IPS_GetInstance($childId);
-            if (!$instance || $instance['ModuleInfo']['ModuleID'] !== self::LADEPUNKT_GUID) {
-                continue;
-            }
+        foreach ($this->ownLadepunkte() as $childId) {
             if (@IPS_GetProperty($childId, 'CPID') === $cpid) {
                 return $childId;
             }
         }
         return 0;
+    }
+
+    // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
+    // direkt an Dietmars Instanz): `IPS_GetChildrenIDs($this->InstanceID)`
+    // spiegelt NICHT zuverlässig die Splitter-Zuordnung — Instanzen lassen
+    // sich in der Konsole frei in andere Kategorien verschieben (bei
+    // Dietmar unter „Geräte / Module" organisiert), wodurch die
+    // Objektbaum-Position von der tatsächlichen Splitter-Zugehörigkeit
+    // abweicht. Live bestätigt: WB1 lag unter einer fremden Kategorie
+    // (#29186), `IPS_GetChildrenIDs()` auf den Splitter lieferte leer.
+    // Jetzt: alle Ladepunkt-Instanzen im System durchsuchen und über die
+    // eigene `SplitterID`-Property filtern (Property, keine Objektbaum-
+    // Abfrage) — mit Objektbaum-Position als Rückfall für Alt-Instanzen,
+    // die noch keine SplitterID gesetzt haben.
+    private function ownLadepunkte(): array
+    {
+        $result = [];
+        foreach (@IPS_GetInstanceListByModuleID(self::LADEPUNKT_GUID) ?: [] as $childId) {
+            $explicitSplitterId = (int)@IPS_GetProperty($childId, 'SplitterID');
+            if ($explicitSplitterId > 0) {
+                if ($explicitSplitterId === $this->InstanceID) {
+                    $result[] = $childId;
+                }
+                continue;
+            }
+            // Rückfall für Instanzen ohne gesetzte SplitterID (Alt-Stand
+            // vor diesem Fix, oder noch nicht konfiguriert).
+            if ((int)(@IPS_GetParent($childId) ?: 0) === $this->InstanceID) {
+                $result[] = $childId;
+            }
+        }
+        return $result;
     }
 
     // ---------------------------------------------------------------------
@@ -657,11 +691,7 @@ class OCPPHubSplitter extends IPSModule
     public function GetFunctions(): array
     {
         $entries = [];
-        foreach (@IPS_GetChildrenIDs($this->InstanceID) ?: [] as $childId) {
-            $instance = @IPS_GetInstance($childId);
-            if (!$instance || $instance['ModuleInfo']['ModuleID'] !== self::LADEPUNKT_GUID) {
-                continue;
-            }
+        foreach ($this->ownLadepunkte() as $childId) {
             $entry = OHUBL_GetContractEntry($childId);
             if (is_array($entry)) {
                 $entries[] = $entry;

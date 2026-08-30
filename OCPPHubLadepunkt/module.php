@@ -20,19 +20,21 @@ class OCPPHubLadepunkt extends IPSModule
     private const METERHUB_GUID     = '{BAB8E05C-9150-43B9-9F2B-E5215FA54F0A}';
     private const INVERTERHUB_GUID  = '{BBE2C593-1A91-426D-A714-29A9C7E87589}';
     private const EMS_GUID          = '{90286A25-E6C9-4A66-BD4E-0CFB707C2C6C}';
+    private const SPLITTER_GUID     = '{81D3E328-9E12-43A9-825A-F7888530868C}';
 
     private const MIN_CURRENT_HARD = 6; // A — kleinster IEC-61851-Ladestrom
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.8';
+    private const VERSION = '0.1.9';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.7';
+    private const NEWS_VERSION = '0.1.9';
     private const NEWS_ITEMS = [
+        'Wichtiger Fix: neues Pflichtfeld „OCPPHub-Splitter" — die Zuordnung zum Splitter lief bisher über die Objektbaum-Position und ging beim Verschieben der Instanz in eine andere Konsolen-Kategorie verloren (Steuerbefehle und Dashboard-Vertrag funktionierten dann nicht mehr, ohne sichtbare Fehlermeldung). Bitte bei bereits angelegten Instanzen einmal öffnen und den Splitter manuell auswählen.',
         'Eigenständiges PV-Überschussladen reagiert jetzt sofort auf neue Messwerte (nicht nur per Timer) und setzt aus, wenn Messwerte älter als 30s sind, statt mit veralteten Werten weiterzurechnen.',
         'Sicherer Phasenzahl-Default (3 statt 1) — verhindert ungewollten Netzbezug, solange die Phasenumschaltung noch nicht implementiert ist.',
         'Neue Backend-Funktionen für Dashboard: OHUBL_ManualStart/ManualStop/SetDailyOverride (die eigentliche Bedienoberfläche baut Dashboard).',
@@ -80,6 +82,18 @@ class OCPPHubLadepunkt extends IPSModule
         // Charge-Point-Identity — der URL-Pfad-Teil, mit dem sich diese
         // Wallbox beim Splitter meldet. Einziges Pflichtfeld.
         $this->RegisterPropertyString('CPID', '');
+        // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
+        // direkt an Dietmars Instanz): IPS_GetParent()/IPS_GetChildrenIDs()
+        // spiegeln NICHT zuverlässig die Splitter-Zuordnung — Objekte lassen
+        // sich in der Konsole frei in andere Kategorien verschieben (Dietmar
+        // organisiert seine Instanzen unter „Geräte / Module"), wodurch die
+        // Objektbaum-Position von der tatsächlichen Splitter-Zugehörigkeit
+        // abweichen kann. Live bestätigt: WB1 lag unter einer fremden
+        // Kategorie (#29186), nicht unter dem Splitter — dadurch fand
+        // OHUB_GetFunctions() UND der interne IPS_GetParent()-Aufruf hier
+        // (für Steuerbefehle) die Instanz nicht mehr. Explizite Property
+        // statt Objektbaum-Position, gleiches Muster wie OCPPHub Konfigurator.
+        $this->RegisterPropertyInteger('SplitterID', 0);
         $this->RegisterPropertyString('Label', '');
 
         $this->RegisterPropertyInteger('MinCurrent', self::MIN_CURRENT_HARD);
@@ -155,14 +169,22 @@ class OCPPHubLadepunkt extends IPSModule
                     'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => 'Eine Instanz je Wallbox/Connector. Die Charge-Point-Identity muss exakt zu dem entsprechen, was die Wallbox selbst an den Splitter meldet — am einfachsten über „OCPPHub Konfigurator" anlegen, dort ist das Feld schon vorausgefüllt.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Stufe 1 (aktueller Stand): kein RFID-Zwang — jede Ladung wird angenommen, unabhängig von Karte/Nutzer. Die Variablen `power`/`energy_total`/`state` erscheinen unter dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular.'],
+                        ['type' => 'Label', 'caption' => 'Was diese Instanz macht: eine „OCPPHub Ladepunkt"-Instanz je Wallbox/Connector — sie hält die sichtbaren Messwerte und Steuervariablen (Ladeleistung, Energiezähler, Status, Ladefreigabe, Stromlimit) und trägt optional das eigenständige PV-Überschussladen. Die eigentliche OCPP-Kommunikation läuft komplett über den zugeordneten Splitter; diese Instanz selbst hält keine WebSocket-Verbindung.'],
+                        ['type' => 'Label', 'caption' => '🆔 Charge-Point-Identity: muss exakt zu dem Namen passen, den die Wallbox selbst in ihrer eigenen OCPP-Konfiguration als letztes Pfadstück der Backend-URL mitschickt (Groß-/Kleinschreibung zählt). Am einfachsten über „OCPPHub Konfigurator" anlegen — der zeigt bereits verbundene Wallboxen an und füllt dieses Feld beim Erstellen automatisch korrekt aus, inklusive der Splitter-Zuordnung unten.'],
+                        ['type' => 'Label', 'caption' => '⚠️ „OCPPHub-Splitter" unten ist ein Pflichtfeld, auch wenn die Instanz automatisch über den Konfigurator angelegt wurde und dort schon vorausgefüllt sein sollte. Ohne diese Zuordnung findet der Splitter diesen Ladepunkt weder für eingehende OCPP-Nachrichten noch für Steuerbefehle (Ladefreigabe, Stromlimit) noch für den Dashboard-Vertrag — Symcons Position dieser Instanz im Objektbaum (welcher Kategorie/welchem Ordner sie in der Konsole zugeordnet ist) reicht dafür ausdrücklich NICHT, weil sich Instanzen dort frei verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang Stufe 1 (aktueller Stand): kein RFID-Zwang — jede Ladung wird angenommen, unabhängig von Karte/Nutzer, keine Kundenverwaltung, keine Tarife/Abrechnung, keine Reservierung. Die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
                     ],
                 ],
                 [
                     'type'    => 'ValidationTextBox',
                     'name'    => 'CPID',
                     'caption' => 'Charge-Point-Identity (aus der Wallbox-OCPP-Konfiguration)',
+                ],
+                [
+                    'type'     => 'SelectInstance',
+                    'name'     => 'SplitterID',
+                    'caption'  => 'OCPPHub-Splitter (Pflichtfeld)',
+                    'moduleID' => self::SPLITTER_GUID,
                 ],
                 [
                     'type'    => 'ValidationTextBox',
@@ -320,9 +342,20 @@ class OCPPHubLadepunkt extends IPSModule
         }
     }
 
+    // Property zuerst, Objektbaum-Position nur als Rückfall (siehe FIX-
+    // Kommentar in Create()).
+    private function resolveSplitterId(): int
+    {
+        $explicit = $this->ReadPropertyInteger('SplitterID');
+        if ($explicit > 0) {
+            return $explicit;
+        }
+        return (int)(@IPS_GetParent($this->InstanceID) ?: 0);
+    }
+
     public function RequestAction($Ident, $Value)
     {
-        $splitterId = @IPS_GetParent($this->InstanceID);
+        $splitterId = $this->resolveSplitterId();
         $cpid = $this->ReadPropertyString('CPID');
 
         switch ($Ident) {
