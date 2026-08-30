@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.6 (30.08.2026)
+
+Dietmar wollte beide Effekte aus 0.2.5 zusammen statt nur einen: die vier Reiter sollen
+eingeklappt gemeinsam die volle Formularbreite ausfüllen UND ein aufgeklappter Reiter
+soll allein die volle Breite einnehmen.
+
+- **Feste, deterministische Breiten statt der bisherigen inhaltsabhängigen
+  Flex-Berechnung**: neues Attribut `ActiveAccordionPanel` merkt sich serverseitig,
+  welcher der vier Reiter gerade offen ist (der `onClick`-Callback allein verrät nicht,
+  ob gerade auf- oder zugeklappt wurde). Alle vier `ExpansionPanel`s bekommen daraus
+  berechnet: eingeklappt `480px` (× 4 = `1920px`, zusammen die volle Formularbreite),
+  der aktive Reiter `1920px` allein. `OHUBA_OnPanelToggle()` schreibt das Attribut und
+  zieht `width`+`expanded` alle vier Panels per `UpdateFormField()` nach — verifiziert,
+  dass `width` bei `UpdateFormField` änderbar ist (nur `name`/`type` und explizit als
+  "nicht änderbar" dokumentierte Felder sind es laut Symcon-Doku nicht).
+- Damit ist das Verhalten jetzt unabhängig vom tatsächlichen Inhalt jedes Reiters
+  (Listenspaltenzahl, Erklärtextlänge) — genau deshalb war es in 0.2.3–0.2.5 noch
+  uneinheitlich.
+
 ## 0.2.5 (30.08.2026)
 
 Dietmar schickte Screenshots aller vier Reiter: je nachdem, WELCHER Reiter geöffnet

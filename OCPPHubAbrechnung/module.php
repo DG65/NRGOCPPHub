@@ -17,13 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.5';
+    private const VERSION = '0.2.6';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.5';
+    private const NEWS_VERSION = '0.2.6';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const NEWS_ITEMS = [
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
-        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier Reiter nebeneinander (Ziehharmonika: Öffnen eines Reiters klappt die anderen automatisch zu).',
+        'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier gleich breite Reiter, die zusammen die volle Formularbreite ausfüllen (Ziehharmonika: der geöffnete Reiter nimmt dann selbst die volle Breite ein, die anderen klappen automatisch zu).',
     ];
 
     public function Create()
@@ -32,6 +32,7 @@ class OCPPHubAbrechnung extends IPSModule
 
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
         $this->RegisterAttributeString('SeenNews', '');
+        $this->RegisterAttributeString('ActiveAccordionPanel', '');
 
         // Vier Listen, IDs intern vergeben (siehe normalizeIds() in
         // ApplyChanges()). Leere JSON-Arrays als Default.
@@ -96,6 +97,7 @@ class OCPPHubAbrechnung extends IPSModule
         $fahrzeuge = $this->getFahrzeuge();
         $gruppen = $this->getGruppen();
         $kunden = $this->getKunden();
+        $activePanel = $this->ReadAttributeString('ActiveAccordionPanel');
 
         $fahrzeugOptions = [['caption' => '— keins —', 'value' => 0]];
         foreach ($fahrzeuge as $f) {
@@ -133,7 +135,8 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'name'     => 'PanelFahrzeuge',
                             'caption'  => '🚙 Fahrzeuge',
-                            'expanded' => false,
+                            'expanded' => $activePanel === 'Fahrzeuge',
+                            'width'    => $this->panelWidth('Fahrzeuge', $activePanel),
                             'onClick'  => 'OHUBA_OnPanelToggle($id, \'Fahrzeuge\');',
                             'items'    => [
                                 ['type' => 'Label', 'width' => '540px', 'caption' => '„Tessie-Fahrzeug" wählen, wenn das Auto schon im Verbund bekannt ist (spiegelt den dortigen Namen automatisch — kein doppeltes Eintippen, immer aktuell). Ohne Tessie oder für ein nicht per Tessie erfasstes Auto: Anzeigename/Kennzeichen von Hand eintragen, „Tessie-Fahrzeug" auf „keins" lassen.'],
@@ -157,7 +160,8 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'name'     => 'PanelGruppen',
                             'caption'  => '👥 Gruppen',
-                            'expanded' => false,
+                            'expanded' => $activePanel === 'Gruppen',
+                            'width'    => $this->panelWidth('Gruppen', $activePanel),
                             'onClick'  => 'OHUBA_OnPanelToggle($id, \'Gruppen\');',
                             'items'    => [
                                 ['type' => 'Label', 'width' => '540px', 'caption' => 'Rein zur Bündelung für Verbrauchslimits (z. B. „Familie" mit gemeinsamem Monats-Limit) — kein eigenes Ladeverhalten.'],
@@ -182,7 +186,8 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'name'     => 'PanelKunden',
                             'caption'  => '🙋 Kunden',
-                            'expanded' => false,
+                            'expanded' => $activePanel === 'Kunden',
+                            'width'    => $this->panelWidth('Kunden', $activePanel),
                             'onClick'  => 'OHUBA_OnPanelToggle($id, \'Kunden\');',
                             'items'    => [
                                 [
@@ -208,7 +213,8 @@ class OCPPHubAbrechnung extends IPSModule
                             'type'     => 'ExpansionPanel',
                             'name'     => 'PanelZugaenge',
                             'caption'  => '🪪 Zugänge (Karten)',
-                            'expanded' => false,
+                            'expanded' => $activePanel === 'Zugaenge',
+                            'width'    => $this->panelWidth('Zugaenge', $activePanel),
                             'onClick'  => 'OHUBA_OnPanelToggle($id, \'Zugaenge\');',
                             'items'    => [
                                 [
@@ -267,16 +273,30 @@ class OCPPHubAbrechnung extends IPSModule
 
     // Ziehharmonika-Verhalten für die vier Reiter Fahrzeuge/Gruppen/Kunden/Zugänge:
     // ExpansionPanel liefert kein eigenes onClick-Gruppierungskonzept, onClick feuert
-    // sowohl beim Auf- als auch beim Zuklappen — darum hier keine Fallunterscheidung
-    // nötig, es werden bei JEDEM Klick einfach alle ANDEREN drei zugeklappt.
+    // sowohl beim Auf- als auch beim Zuklappen — der jeweils aktive Reiter wird darum
+    // serverseitig gemerkt (ActiveAccordionPanel), nicht aus dem Klick selbst abgeleitet.
+    // Feste Breite (Symcon-Formular-Property, kein CSS-Prozent — % ist auf 9.0 laut
+    // Symcon-Community ein bestätigter Darstellungsfehler): eingeklappt teilen sich alle
+    // vier WIDTH_NARROW (zusammen = WIDTH_FULL), aufgeklappt nimmt der aktive Reiter
+    // WIDTH_FULL allein ein.
     private const PANEL_NAMES = ['Fahrzeuge', 'Gruppen', 'Kunden', 'Zugaenge'];
+    private const WIDTH_NARROW = '480px';
+    private const WIDTH_FULL = '1920px';
+
+    private function panelWidth(string $name, string $activePanel): string
+    {
+        return $name === $activePanel ? self::WIDTH_FULL : self::WIDTH_NARROW;
+    }
 
     public function OnPanelToggle(string $Panel): void
     {
+        $current = $this->ReadAttributeString('ActiveAccordionPanel');
+        $newActive = $current === $Panel ? '' : $Panel;
+        $this->WriteAttributeString('ActiveAccordionPanel', $newActive);
+
         foreach (self::PANEL_NAMES as $name) {
-            if ($name !== $Panel) {
-                $this->UpdateFormField('Panel' . $name, 'expanded', false);
-            }
+            $this->UpdateFormField('Panel' . $name, 'expanded', $name === $newActive);
+            $this->UpdateFormField('Panel' . $name, 'width', $this->panelWidth($name, $newActive));
         }
     }
 
