@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.8';
+    private const VERSION = '0.2.9';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.8';
+    private const NEWS_VERSION = '0.2.9';
     private const NEWS_ITEMS = [
+        'Neue Diagnosefunktion OHUB_GetConfigurationKeys() — fragt beliebige OCPP-Konfigurationsschlüssel einer Wallbox ab, Antwort landet jetzt IMMER dauerhaft im Systemlog (nicht nur bei Ablehnung), da eine erfolgreiche GetConfiguration-Antwort kein "status"-Feld hat und darum bisher nur flüchtig im Debug-Fenster sichtbar war.',
         'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch). Design mit Dashboard abgestimmt.',
         'Neue Diagnose bei eindeutiger Ladeablehnung (RemoteStartTransaction/SetChargingProfile): fragt automatisch beim verknüpften Tessie-Fahrzeug und optional Tibber Grid Rewards nach einer möglichen Erklärung — sichtbar am Ladepunkt in der neuen Variable `block_reason`.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): go-e lehnte jeden manuellen Ladestart mit "Rejected" ab, ohne dass das irgendwo sichtbar war. Ursache: RemoteStartTransaction fehlte das Feld connectorId — go-e wusste nicht, welchen Connector es starten soll. Jetzt fest auf 1 gesetzt (der tatsächlich ladende Connector, live an WB2 bestätigt). Außerdem: jede erkennbare Ablehnung (CALLERROR oder ein "status" ungleich "Accepted") auf einen von uns gesendeten Aufruf wird jetzt zusätzlich dauerhaft ins Systemlog geschrieben, nicht mehr nur ins flüchtige Debug-Fenster.',
@@ -407,15 +408,25 @@ class OCPPHubSplitter extends IPSModule
                 // Dashboard hatte keinerlei Hinweis auf den stillen
                 // Fehlschlag).
                 $isFailure = (int)$message[0] === self::OCPP_CALLERROR || $this->responseIndicatesFailure($message[2] ?? null);
+                $action = $this->resolvePendingCall((string)($message[1] ?? ''));
                 if ($isFailure) {
                     IPS_LogMessage('OCPPHub', 'Ablehnung/Fehler auf gesendeten Aufruf [' . $cpid . ']: ' . $raw);
+                } elseif ($action === 'GetConfiguration') {
+                    // Live-Fund 31.08.2026 (Dietmar, am eigenen Leib erlebt): eine
+                    // ERFOLGREICHE Antwort ohne "status"-Feld (z. B. GetConfiguration.conf
+                    // liefert nur eine Werteliste, kein status) fiel oben durch —
+                    // genau die Sackgasse, die block_reason für Ladeablehnungen lösen
+                    // sollte, hier für eine reine Diagnoseabfrage nochmal live erlebt.
+                    // GetConfiguration wird nur gezielt/selten manuell zur Fehlersuche
+                    // gesendet (nicht im Normalbetrieb) — darum hier bewusst IMMER
+                    // dauerhaft geloggt, nicht nur bei Ablehnung, kein Spam-Risiko.
+                    IPS_LogMessage('OCPPHub', 'Antwort auf GetConfiguration [' . $cpid . ']: ' . $raw);
                 }
                 // Ladeablehnung erklären (Diagnose-Feature 31.08.2026, siehe
                 // .docs/architektur.md): nur bei einer EINDEUTIGEN Ablehnung
                 // auf genau die beiden Aktionen, die tatsächlich einen
                 // Ladevorgang anstoßen sollen — eine abgelehnte
                 // ChangeConfiguration o. ä. braucht keine Fahrzeugdiagnose.
-                $action = $this->resolvePendingCall((string)($message[1] ?? ''));
                 if (in_array($action, ['RemoteStartTransaction', 'SetChargingProfile'], true)) {
                     $ladepunktId = $this->findLadepunkt($cpid);
                     if ($ladepunktId !== 0) {
@@ -849,6 +860,21 @@ class OCPPHubSplitter extends IPSModule
             }
         }
         return $result;
+    }
+
+    // Diagnose-Hilfsfunktion (Live-Fund 31.08.2026, Dietmar: "man steht wie der
+    // Ochs vorm Berg, wenn man keine Rückmeldung bekommt") — fragt beliebige
+    // OCPP-Konfigurationsschlüssel einer Wallbox ab, z. B. zur Klärung von
+    // AuthorizeRemoteTxRequests, ohne für jede Ad-hoc-Diagnose einen Rohbefehl
+    // per WC_PushMessage() von Hand zu basteln (der dann NICHT durch sendCall()
+    // läuft und darum auch nicht in der PendingCalls-Korrelation/dem
+    // persistenten Logging auftaucht — genau das ist mir hier live passiert).
+    // $keys leer = alle Schlüssel abfragen (GetConfiguration.req ohne "key").
+    // Antwort landet dauerhaft im Systemlog (siehe handleCall() CALLRESULT/
+    // CALLERROR), nicht nur im flüchtigen Debug-Fenster.
+    public function GetConfigurationKeys(string $cpid, array $keys): void
+    {
+        $this->sendCall($cpid, 'GetConfiguration', $keys === [] ? [] : ['key' => $keys]);
     }
 
     // ---------------------------------------------------------------------

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1 (31.08.2026)
+
+**Splitter 0.2.9**: Selbst in dieselbe Falle getappt, die `block_reason` eigentlich
+lösen sollte — eine per Live-Zugriff ad-hoc gesendete `GetConfiguration`-Abfrage lief
+NICHT über `sendCall()` (Rohbefehl per `WC_PushMessage()`), tauchte deshalb nicht in
+der `PendingCalls`-Korrelation auf, UND eine erfolgreiche `GetConfiguration`-Antwort
+hat gar kein `status`-Feld — landete also weder in der Ablehnungs-Protokollierung noch
+sonst irgendwo dauerhaft, nur im längst geschlossenen Debug-Fenster. Fix:
+- Neue Diagnosefunktion `OHUB_GetConfigurationKeys($cpid, $keys)` — läuft korrekt über
+  `sendCall()`, damit sie erfasst wird.
+- Antworten auf `GetConfiguration` werden jetzt IMMER dauerhaft geloggt (nicht nur bei
+  Ablehnung) — bewusst nur für diese eine, selten manuell zur Fehlersuche gesendete
+  Aktion, kein Spam-Risiko im Normalbetrieb.
+
 ## 0.5.0 (31.08.2026)
 
 **Neue Funktion: automatische Ladefreigabe für erkannte Fahrzeuge** ("so etwas wie

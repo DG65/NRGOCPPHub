@@ -582,11 +582,15 @@ füllt sich mit der besten verfügbaren Erklärung (leer = keine erkennbare Ursa
 Aufrufe hinter `function_exists()` abgesichert.
 
 **Noch offen**: die eigentliche `Rejected`-Ursache (hängende Transaktion vs.
-`AuthorizeRemoteTxRequests`) ist noch nicht verifiziert, da das Testfahrzeug abgesteckt
-wurde, bevor weiter eingegrenzt werden konnte — beim nächsten Live-Test zuerst per
-`GetConfiguration` nach `AuthorizeRemoteTxRequests` fragen (bereits einmal live
-angestoßen, Antwort noch nicht ausgewertet) und prüfen, ob eine alte Transaktion auf
-Connector 1 hängt.
+`AuthorizeRemoteTxRequests`) ist noch nicht verifiziert — ein erster Versuch (Ad-hoc-
+Rohbefehl per Live-Zugriff, ohne `sendCall()`) lief in genau die Sackgasse, die
+`block_reason` eigentlich lösen sollte: keine Korrelation, keine dauerhafte
+Protokollierung einer erfolgreichen Antwort ohne `status`-Feld — nur im Debug-Fenster
+sichtbar gewesen, das schon zu war. Fix (Splitter 0.2.9): neue Funktion
+`OHUB_GetConfigurationKeys($cpid, $keys)`, Antworten auf `GetConfiguration` werden
+jetzt immer dauerhaft geloggt. Beim nächsten Live-Test: `OHUB_GetConfigurationKeys($id,
+'WB1', ['AuthorizeRemoteTxRequests'])` aufrufen, Antwort diesmal im Systemlog nach
+„GetConfiguration" suchen, und prüfen, ob eine alte Transaktion auf Connector 1 hängt.
 
 ## Authentifizierung (RFID & Alternativen)
 
