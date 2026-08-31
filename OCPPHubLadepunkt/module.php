@@ -21,12 +21,13 @@ class OCPPHubLadepunkt extends IPSModule
     private const INVERTERHUB_GUID  = '{BBE2C593-1A91-426D-A714-29A9C7E87589}';
     private const EMS_GUID          = '{90286A25-E6C9-4A66-BD4E-0CFB707C2C6C}';
     private const SPLITTER_GUID     = '{81D3E328-9E12-43A9-825A-F7888530868C}';
+    private const TIBBER_GUID       = '{E92F62F4-88A6-4C6E-9F0D-E76C3B1C9A01}';
 
     private const MIN_CURRENT_HARD = 6; // A — kleinster IEC-61851-Ladestrom
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.7';
+    private const VERSION = '0.2.8';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -627,7 +628,21 @@ class OCPPHubLadepunkt extends IPSModule
         if ($vehicleName === '') {
             return '';
         }
-        $controls = @TIBBERGR_GetActiveControls();
+        // Live-Fund 01.09.2026 (echter Ladeversuch, Dietmars Auto):
+        // TIBBERGR_GetActiveControls() ohne InstanceID aufgerufen —
+        // ArgumentCountError, DiagnoseBlockReason() brach deshalb komplett
+        // ab (auch der schon fertige Tessie-Teil blieb ungenutzt). Jede vom
+        // Kernel generierte globale Wrapper-Funktion braucht die
+        // Instanz-ID als ERSTES Argument, unabhängig von der PHP-Signatur
+        // der Methode selbst (dieselbe Lehre wie beim RemoteStart()-Fund,
+        // hier schlicht komplett vergessen). Erste gefundene Tibber-
+        // Instanz reicht — bei mehreren wird nur eine sinnvoll bedient,
+        // wie schon bei buildTessieOptions() in Abrechnung.
+        $tibberIds = @IPS_GetInstanceListByModuleID(self::TIBBER_GUID) ?: [];
+        if ($tibberIds === []) {
+            return '';
+        }
+        $controls = @TIBBERGR_GetActiveControls($tibberIds[0]);
         if (!is_array($controls)) {
             return '';
         }

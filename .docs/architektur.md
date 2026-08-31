@@ -589,9 +589,55 @@ jetzt korrekt dauerhaft im Systemlog gelandet — der erste Versuch war noch ein
 Rohbefehl ohne `sendCall()`, lief in dieselbe Sackgasse wie `block_reason` eigentlich
 lösen sollte, siehe „Meta-Lehre" in `project_nrgocpphub`-Memory). Damit ist Tibbers
 erste Hypothese (go-e verlangt eine zusätzliche Rückfrage-Autorisierung) widerlegt.
-**Noch offen**: die zweite Hypothese — eine alte, nicht sauber beendete Transaktion
-blockiert Connector 1 — lässt sich nur mit einem echten Ladeversuch bei angestecktem
-Fahrzeug klären, nicht per reiner Konfigurationsabfrage.
+
+**Vollständig geklärt (01.09.2026, erster echter Ladeversuch mit angestecktem
+Fahrzeug)**: Tibbers zweite Hypothese bestätigt sich — Transaktion #14 auf WB2 lief
+noch, gestartet über die damals unregistrierte Karte, nie per `StopTransaction`
+beendet. Per `OHUBL_GetLastTransactionId()` live nachgesehen (`14`, `lastIdTag`
+identisch mit `meterStart` ≈ aktuellem `energy_total` — Session ohne jeden
+Fortschritt seit dem Start), per `OHUB_RemoteStop()` beendet, Status ging sauber auf
+„Finishing". Damit ist das seit dem 31.08. offene `RemoteStartTransaction`-
+„Rejected"-Rätsel gelöst: **kein go-e-Bug, keine fehlende Config — schlicht eine nie
+geschlossene alte Sitzung.** Diagnostischer Umweg für künftige Fälle:
+`OHUBL_GetLastTransactionId($ladepunktId)` (öffentlich, bereits vorhanden) direkt
+gegen den aktuellen `energy_total`-Fortschritt prüfen, bevor Konfigurationsschlüssel
+gejagt werden — ein Blick auf beide Werte hätte diesen Fall sofort erklärt.
+
+Zweiter, unabhängiger Fund beim selben Live-Versuch: „Schneeflocke" hatte gar keine
+registrierte Karte (nur „Kohlekasten" hatte eine) — unter Betriebsart ② verweigert
+`OHUBA_CheckAuthorization()` das zu Recht mit „Invalid" (auch für den internen
+Platzhalter-idTag `'symcon'`, der für manuelle/Dashboard-Starts genutzt wird — dieser
+Platzhalter ist NICHT automatisch autorisiert, sobald eine echte Zugänge-Whitelist
+aktiv ist, das ist beabsichtigtes Verhalten, keine Regression). Dietmar hat die
+zuvor unbekannte Karte selbst über die neue Konfigurationskachel/„Karte anlernen"
+als Zugang für Schneeflocke registriert — danach lief sowohl die reale Karte als
+auch `OHUB_AutoAuthorizeVehicle()` fehlerfrei bis `Accepted` durch.
+
+Dritter Layer, kein Software-Thema mehr: nach erfolgreichem `Accepted` und frisch
+gesendetem `SetChargingProfile` (16 A) blieb die Leistung bei 0 W
+(`SuspendedEVSE`). `TESSIE_GetVehicleState()` zeigt die wahrscheinliche Erklärung:
+`soc: 92.36`, `chargeAmpsRequest`/`chargeAmpsMax: 5` — das Fahrzeug fordert selbst
+nur noch 5 A an, unterhalb der IEC-61851-Mindeststromstärke (6 A, siehe
+`MIN_CURRENT_HARD` im Ladepunkt) für Typ-2-Laden. Vermutlich Teslas eigene
+Ladestrom-Reduzierung nahe der Vollladung — außerhalb der Kontrolle dieses Moduls,
+das Fahrzeug selbst entscheidet die tatsächliche Stromaufnahme, der Central-System-
+Server kann nur eine Obergrenze anbieten, keine Untergrenze erzwingen. **Erkenntnis
+für `block_reason`**: die aktuelle Diagnose feuert nur bei einer erkennbaren
+CALLERROR/Ablehnung, nicht bei „Accepted, aber dauerhaft SuspendedEVSE ohne
+Leistung" — dieser dritte Fall bliebe auch mit funktionierendem Diagnose-Feature
+unerklärt. Mögliche künftige Erweiterung: `chargeAmpsRequest` aus Tessie zusätzlich
+als eigene Diagnose-Kategorie aufnehmen, wenn sich dieses Muster wiederholt — noch
+nicht gebaut, da bislang nur dieser eine Fall bekannt ist.
+
+Nebenfund beim Live-Debugging: `diagnoseFromTibber()` rief
+`TIBBERGR_GetActiveControls()` ohne InstanceID auf (`ArgumentCountError`) —
+`DiagnoseBlockReason()` brach dadurch beim ersten echten Ablehnungsfall dieser
+Sitzung komplett ab, noch bevor überhaupt eine Erklärung im Dashboard sichtbar
+werden konnte. Derselbe Fehlertyp wie der `RemoteStart()`-Fund vom 31.08. (jeder
+global generierte `PREFIX_Methode()`-Wrapper braucht die InstanceID als erstes
+Argument, unabhängig von der PHP-Methodensignatur) — hier trotz Kenntnis der Lehre
+selbst wiederholt. Gefixt (Ladepunkt 0.2.8): erste gefundene Tibber-Instanz wird
+jetzt korrekt mitgegeben.
 
 ## Authentifizierung (RFID & Alternativen)
 

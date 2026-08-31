@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.6.5 (01.09.2026)
+
+**Erster echter Live-Ladeversuch mit angestecktem Fahrzeug** — endlich der reale Test,
+auf den die ganze "Rejected"-Untersuchung dieser Sitzung gewartet hatte. Drei
+Ursachen gefunden und live behoben/verstanden, keine davon ein neuer Software-Bug
+in der Kernlogik:
+
+1. **Hängende alte Transaktion bestätigt** (die seit Wochen offene Hypothese): eine
+   frühere Sitzung (Transaktion, gestartet über die damals noch unregistrierte Karte)
+   war nie sauber per `StopTransaction` beendet worden. Der go-e lehnte deshalb jeden
+   neuen `RemoteStartTransaction` mit `Rejected` ab — aus seiner Sicht lief ja schon
+   eine Sitzung auf dem Connector. Live per `RemoteStopTransaction` beendet, Status
+   ging sauber auf „Finishing" — löst die alte Hypothese endgültig auf.
+2. **Fehlender Zugang für das zweite Fahrzeug**: „Schneeflocke" hatte schlicht keine
+   registrierte Karte in der Kundenverwaltung (nur „Kohlekasten" hatte eine) — unter
+   Betriebsart ② („Mehrere Nutzer") verweigert das System das zu Recht. Dietmar hat
+   die zuvor unbekannte Karte über die brandneue "Karte anlernen"-Kachel selbst als
+   Zugang für Schneeflocke registriert — danach liefen sowohl die reale Karte als
+   auch die Auto-Autorisierung (`OHUB_AutoAuthorizeVehicle`) sofort fehlerfrei durch
+   bis zu `RemoteStartTransaction` → `Accepted`.
+3. **Danach kein Software-Thema mehr**: die Transaktion lief, ein frisches
+   Stromlimit wurde gesendet, aber es floss weiter kein Strom. Tessie-Abfrage zeigt
+   die wahrscheinliche Erklärung: das Fahrzeug steht bei 92 % SoC und fordert selbst
+   nur noch 5 A an (`chargeAmpsRequest`/`chargeAmpsMax`) — unterhalb der
+   IEC-61851-Mindeststromstärke (6 A), die Type-2-Laden voraussetzt. Vermutlich
+   Teslas eigene Strom-Reduzierung nahe der Vollladung, außerhalb der Kontrolle
+   dieses Moduls (die Wallbox/das Fahrzeug entscheiden das selbst, nicht der Central-
+   System-Server).
+
+**Ladepunkt 0.2.8**: dabei einen echten Bug im Diagnose-Feature selbst gefunden und
+gefixt — `diagnoseFromTibber()` rief `TIBBERGR_GetActiveControls()` OHNE die
+erforderliche InstanceID auf (`ArgumentCountError`), wodurch `DiagnoseBlockReason()`
+beim ersten echten Ladeablehnungs-Fall dieser Sitzung komplett abstürzte, bevor es
+überhaupt eine Erklärung anzeigen konnte — derselbe Fehlertyp wie beim
+`RemoteStart()`-Fund vom 31.08., hier schlicht selbst wiederholt. Fix: erste
+gefundene Tibber-Instanz wird jetzt korrekt mit übergeben.
+
 ## 0.6.4 (01.09.2026)
 
 **Architekturkorrektur nach Dietmars Frage: "Gibt es keine andere Möglichkeit, wie
