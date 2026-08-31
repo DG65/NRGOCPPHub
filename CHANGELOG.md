@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.3 (31.08.2026)
+
+**Neue Funktion: Karte anlernen** — Dietmars Wunsch, nachdem er selbst wieder eine
+idTag von Hand aus dem Systemlog abtippen musste: *"irgendwie müssen die idTags ja in
+die Konfiguration kommen. D.h. wir brauchen eine Sequenz um die idTags anzulernen."*
+
+**Abrechnung 0.2.12**:
+- `CheckAuthorization()` merkt sich jetzt jede unbekannte idTag (`LastUnknownIdTag` +
+  Zeitstempel-Attribute), sobald eine Karte aufgelegt wird, für die noch kein Zugang
+  existiert.
+- Neuer Hinweisblock oben im Formular, sobald eine unbekannte Karte vorliegt — mit
+  Klartext-idTag, Zeitpunkt und einem Button „Als neuen Zugang übernehmen".
+- Neue Methode `AdoptLastUnknownIdTag()`: staged einen Entwurfs-Zugang (idTag
+  vorausgefüllt, Rest leer) per `UpdateFormField()` in die Zugänge-Liste — keine
+  Selbstpersistenz im Button (Verbundregel), erst Dietmars eigenes „Übernehmen" im
+  Formular speichert wirklich. Klappt dafür gezielt den Zugänge-Reiter auf, OHNE
+  `ReloadForm()` — das würde die gerade gestagte, noch ungespeicherte Zeile sofort
+  wieder verwerfen (Formular würde komplett neu aus `GetConfigurationForm()`
+  aufgebaut). Kleiner bewusster Kompromiss: der Reiter rückt dabei nicht wie beim
+  normalen Ziehharmonika-Klick ganz nach rechts, bleibt aber an seiner Stelle
+  aufgeklappt sichtbar.
+
 ## 0.5.2 (31.08.2026)
 
 **Ladepunkt 0.2.7**: Boot-Timing-Wache in `Update()` (proaktiv übernommen von

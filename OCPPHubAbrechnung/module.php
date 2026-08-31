@@ -17,12 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.11';
+    private const VERSION = '0.2.12';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.9';
+    private const NEWS_VERSION = '0.2.12';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        'Karte anlernen: eine unbekannte Karte (idTag) wird jetzt oben im Formular angezeigt, sobald sie an einer Wallbox aufgelegt wurde — ein Klick auf „Als neuen Zugang übernehmen" trägt sie als Entwurf in die Zugänge-Liste ein, kein Abtippen aus dem Systemlog mehr nötig.',
         'Warnhinweis hinzugekommen, falls diese Instanz NICHT als direktes Kind eines OCPPHub-Splitters angelegt ist — dann wird sie vom Splitter nicht verwendet und hat keine Funktion (Duplikat/Fehlanlage).',
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
         'Fahrzeuge, Gruppen, Kunden und Zugänge stehen im Formular als vier gleich breite Reiter, die zusammen die volle Formularbreite ausfüllen. Ziehharmonika: der geöffnete Reiter nimmt selbst die volle Breite ein, rückt dabei ganz nach rechts, und die anderen klappen automatisch zu.',
@@ -49,6 +50,12 @@ class OCPPHubAbrechnung extends IPSModule
         // (Laufzeitdaten, kein Formularfeld). Struktur:
         // { "<customerId>": { "<periodKey>": <kWh> } }
         $this->RegisterAttributeString('ConsumptionLog', '{}');
+
+        // Karte-anlernen: letzte unbekannte idTag merken, damit sie per Klick
+        // als Zugang-Entwurf übernommen werden kann statt sie aus dem
+        // Systemlog abzutippen.
+        $this->RegisterAttributeString('LastUnknownIdTag', '');
+        $this->RegisterAttributeInteger('LastUnknownIdTagAt', 0);
     }
 
     public function ApplyChanges()
@@ -237,6 +244,7 @@ class OCPPHubAbrechnung extends IPSModule
 
         $form = [
             'elements' => [
+                $this->unknownCardHint(),
                 [
                     'type'     => 'ExpansionPanel',
                     'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
@@ -322,6 +330,71 @@ class OCPPHubAbrechnung extends IPSModule
         $newActive = $current === $Panel ? '' : $Panel;
         $this->WriteAttributeString('ActiveAccordionPanel', $newActive);
         $this->ReloadForm();
+    }
+
+    // Karte anlernen: eine zuvor unbekannte idTag (siehe CheckAuthorization())
+    // wird hier sichtbar gemacht, statt sie aus dem Systemlog abzutippen. Das
+    // Element existiert immer im Formular (name 'UnknownCardHint'), Sichtbarkeit
+    // steuert 'visible' — analog ReviewHint/NewsPanel.
+    private function unknownCardHint(): array
+    {
+        $tag = $this->ReadAttributeString('LastUnknownIdTag');
+        $at = $this->ReadAttributeInteger('LastUnknownIdTagAt');
+        $caption = $tag === '' ? '' : '🆕 Unbekannte Karte erkannt: „' . $tag . '" (' . date('d.m.Y H:i:s', $at) . '). Noch kein Zugang dafür angelegt — übernehmen, um als Entwurf ins Formular zu holen (danach unten bei „Zugänge" prüfen/ausfüllen und mit „Übernehmen" speichern).';
+        return [
+            'type'    => 'RowLayout',
+            'name'    => 'UnknownCardHint',
+            'visible' => $tag !== '',
+            'items'   => [
+                ['type' => 'Label', 'caption' => $caption],
+                ['type' => 'Button', 'caption' => 'Als neuen Zugang übernehmen', 'onClick' => 'OHUBA_AdoptLastUnknownIdTag($id);'],
+            ],
+        ];
+    }
+
+    // Staged NUR per UpdateFormField (kein IPS_SetProperty/ApplyChanges im
+    // Button-Handler — Verbundregel „keine Selbstpersistenz in Formular-
+    // Buttons"). Bewusst KEIN ReloadForm(): das würde die gerade gestagte,
+    // ungespeicherte Zeile wieder verwerfen (siehe Kommentar bei
+    // OnPanelToggle) — darum wird der Zugänge-Reiter hier nur aufgeklappt,
+    // NICHT ans Ende der Reihenfolge verschoben (kleiner optischer
+    // Kompromiss statt Datenverlust).
+    public function AdoptLastUnknownIdTag(): void
+    {
+        $tag = $this->ReadAttributeString('LastUnknownIdTag');
+        if ($tag === '') {
+            return;
+        }
+
+        $rows = json_decode($this->ReadPropertyString('Zugaenge'), true);
+        if (!is_array($rows)) {
+            $rows = [];
+        }
+        $rows[] = [
+            'idTag'       => $tag,
+            'name'        => '',
+            'customerId'  => 0,
+            'vehicleId'   => 0,
+            'active'      => true,
+            'validUntil'  => '',
+            'allowedFrom' => '',
+            'allowedTo'   => '',
+            'id'          => 0,
+        ];
+        $this->UpdateFormField('Zugaenge', 'values', json_encode(array_values($rows)));
+
+        $this->UpdateFormField('PanelZugaenge', 'expanded', true);
+        $this->UpdateFormField('PanelZugaenge', 'width', self::WIDTH_FULL);
+        foreach (self::PANEL_NAMES as $name) {
+            if ($name !== 'Zugaenge') {
+                $this->UpdateFormField('Panel' . $name, 'width', self::WIDTH_NARROW);
+            }
+        }
+        $this->WriteAttributeString('ActiveAccordionPanel', 'Zugaenge');
+
+        $this->WriteAttributeString('LastUnknownIdTag', '');
+        $this->WriteAttributeInteger('LastUnknownIdTagAt', 0);
+        $this->UpdateFormField('UnknownCardHint', 'visible', false);
     }
 
     private function newsBanner(): ?array
@@ -467,6 +540,8 @@ class OCPPHubAbrechnung extends IPSModule
     {
         $zugang = $this->findZugangByIdTag($idTag);
         if ($zugang === null) {
+            $this->WriteAttributeString('LastUnknownIdTag', $idTag);
+            $this->WriteAttributeInteger('LastUnknownIdTagAt', time());
             return ['status' => 'Invalid'];
         }
         if (!($zugang['active'] ?? true)) {

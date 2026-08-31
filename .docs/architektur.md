@@ -650,6 +650,34 @@ nur die Handvoll, die eine einzelne Wallbox lokal speichern kann. Recherche-Erge
   `AssignVehicles()` + idTag-Direktzuordnung der einzig mögliche Weg zur
   Fahrzeugzuordnung (siehe unten), unabhängig vom Autocharge/DC-Thema oben.
 
+### Karte anlernen (Teach-in, 31.08.2026)
+
+Dietmars Anstoß, nachdem er beim Live-Test wieder eine unbekannte idTag von Hand aus
+dem Systemlog abtippen musste: *"irgendwie müssen die idTags ja in die Konfiguration
+kommen. D.h. wir brauchen eine Sequenz um die idTags anzulernen."*
+
+- `CheckAuthorization()` merkt sich jede idTag, für die `findZugangByIdTag()` `null`
+  liefert, in den Attributen `LastUnknownIdTag`/`LastUnknownIdTagAt` — läuft bei jedem
+  Kartenauflegen ohnehin schon mit, kostet also nichts Zusätzliches.
+- `GetConfigurationForm()` zeigt bei nicht-leerem `LastUnknownIdTag` oben einen
+  Hinweisblock (idTag im Klartext + Zeitpunkt) mit Button „Als neuen Zugang
+  übernehmen" → `AdoptLastUnknownIdTag()`.
+- `AdoptLastUnknownIdTag()` staged eine neue Entwurfszeile (idTag vorausgefüllt, Rest
+  leer, `id => 0`) per `UpdateFormField('Zugaenge', 'values', …)` in die Zugänge-Liste
+  — **keine Selbstpersistenz im Button** (Verbundregel), erst Dietmars eigenes
+  „Übernehmen" im Formular ruft `ApplyChanges()` → `assignIds()` auf und vergibt die
+  echte `id`. Klappt dafür den Zugänge-Reiter direkt per `UpdateFormField('expanded'/
+  'width', …)` auf, **bewusst OHNE `ReloadForm()`** — das würde das Formular komplett
+  neu aus `GetConfigurationForm()` aufbauen und damit die gerade gestagte,
+  ungespeicherte Zeile sofort wieder verwerfen (derselbe Formular-Rebuild-Mechanismus,
+  den `OnPanelToggle()` für die Reiter-Reihenfolge nutzt — hier bewusst vermieden).
+  Kompromiss: der Reiter rückt dabei nicht wie beim normalen Ziehharmonika-Klick ganz
+  nach rechts, bleibt aber an seiner Stelle sichtbar aufgeklappt.
+- Nach dem Übernehmen wird `LastUnknownIdTag` sofort geleert (Hinweis verschwindet) —
+  liegt dieselbe Karte danach nochmal unautorisiert auf, schreibt `CheckAuthorization()`
+  sie erneut, kein dauerhafter Datenverlust bei einem Klick ohne anschließendes
+  Speichern.
+
 ## Abrechnung (Datenmodell-Entwurf)
 
 Erweiterung 30.08.2026 (Dietmar): 1:1 „eine Karte = ein Nutzer" reicht nicht — Kunden
