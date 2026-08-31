@@ -26,14 +26,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.3';
+    private const VERSION = '0.2.4';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.3';
+    private const NEWS_VERSION = '0.2.4';
     private const NEWS_ITEMS = [
+        'Zwei Anzeige-Fixes (Dashboard-Fund, Live-Test): „Stromlimit" zeigte unsinnige Zehntel-Ampere (z. B. „10.0 A") — lag am geteilten NRG.Ampere-Profil, das auf diesem System als Float mit 1 Nachkommastelle existiert; ctl_curr_limit hat jetzt ein eigenes ganzzahliges Profil. „Fahrzeug angesteckt" zeigte das Symcon-Standard-Ein/Aus einer profillosen Bool-Variable — jetzt eigenes Profil mit Ja/Nein, analog ChargerHub.',
         'Neue Diagnose: bei einer eindeutigen Ladeablehnung wird — falls das Fahrzeug per Tessie verknüpft ist — automatisch nach einer Erklärung gefragt (eigene Ladeplanung aktiv, Ladelimit erreicht, oder Fahrzeug schläft gerade und wird automatisch aufgeweckt), sichtbar in der neuen Variable `block_reason`. Ergänzend ein unsicherer Tibber-Grid-Rewards-Namensabgleich, ausdrücklich als "möglicherweise" markiert.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): „Laden starten" schlug am Ladepunkt mit einem PHP-Fatal-Error ab (ArgumentCountError) — Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern, ein fehlender dritter Parameter ließ jeden manuellen Ladestart über Dashboard/ctl_enable scheitern.',
         'Stufe 2: Reservierung hinzugekommen — OHUBL_Reserve($idTag, $bisWann)/OHUBL_CancelReservation(), sichtbar in den neuen Variablen reserved_by/reserved_until. Eine aktive Reservierung blockiert jede Kartenauflage mit einem anderen idTag, unabhängig von der Splitter-Betriebsart.',
@@ -342,6 +343,28 @@ class OCPPHubLadepunkt extends IPSModule
                 IPS_SetVariableProfileAssociation('OHUB.ChargePointStatus', $code, $caption, '', -1);
             }
         }
+        // Live-Fund 31.08.2026 (Dashboard-Rückmeldung): das geteilte
+        // "NRG.Ampere" ist auf Dietmars System ein FLOAT-Profil mit 1
+        // Nachkommastelle (von einem anderen Modul zuerst angelegt, z. B.
+        // für echte, tatsächlich fraktionale Ladestrom-Messwerte) — für ein
+        // GANZZAHLIGES Sollwert-Limit wie ctl_curr_limit ergibt "10.0 A"
+        // aber keinen Sinn (weder Wallbox noch Fahrzeug kennen Zehntel-
+        // Ampere-Grenzen). Eigenes Profil statt das geteilte umzudeuten
+        // (Verbund-Regel 8: gemeinsame Profile nie überschreiben).
+        if (!IPS_VariableProfileExists('OHUB.AmpereLimit')) {
+            IPS_CreateVariableProfile('OHUB.AmpereLimit', VARIABLETYPE_INTEGER);
+            IPS_SetVariableProfileText('OHUB.AmpereLimit', '', ' A');
+            IPS_SetVariableProfileValues('OHUB.AmpereLimit', 0, 63, 1);
+        }
+        // Analog ChargerHubs CHB.Connected (dortiges Vorbild, siehe
+        // .docs/architektur.md „Instanzmodell") — ohne eigenes Profil zeigt
+        // eine profil-lose Boolean-Variable Symcons Default "Ein"/"Aus",
+        // das für "ist ein Fahrzeug angesteckt" nicht passt.
+        if (!IPS_VariableProfileExists('OHUB.Connected')) {
+            IPS_CreateVariableProfile('OHUB.Connected', VARIABLETYPE_BOOLEAN);
+            IPS_SetVariableProfileAssociation('OHUB.Connected', false, 'Nein', '', -1);
+            IPS_SetVariableProfileAssociation('OHUB.Connected', true, 'Ja', '', -1);
+        }
     }
 
     private function RegisterVariables(): void
@@ -350,14 +373,14 @@ class OCPPHubLadepunkt extends IPSModule
         $this->MaintainVariable('energy_total', 'Energie gesamt', VARIABLETYPE_FLOAT, 'NRG.kWh', 10, true);
         $this->MaintainVariable('energy_session', 'Energie dieser Ladung', VARIABLETYPE_FLOAT, 'OHUB.kWhSession', 20, true);
         $this->MaintainVariable('state', 'Status', VARIABLETYPE_INTEGER, 'OHUB.ChargePointStatus', 30, true);
-        $this->MaintainVariable('vehicle_plugged', 'Fahrzeug angesteckt', VARIABLETYPE_BOOLEAN, '', 40, true);
+        $this->MaintainVariable('vehicle_plugged', 'Fahrzeug angesteckt', VARIABLETYPE_BOOLEAN, 'OHUB.Connected', 40, true);
         $this->MaintainVariable('vehicle_name', 'Zugeordnetes Fahrzeug', VARIABLETYPE_STRING, '', 50, true);
         // Nur befüllt, wenn die Wallbox den OCPP-Measurand „SoC" tatsächlich
         // überträgt (nicht jede tut das) — siehe UpdateMeterValues().
         $this->MaintainVariable('vehicle_soc', 'Fahrzeug-Ladestand (SoC, falls von der Wallbox übertragen)', VARIABLETYPE_FLOAT, 'NRG.Percent', 55, true);
 
         $this->MaintainVariable('ctl_enable', 'Ladefreigabe', VARIABLETYPE_BOOLEAN, '', 60, true);
-        $this->MaintainVariable('ctl_curr_limit', 'Stromlimit', VARIABLETYPE_INTEGER, 'NRG.Ampere', 70, true);
+        $this->MaintainVariable('ctl_curr_limit', 'Stromlimit', VARIABLETYPE_INTEGER, 'OHUB.AmpereLimit', 70, true);
         $this->EnableAction('ctl_enable');
         $this->EnableAction('ctl_curr_limit');
 

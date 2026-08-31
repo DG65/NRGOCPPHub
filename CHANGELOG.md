@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.1 (31.08.2026)
+
+**Ladepunkt 0.2.4** — zwei Anzeigefehler, beide beim ersten Live-Test des neuen
+Diagnose-Features aufgefallen:
+
+- **„Stromlimit: 10.0 A" statt „10 A"**: Dashboard (die bewusst nur `GetValueFormatted()`
+  aufrufen, keine eigene Formatierung — richtig so) zeigte an, was IP-Symcon aus dem
+  zugewiesenen Profil macht. Live geprüft: das geteilte `NRG.Ampere`-Profil existiert
+  auf Dietmars System als FLOAT mit 1 Nachkommastelle (von einem anderen Modul zuerst
+  angelegt, sinnvoll für echte fraktionale Ladestrom-Messwerte) — für unser
+  ganzzahliges Sollwert-Limit `ctl_curr_limit` aber unpassend. Fix: eigenes Profil
+  `OHUB.AmpereLimit` (Integer, 0 Nachkommastellen) statt das geteilte Profil
+  umzudeuten (Verbund-Regel: gemeinsame Profile nie überschreiben).
+- **„Fahrzeug angesteckt: An/Aus"**: `vehicle_plugged` hatte gar kein Profil zugewiesen
+  → Symcons Boolean-Standardanzeige „Ein/Aus", passt aber nicht zu einer
+  Angesteckt-Frage. Fix: eigenes Profil `OHUB.Connected` (Ja/Nein), exakt analog
+  ChargerHubs `CHB.Connected`.
+
 ## 0.4.0 (31.08.2026)
 
 **Neue Funktion: Ladeablehnung erklären.** Auslöser: Dietmar testete live einen
