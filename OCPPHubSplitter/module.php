@@ -41,7 +41,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.9';
+    private const VERSION = '0.2.10';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -174,6 +174,22 @@ class OCPPHubSplitter extends IPSModule
         @IPS_ApplyChanges($newId);
         $this->WriteAttributeInteger('AbrechnungID', $newId);
         return $newId;
+    }
+
+    // Öffentlicher Zugriff auf die tatsächliche, funktionale Bindung
+    // Splitter↔Abrechnung (das Attribut, NICHT die Baumposition — Dietmars
+    // Frage 01.09.2026: "gibt es keine andere Möglichkeit, als die
+    // Abrechnungs-Instanz direkt unter die Splitter-Instanz zu nageln?").
+    // `IPS_SetParent()` in ensureAbrechnung() ist nur ein einmaliger,
+    // rein kosmetischer Startort bei Neuanlage — die Abrechnung-Instanz
+    // kann jederzeit im Objektbaum verschoben werden (z. B. für eine
+    // aufgeräumtere WebFront-Einordnung), ohne die Funktion zu verlieren,
+    // solange diese ID hier unverändert bleibt. Abrechnung::
+    // isRegisteredWithSplitter() nutzt genau das, um verwaiste/falsche
+    // Instanzen zu erkennen — siehe .docs/architektur.md „Instanzmodell".
+    public function GetAbrechnungID(): int
+    {
+        return $this->ReadAttributeInteger('AbrechnungID');
     }
 
     // Trägt diese Instanz als Ziel für $Hook in die "Hooks"-Property der

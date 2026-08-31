@@ -17,13 +17,14 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.3';
+    private const VERSION = '0.3.4';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.3.3';
+    private const NEWS_VERSION = '0.3.4';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
-        'Konfigurationskachel warnt jetzt, wenn sie an einer Instanz hängt, die NICHT Kind eines OCPPHub-Splitters ist — vorher blieben Fahrzeuge/Gruppen/Kunden/Zugänge in diesem Fall kommentarlos leer, obwohl an anderer Stelle bereits Daten gepflegt waren.',
+        'Die Instanz kann jetzt frei im Objektbaum verschoben werden (z. B. für eine aufgeräumtere WebFront-Einordnung) ohne die Verbindung zu ihrem Splitter zu verlieren — der Warnhinweis „nicht verbunden" prüft jetzt die tatsächliche Zuordnung statt der Baumposition.',
+        'Konfigurationskachel warnt jetzt, wenn sie an einer Instanz hängt, die kein Splitter als seine Abrechnung führt — vorher blieben Fahrzeuge/Gruppen/Kunden/Zugänge in diesem Fall kommentarlos leer, obwohl an anderer Stelle bereits Daten gepflegt waren.',
         'Neu: Konfigurationskachel — dieselbe Kundenverwaltung (Fahrzeuge/Gruppen/Kunden/Zugänge, Karte anlernen) gibt es jetzt auch als WebFront-Kachel dieser Instanz, die einem eigenen, gesicherten WebFront zugewiesen werden kann, ohne dafür Konsolen-Zugang zu vergeben.',
         'Karte anlernen: eine unbekannte Karte (idTag) wird jetzt oben im Formular angezeigt, sobald sie an einer Wallbox aufgelegt wurde — ein Klick auf „Als neuen Zugang übernehmen" trägt sie als Entwurf in die Zugänge-Liste ein, kein Abtippen aus dem Systemlog mehr nötig.',
         'Warnhinweis hinzugekommen, falls diese Instanz NICHT als direktes Kind eines OCPPHub-Splitters angelegt ist — dann wird sie vom Splitter nicht verwendet und hat keine Funktion (Duplikat/Fehlanlage).',
@@ -233,13 +234,13 @@ class OCPPHubAbrechnung extends IPSModule
             'version'         => self::VERSION,
             'hookPath'        => '/hook/ohubadmin' . $this->InstanceID,
             // Live-Fund 01.09.2026: Dietmar hatte eine zweite, manuell
-            // angelegte Abrechnung-Instanz (nicht Kind eines Splitters) zum
+            // angelegte Abrechnung-Instanz (von keinem Splitter geführt) zum
             // Kachel-Testen benutzt — die zeigte kommentarlos leere Daten,
             // ohne jeden Hinweis warum. Die Konsole warnt davor bereits
-            // (hasSplitterParent()), die Kachel bislang NICHT — genau die
-            // Art von stillem Fehlschlag, die dieses ganze Diagnose-Feature
-            // eigentlich verhindern sollte. Jetzt auch hier.
-            'connected'       => $this->hasSplitterParent(),
+            // (isRegisteredWithSplitter()), die Kachel bislang NICHT — genau
+            // die Art von stillem Fehlschlag, die dieses ganze Diagnose-
+            // Feature eigentlich verhindern sollte. Jetzt auch hier.
+            'connected'       => $this->isRegisteredWithSplitter(),
             'Fahrzeuge'       => $this->getFahrzeuge(),
             'Gruppen'         => $this->getGruppen(),
             'Kunden'          => $this->getKunden(),
@@ -513,11 +514,11 @@ class OCPPHubAbrechnung extends IPSModule
             array_unshift($form['elements'], $banner);
         }
 
-        if (!$this->hasSplitterParent()) {
+        if (!$this->isRegisteredWithSplitter()) {
             array_unshift($form['elements'], [
                 'type'  => 'RowLayout',
                 'items' => [
-                    ['type' => 'Label', 'caption' => '⚠️ Diese Instanz ist NICHT direktes Kind einer OCPPHub-Splitter-Instanz. Der Splitter benutzt ausschließlich seine EIGENE, selbst angelegte „OCPPHub Abrechnung"-Instanz (im Objektbaum direkt unter ihm) — diese hier wurde offenbar manuell erstellt und wird darum von KEINEM Splitter jemals abgefragt. Eingaben hier haben keinerlei Wirkung. Bitte deine Daten stattdessen in der Instanz unter deinem OCPPHub-Splitter eintragen und diese hier löschen.'],
+                    ['type' => 'Label', 'caption' => '⚠️ Kein Splitter führt diese Instanz als seine Abrechnung. Jeder OCPPHub-Splitter benutzt genau EINE, fest bei ihm hinterlegte Abrechnung-Instanz — diese hier ist es nicht (unabhängig davon, wo sie im Objektbaum liegt) und wird darum von KEINEM Splitter abgefragt. Eingaben hier haben keinerlei Wirkung. Bitte deine Daten stattdessen in der vom Splitter selbst angelegten Instanz eintragen (Name endet auf „… Abrechnung") und diese hier löschen.'],
                 ],
             ]);
         }
@@ -645,19 +646,27 @@ class OCPPHubAbrechnung extends IPSModule
         $this->UpdateFormField('NewsPanel', 'visible', false);
     }
 
-    // Diese Instanz hat nur dann eine Funktion, wenn sie ein direktes Kind
-    // einer OCPPHub-Splitter-Instanz ist (siehe ensureAbrechnung() im
-    // Splitter — er erstellt/verwendet ausschließlich diese eine Instanz,
-    // sucht nicht anderswo). Eine manuell woanders angelegte Abrechnung-
-    // Instanz wird von KEINEM Splitter je konsultiert (live gefunden
-    // 31.08.2026, siehe .docs/architektur.md „Instanzmodell").
-    private function hasSplitterParent(): bool
+    // Diese Instanz hat nur dann eine Funktion, wenn ein Splitter sie
+    // tatsächlich als SEINE Abrechnung führt — das ist Splitter::AbrechnungID
+    // (Attribut), NICHT die Baumposition. `IPS_SetParent()` in Splitters
+    // ensureAbrechnung() setzt beim Erstanlegen nur einen kosmetischen
+    // Startort; die Instanz kann danach beliebig im Objektbaum verschoben
+    // werden (z. B. für eine aufgeräumtere WebFront-Einordnung), ohne die
+    // Bindung zu verlieren. Korrigiert 01.09.2026 (Dietmars Frage "gibt es
+    // keine andere Möglichkeit als die Abrechnungs-Instanz direkt unter die
+    // Splitter-Instanz zu nageln?") — die alte, rein Baumposition-basierte
+    // Prüfung hätte nach einem Verschieben der ECHTEN Instanz fälschlich
+    // "nicht verbunden" gemeldet, und hätte umgekehrt eine zufällig unter
+    // denselben Splitter gehängte ZWEITE (unbenutzte) Instanz fälschlich als
+    // verbunden durchgehen lassen. Siehe .docs/architektur.md „Instanzmodell".
+    private function isRegisteredWithSplitter(): bool
     {
-        $parentId = @IPS_GetParent($this->InstanceID);
-        if ($parentId === 0 || !@IPS_InstanceExists($parentId)) {
-            return false;
+        foreach (@IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [] as $splitterId) {
+            if (OHUB_GetAbrechnungID($splitterId) === $this->InstanceID) {
+                return true;
+            }
         }
-        return (IPS_GetInstance($parentId)['ModuleInfo']['ModuleID'] ?? '') === self::SPLITTER_GUID;
+        return false;
     }
 
     // ---------------------------------------------------------------------

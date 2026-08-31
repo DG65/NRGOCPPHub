@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.4 (01.09.2026)
+
+**Architekturkorrektur nach Dietmars Frage: "Gibt es keine andere Möglichkeit, wie
+die Abrechnungs-Instanz direkt unter die Splitter-Instanz zu nageln?"** — die
+Antwort: ja, die gibt es bereits, und sie ist besser als die Baumposition. Der
+Splitter bindet seine Abrechnung-Instanz von Anfang an über ein Attribut
+(`AbrechnungID`), NICHT über die Position im Objektbaum — `IPS_SetParent()` bei der
+Erstanlage war immer nur ein einmaliger, kosmetischer Startort. Der gestern gebaute
+Warnhinweis (0.3.3) prüfte aber fälschlich genau diese Baumposition
+(`hasSplitterParent()`) statt der echten Bindung — hätte also fälschlich "nicht
+verbunden" gemeldet, sobald die echte Instanz verschoben wird, und umgekehrt eine
+zufällig unter denselben Splitter gehängte zweite, unbenutzte Instanz fälschlich als
+verbunden durchgehen lassen.
+
+- **Splitter 0.2.10**: neue öffentliche Methode `GetAbrechnungID()` — gibt die
+  tatsächlich gebundene Abrechnung-Instanz-ID zurück.
+- **Abrechnung 0.3.4**: `hasSplitterParent()` ersetzt durch `isRegisteredWithSplitter()`
+  — fragt alle Splitter-Instanzen über `OHUB_GetAbrechnungID()` ab und prüft auf
+  Übereinstimmung mit der eigenen InstanceID, unabhängig von der Baumposition.
+  Warnhinweis (Konsole + Kachel) entsprechend umformuliert: nicht mehr "muss
+  direktes Kind sein", sondern "muss vom Splitter tatsächlich als seine Abrechnung
+  geführt werden — egal wo sie im Baum liegt". Praktische Folge für Dietmar: die
+  Abrechnung-Instanz kann jetzt frei verschoben werden (z. B. in eine eigene
+  Kategorie für eine aufgeräumtere WebFront-Einordnung), ohne die Funktion zu
+  verlieren.
+
 ## 0.6.3 (01.09.2026)
 
 **Abrechnung 0.3.3**: Dietmars nächster Screenshot-Vergleich deckte einen echten

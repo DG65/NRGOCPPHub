@@ -61,9 +61,11 @@ Vorlage, falls an anderer Stelle im Modul dieselbe Frage aufkommt.
    das ist Dietmar live passiert: er hatte eine zweite, manuell angelegte Instanz
    gepflegt, während der Splitter seine eigene (leere) Instanz abfragte. Fix: (a)
    Splitter-Formular warnt jetzt explizit davor, manuell eine zweite Instanz anzulegen;
-   (b) Abrechnung-Formular prüft beim Aufbau selbst (`hasSplitterParent()`), ob es
-   direktes Kind einer OCPPHub-Splitter-Instanz ist, und zeigt sonst ganz oben einen
-   unübersehbaren Warnhinweis samt Löschempfehlung.
+   (b) Abrechnung-Formular prüft beim Aufbau selbst (`isRegisteredWithSplitter()`,
+   Baumposition-unabhängig — siehe „Zwei-Instanzen-Falle bei der Kachel" unten für die
+   Korrektur vom 01.09.2026), ob irgendein Splitter sie tatsächlich als seine
+   Abrechnung führt, und zeigt sonst ganz oben einen unübersehbaren Warnhinweis samt
+   Löschempfehlung.
    **Umsetzung Stufe 2 (30.08.2026)**: Kunden/Zugänge/Fahrzeuge/Gruppen implementiert
    (Tarife/Berichte bleiben Stufe 3). Anders als ursprünglich geplant zeigt diese
    Instanz ihre Felder IMMER (eigene Konsolenseite, kein einblendbares Panel im
@@ -787,6 +789,27 @@ verhindern sollte). Fix: `buildTilePayload()` liefert jetzt zusätzlich `connect
 die Konsole. **Lehre**: jede neue Oberfläche (Formular UND Kachel) muss dieselben
 Diagnose-/Warnhinweise bekommen, nicht nur die zuerst gebaute — sonst wandert ein
 bereits gelöstes „stiller Fehlschlag"-Problem in die neue Oberfläche zurück.
+
+**Korrektur: Bindung ist ein Attribut, keine Baumposition (01.09.2026, Splitter
+0.2.10 / Abrechnung 0.3.4)**: Dietmar fragte direkt nach, ob es nicht "eine andere
+Möglichkeit" gäbe, als die Abrechnung-Instanz zwingend direkt unter den Splitter zu
+hängen. Antwort beim Codelesen gefunden: es GIBT bereits eine bessere Möglichkeit —
+`ensureAbrechnung()` im Splitter bindet seine Abrechnung von Anfang an über das
+Attribut `AbrechnungID`, `IPS_SetParent()` beim Erstanlegen ist nur ein einmaliger
+kosmetischer Startort, keine fortlaufende Bedingung. Der gerade gebaute Warnhinweis
+oben (`hasSplitterParent()`) prüfte fälschlich die Baumposition statt der echten
+Bindung — zwei konkrete Fehlerfälle wären dadurch möglich gewesen: (a) die echte,
+verbundene Instanz nach einem Verschieben (z. B. in eine WebFront-freundlichere
+Kategorie) fälschlich als „nicht verbunden" gemeldet, (b) eine zufällig unter
+denselben Splitter gehängte, tatsächlich unbenutzte zweite Instanz fälschlich als
+„verbunden" durchgehen lassen. Fix: Splitter bekommt `GetAbrechnungID(): int`
+(öffentlicher Zugriff aufs Attribut), Abrechnung ersetzt `hasSplitterParent()` durch
+`isRegisteredWithSplitter()` — fragt alle Splitter-Instanzen über
+`OHUB_GetAbrechnungID()` ab, prüft auf Übereinstimmung mit der eigenen InstanceID.
+**Praktische Konsequenz**: die Abrechnung-Instanz kann jetzt beliebig im Objektbaum
+verschoben werden (z. B. in eine eigene Kategorie für eine aufgeräumtere
+WebFront-Einordnung), ohne die Splitter-Bindung zu verlieren — die Warnung reagiert
+korrekt auf die tatsächliche Funktion, nicht auf den Ablageort.
 
 ## Abrechnung (Datenmodell-Entwurf)
 
