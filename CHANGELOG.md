@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.2 (31.08.2026)
+
+**Ladepunkt 0.2.7**: Boot-Timing-Wache in `Update()` (proaktiv übernommen von
+ChargerHub, Commit `e32ed18`, nach unserer Meldung eines „InstanceInterface is not
+available"-Fehlers bei ihnen) — der `SurplusTimer` kann beim Systemstart feuern, bevor
+der Kernel alle Instanzen fertig angebunden hat, jeder Property-Zugriff würde dann
+kurzzeitig mit `InstanceInterface is not available` scheitern. Jetzt `if
+(IPS_GetKernelRunlevel() !== KR_READY) return;` als erste Zeile — der Timer feuert kurz
+danach ohnehin erneut, kein Datenverlust.
+
 ## 0.5.1 (31.08.2026)
 
 **Splitter 0.2.9**: Selbst in dieselbe Falle getappt, die `block_reason` eigentlich

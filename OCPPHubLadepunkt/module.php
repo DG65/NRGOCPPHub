@@ -26,7 +26,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.6';
+    private const VERSION = '0.2.7';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -876,6 +876,14 @@ class OCPPHubLadepunkt extends IPSModule
 
     public function Update(): void
     {
+        // Boot-Timing-Wache (ChargerHub-Fund 31.08.2026, Commit e32ed18, bei
+        // uns proaktiv übernommen): SurplusTimer kann beim Systemstart feuern,
+        // bevor der Kernel alle Instanzen fertig angebunden hat — jeder
+        // Property-Zugriff wirft dann kurzzeitig "InstanceInterface is not
+        // available". Timer feuert kurz danach ohnehin erneut, kein Datenverlust.
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            return;
+        }
         if (!$this->ReadPropertyBoolean('EnableSurplusCharging')) {
             return;
         }
