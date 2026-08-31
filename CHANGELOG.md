@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.3 (01.09.2026)
+
+**Abrechnung 0.3.3**: Dietmars nächster Screenshot-Vergleich deckte einen echten
+Bug auf, keinen Kontrast-Fall — die neue Kachel zeigte in ALLEN vier Bereichen
+"Noch keine Einträge", während die Konsole zur selben Zeit echte Daten (2 Fahrzeuge,
+1 Gruppe, 1 Kunde, 1 Zugang) anzeigte. Ursache per Live-Abfrage gefunden: es
+existieren zwei Abrechnung-Instanzen — die von Dietmar zum Kachel-Testen manuell
+angelegte "OCPP-Kundenverwaltung" (Kind einer Kategorie "Test Kacheln", NICHT eines
+OCPPHub-Splitters) ist leer, die echte "NRG-Stack OCPPHub Splitter Abrechnung"
+(Kind des Splitters) enthält die Daten. Die Konsole warnt seit Stufe 2 bereits vor
+genau diesem Fall (`hasSplitterParent()`), die neue Kachel bislang NICHT — sie zeigte
+kommentarlos leere Daten ohne jeden Hinweis, warum. Fix: dieselbe Warnung jetzt auch
+in `module.html` (`buildTilePayload()` liefert `connected`, Banner analog dem
+Konsolen-Hinweis).
+
 ## 0.6.2 (31.08.2026)
 
 **Abrechnung 0.3.2**: zweiter Kachel-Feinschliff nach Dietmars nächstem

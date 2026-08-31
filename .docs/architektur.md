@@ -771,6 +771,23 @@ liegt, sollte als Nächstes eine echte Pixel-Messung (z. B. testweise eingeblend
 Lineal-Markierungen in der Kachel) her, um die Symcon-Titelzeilenhöhe endlich
 verbundweit exakt zu dokumentieren, statt erneut zu schätzen.
 
+**Zwei-Instanzen-Falle bei der Kachel — jetzt mit Warnhinweis (01.09.2026,
+Abrechnung 0.3.3)**: Dietmars nächster Screenshot-Vergleich zeigte einen echten Bug,
+keinen Kontrast-Fall — die Kachel zeigte in ALLEN vier Bereichen "Noch keine
+Einträge", obwohl die Konsole zur selben Zeit echte Daten anzeigte. Per Live-Abfrage
+(`mcp__ips-automation__php_eval`, Instanzliste nach Modul-GUID) bestätigt: es
+existierten zwei Abrechnung-Instanzen — eine von Dietmar zum Kachel-Testen manuell
+angelegte (`Kind einer Kategorie, NICHT eines Splitters`, leer) und die echte,
+vom Splitter selbst verwaltete (mit Daten). Die Konsole warnt seit Stufe 2 bereits
+vor genau diesem Fall (`hasSplitterParent()`, siehe „Instanzmodell"), die Kachel
+NICHT — sie zeigte kommentarlos leere Daten ohne jeden Hinweis, warum (genau die Art
+stiller Fehlschlag, die das ganze `block_reason`-Diagnose-Feature eigentlich
+verhindern sollte). Fix: `buildTilePayload()` liefert jetzt zusätzlich `connected`
+(= `hasSplitterParent()`), `module.html` zeigt bei `false` denselben Warntext wie
+die Konsole. **Lehre**: jede neue Oberfläche (Formular UND Kachel) muss dieselben
+Diagnose-/Warnhinweise bekommen, nicht nur die zuerst gebaute — sonst wandert ein
+bereits gelöstes „stiller Fehlschlag"-Problem in die neue Oberfläche zurück.
+
 ## Abrechnung (Datenmodell-Entwurf)
 
 Erweiterung 30.08.2026 (Dietmar): 1:1 „eine Karte = ein Nutzer" reicht nicht — Kunden

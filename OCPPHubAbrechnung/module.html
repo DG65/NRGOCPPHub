@@ -87,12 +87,26 @@
   }
   .unknown-banner.show { display: flex; }
   .unknown-banner b { font-family: monospace; font-size: 13px; }
+  .orphan-banner {
+    display: none; border: 1px solid rgba(192,57,43,0.5); background: rgba(192,57,43,0.14);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; line-height: 1.5;
+  }
+  .orphan-banner.show { display: block; }
 </style>
 </head>
 <body>
   <!-- Bewusst KEIN eigener <h1>-Titel: Symcon zeigt den Instanznamen als
        Kachel-Überschrift selbst an, ein eigener Titel überlagert diesen nur
        (Live-Fund 31.08.2026, siehe [[ips-kachel-kein-eigener-titel]]). -->
+
+  <div class="orphan-banner" id="orphanBanner">
+    ⚠️ Diese Instanz ist NICHT direktes Kind einer OCPPHub-Splitter-Instanz. Der
+    Splitter benutzt ausschließlich seine EIGENE, selbst angelegte Abrechnung-Instanz
+    — diese hier wurde offenbar manuell erstellt und wird darum von KEINEM Splitter
+    abgefragt. Alle Bereiche unten sind deshalb leer, auch wenn an anderer Stelle
+    bereits Daten gepflegt wurden. Bitte die Kachel stattdessen auf der Abrechnung-
+    Instanz unterhalb des OCPPHub-Splitters einrichten und diese hier ggf. löschen.
+  </div>
 
   <div class="unknown-banner" id="unknownBanner">
     <span>🆕 Unbekannte Karte erkannt: <b id="unknownTag"></b> (<span id="unknownAt"></span>)</span>
@@ -291,6 +305,11 @@ function adoptUnknown() {
     .catch(function () {});
 }
 
+function renderOrphanBanner() {
+  const banner = document.getElementById('orphanBanner');
+  banner.classList.toggle('show', PAYLOAD && PAYLOAD.connected === false);
+}
+
 function renderUnknownBanner() {
   const banner = document.getElementById('unknownBanner');
   const tag = PAYLOAD && PAYLOAD.unknownIdTag;
@@ -323,6 +342,7 @@ function handleMessage(payload) {
       DRAFTS[area] = (payload[area] || []).map(cloneRow);
     }
   });
+  renderOrphanBanner();
   renderUnknownBanner();
   Object.keys(AREAS).forEach(renderTable);
 }

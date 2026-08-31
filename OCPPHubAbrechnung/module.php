@@ -17,12 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.2';
+    private const VERSION = '0.3.3';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.3.0';
+    private const NEWS_VERSION = '0.3.3';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        'Konfigurationskachel warnt jetzt, wenn sie an einer Instanz hängt, die NICHT Kind eines OCPPHub-Splitters ist — vorher blieben Fahrzeuge/Gruppen/Kunden/Zugänge in diesem Fall kommentarlos leer, obwohl an anderer Stelle bereits Daten gepflegt waren.',
         'Neu: Konfigurationskachel — dieselbe Kundenverwaltung (Fahrzeuge/Gruppen/Kunden/Zugänge, Karte anlernen) gibt es jetzt auch als WebFront-Kachel dieser Instanz, die einem eigenen, gesicherten WebFront zugewiesen werden kann, ohne dafür Konsolen-Zugang zu vergeben.',
         'Karte anlernen: eine unbekannte Karte (idTag) wird jetzt oben im Formular angezeigt, sobald sie an einer Wallbox aufgelegt wurde — ein Klick auf „Als neuen Zugang übernehmen" trägt sie als Entwurf in die Zugänge-Liste ein, kein Abtippen aus dem Systemlog mehr nötig.',
         'Warnhinweis hinzugekommen, falls diese Instanz NICHT als direktes Kind eines OCPPHub-Splitters angelegt ist — dann wird sie vom Splitter nicht verwendet und hat keine Funktion (Duplikat/Fehlanlage).',
@@ -231,6 +232,14 @@ class OCPPHubAbrechnung extends IPSModule
         return [
             'version'         => self::VERSION,
             'hookPath'        => '/hook/ohubadmin' . $this->InstanceID,
+            // Live-Fund 01.09.2026: Dietmar hatte eine zweite, manuell
+            // angelegte Abrechnung-Instanz (nicht Kind eines Splitters) zum
+            // Kachel-Testen benutzt — die zeigte kommentarlos leere Daten,
+            // ohne jeden Hinweis warum. Die Konsole warnt davor bereits
+            // (hasSplitterParent()), die Kachel bislang NICHT — genau die
+            // Art von stillem Fehlschlag, die dieses ganze Diagnose-Feature
+            // eigentlich verhindern sollte. Jetzt auch hier.
+            'connected'       => $this->hasSplitterParent(),
             'Fahrzeuge'       => $this->getFahrzeuge(),
             'Gruppen'         => $this->getGruppen(),
             'Kunden'          => $this->getKunden(),
