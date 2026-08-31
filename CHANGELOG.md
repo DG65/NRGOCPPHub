@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2 (31.08.2026)
+
+Klarstellung im Formular (Ladepunkt 0.2.5) und in `.docs/recherche.md`: go-e unterstützt
+den OCPP-Kernbefehl `ReserveNow` nicht (live bestätigt, siehe 0.4.1-Nachtrag in
+`architektur.md`). Damit das nicht wie eine generelle Einschränkung unseres Moduls
+wirkt (Dietmar: das Modul ist für den ganzen Nutzerkreis gedacht, nicht nur go-e) —
+`ReserveNow`/`CancelReservation` bleiben unverändert protokollkonform im Code, unsere
+eigene serverseitige Blockade-Durchsetzung ist davon unabhängig, und die Funktion
+kommt Nutzern mit reservierungsfähiger Hardware (z. B. Easee) direkt zugute.
+
 ## 0.4.1 (31.08.2026)
 
 **Ladepunkt 0.2.4** — zwei Anzeigefehler, beide beim ersten Live-Test des neuen

@@ -70,9 +70,18 @@ OCPP-Steuerungs- und Abrechnungsmodul für Symcon?" — Antwort: **ja**, siehe F
 - **go-e Gemini** (Dietmars WB1/WB2): OCPP 1.6J ab FW 56.1 (besser ≥56.8), Aktivierung
   per App, WSS + HTTP-Basic-Auth, Phasenumschaltung auch über OCPP möglich.
   https://support.clever-pv.com/hc/de/articles/34328191729682-go-e-Charger-OCPP
+  **Reservation-Profil NICHT unterstützt** (live 31.08.2026 bestätigt: `ReserveNow` →
+  `CALLERROR "NotImplemented"`, deckt sich mit go-es eigener Feature-Profile-Tabelle in
+  deren OCPP-Doku). Unser `ReserveNow`/`CancelReservation` bleibt trotzdem protokoll-
+  konform im Modul — betrifft nur die Wallbox-seitige Umsetzung, nicht unseren eigenen
+  serverseitigen Blockade-Mechanismus (siehe `.docs/architektur.md` „Reservierung"),
+  UND soll anderen Nutzern mit reservierungsfähiger Hardware zugutekommen (Dietmar
+  30.08.2026: das Modul ist nicht nur für seine eigene Anlage gedacht).
 - **KEBA P30**: OCPP 1.6 nur x-series (c-series: UDP/Modbus).
 - **Alfen Eve**: OCPP-nativ (Primärprotokoll).
 - **Heidelberg Energy Control**: KEIN OCPP (Modbus RTU) — bleibt bei ChargerHub.
+- **Easee**: von Dietmar als möglicher Nutzerkreis genannt (31.08.2026) — OCPP-1.6-
+  Unterstützung inkl. Reservation-Profil noch nicht recherchiert, TODO bei Bedarf.
 
 ## Was kommerzielle Anbieter besser machen (bewusst außerhalb unseres Scopes)
 
