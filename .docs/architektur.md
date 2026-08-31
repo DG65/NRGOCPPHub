@@ -607,11 +607,18 @@ nur die Handvoll, die eine einzelne Wallbox lokal speichern kann. Recherche-Erge
   Chargekeeper-Backends), bei dem die Wallbox während des Anstöpsel-Handshakes die
   MAC-Adresse des EVCC (Electric Vehicle Communication Controller, NICHT die
   WLAN/Bluetooth-MAC des Fahrzeugs) als virtuellen idTag im selben `Authorize.req`
-  schickt, Format z. B. `VID:A014310E004E`. Fahrzeug muss das unterstützen (frühere
-  Renault-/Tesla-Modelle u. a.); ob go-e das sendet, ist unklar und noch nicht geprüft.
-  **Datenmodell-Konsequenz**: `idTag` bleibt einfach ein String/Whitelist-Eintrag —
-  ein Autocharge-Tag ist technisch nur ein weiterer idTag-Typ, kein Sonderfall. Keine
-  Architekturänderung nötig, nur bei Gelegenheit prüfen, ob WB1 das sendet.
+  schickt, Format z. B. `VID:A014310E004E`. **Geklärt 31.08.2026**: go-e kann das NICHT
+  — laut go-e-Maintainer (GitHub-Diskussion `goecharger/go-eCharger-API-v2#182`) fehlt
+  den go-eCharger-Geräten ISO 15118 komplett, sie kommunizieren nur über PWM-
+  Pulsweitensignale (IEC 61851) — keine digitale Fahrzeugkommunikation, also technisch
+  unmöglich, nicht nur nicht konfiguriert/nicht nachrüstbar per Firmware. Der go-e-
+  Maintainer nennt als einzigen Weg exakt unseren bereits gewählten Ansatz (Fahrzeug-
+  API + zeitliche Korrelation beim Anstecken) — bestätigt also `AssignVehicles()`+
+  idTag-Direktzuordnung als richtigen, notwendigen Weg für diese Hardware-Generation,
+  nicht nur als Verlegenheitslösung. **Datenmodell-Konsequenz unverändert**: `idTag`
+  bleibt einfach ein String/Whitelist-Eintrag — ein Autocharge-Tag wäre technisch nur
+  ein weiterer idTag-Typ, kein Sonderfall, relevant für andere Wallbox-Modelle mit
+  ISO-15118-Unterstützung (Nutzerkreis über go-e hinaus, siehe `.docs/recherche.md`).
 
 ## Abrechnung (Datenmodell-Entwurf)
 
