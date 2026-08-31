@@ -678,6 +678,66 @@ kommen. D.h. wir brauchen eine Sequenz um die idTags anzulernen."*
   sie erneut, kein dauerhafter Datenverlust bei einem Klick ohne anschließendes
   Speichern.
 
+### Konfigurationskachel (31.08.2026)
+
+Dietmars Idee, nachdem "Karte anlernen" zunächst nur im Konsolenformular verfügbar
+war: *"Wir brauchen eine oder mehrere Konfigurationskacheln. Die können wir dann
+verschiedenen Webfronts zuordnen die gesichert sind. In den Administrationskacheln
+muss mindestens das gleiche wie in der Konsole möglich sein."* Entscheidung nach
+Rückfrage: EINE Kachel mit voller Parität (statt mehrerer fokussierter Kacheln, siehe
+"Kachel-Umfang"-Optionen der Rückfrage), Konsolenformular bleibt PARALLEL bestehen
+(nicht ersetzt).
+
+**Warum eine eigene HTML-Kachel nötig ist, kein reiner Formular-Export**: Symcons
+Listen-Editor (`GetConfigurationForm()`-Element `List`, Zeilen add/delete/edit) ist
+ein reines Konsole-Formularelement — WebFront rendert es nicht (siehe
+[[ips-webfront-vs-konsole]]-Lehre: gilt weiterhin für den nativen Form-Mechanismus,
+gelöst wird das hier NICHT durch Form-Export, sondern durch eine komplett eigene
+HTML/JS-Nachbildung der Tabellenverwaltung).
+
+**Technisches Muster — 1:1 von `NRGDashboardTile` übernommen** (dort bereits
+verbundweit bewährt, inkl. der Kernel-Boot-Timing-Absicherung):
+- `ApplyChanges()`: `SetVisualizationType(1)` + `RegisterHook('/hook/ohubadmin' .
+  $this->InstanceID)` bei bereits laufendem Kernel, sonst `RegisterMessage(0,
+  IPS_KERNELMESSAGE)` + `MessageSink()` ruft bei `KR_READY` erneut `ApplyChanges()`
+  auf (derselbe Boot-Timing-Schutz wie beim Ladepunkt-`Update()`, siehe oben).
+- `RegisterHook()`: Standard-WebHook-Control-Registrierung (GUID
+  `{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}`), generischer Symcon-Mechanismus, keine
+  Modul-eigene Logik. Voraussetzung: eine WebHook-Control-Instanz muss im Objektbaum
+  existieren (Symcon legt sie i. d. R. automatisch an, sonst still folgenlos — kein
+  Fehler, nur keine erreichbare Kachel-URL).
+- `GetVisualizationTile()`: liefert `module.html` + eingebetteten JSON-Payload
+  (`buildTilePayload()`) für die eingebettete WebFront-Kachel.
+- `ProcessHookData()`: bedient zusätzlich eine eigenständige Seite (IPSView/Browser-
+  Popup, `?json=1` für reine Datenabfrage) UND die Schreibpfade:
+  - `?area=Fahrzeuge|Gruppen|Kunden|Zugaenge` (POST, JSON-Body = komplette Liste
+    dieses Bereichs) — persistiert SOFORT per `IPS_SetProperty()`+
+    `IPS_ApplyChanges()` (kein Konsolen-"Übernehmen"-Dialog hier, der die
+    Selbstpersistenz-Regel für Formular-Buttons auslösen würde — die Regel gilt
+    weiterhin für Formular-Buttons, nicht für WebHook-Endpunkte).
+  - `?action=adoptUnknown` (GET) — Kachel-Variante von "Karte anlernen"
+    (`adoptUnknownIdTagDirect()`), speichert sofort statt wie im Konsolenformular
+    (`AdoptLastUnknownIdTag()`) nur zu stagen.
+  - Serverseitige Whitelist+Typprüfung: `AREA_SCHEMA`-Konstante + `sanitizeRows()` —
+    verhindert beliebige Property-Namen über `?area=` (Sicherheit) UND Datenmüll
+    durch ungeprüfte JS-Werte (die Konsole bekommt diese Prüfung von Symcons
+    Formular-Typen geschenkt, hier muss das Modul sie selbst nachholen).
+- `module.html`: generische, schema-getriebene Tabellen-UI (ein Renderer für alle
+  vier Bereiche, Spalten aus einem JS-`AREAS`-Objekt) — je Bereich eigenes
+  `<details>`-Panel, ➕-Zeile/🗑-Zeile/💾-Speichern. Ungespeicherte Änderungen werden
+  vom periodischen 30-s-Auto-Refresh NICHT überschrieben (`TOUCHED`-Flag je Bereich).
+
+**Zugriffsschutz bewusst NICHT modul-eigen**: läuft komplett über Symcons Standard-
+WebFront-Mechanismus (Instanzsichtbarkeit je WebFront-Instanz — ein separates,
+gesichertes WebFront zeigt diese Abrechnung-Instanz, ein normales Familien-WebFront
+nicht). Kein zusätzliches Passwort im Modul. Offener Punkt, den Dietmar selbst
+einrichten muss (kein Code-Thema): der rohe WebHook-Pfad selbst
+(`/hook/ohubadmin<id>`) ist NICHT automatisch durch WebFront-Login geschützt — je
+nach Symcon-Konfiguration ("Nur intern erreichbar" an der WebHook-Control-Instanz,
+WebFront-eigener Login) kann die URL auch ohne WebFront-Session erreichbar sein.
+Für eine wirklich gesicherte Konfigurationskachel sollte die WebHook-Control-Instanz
+entsprechend eingeschränkt bzw. nur im internen Netz erreichbar sein.
+
 ## Abrechnung (Datenmodell-Entwurf)
 
 Erweiterung 30.08.2026 (Dietmar): 1:1 „eine Karte = ein Nutzer" reicht nicht — Kunden

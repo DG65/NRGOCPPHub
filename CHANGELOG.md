@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.0 (31.08.2026)
+
+**Neue Funktion: Konfigurationskachel** — Dietmars Idee, nachdem die "Karte
+anlernen"-Funktion nur im Konsolenformular verfügbar war: *"Wir brauchen eine oder
+mehrere Konfigurationskacheln. Die können wir dann verschiedenen Webfronts zuordnen
+die gesichert sind. In den Administrationskacheln muss mindestens das gleiche wie in
+der Konsole möglich sein."*
+
+**Abrechnung 0.3.0**: die komplette Kundenverwaltung (Fahrzeuge/Gruppen/Kunden/
+Zugänge inkl. Karte-anlernen-Hinweis) steht jetzt zusätzlich als eigene WebFront-Kachel
+zur Verfügung — Konsolenformular bleibt unverändert bestehen (Parallelbetrieb,
+Dietmars Wunsch). Technisch, weil Symcons Listen-Editor (Formularelement `List`, mit
+Zeilen hinzufügen/löschen) ein reines Konsole-Formularelement ist und in WebFront gar
+nicht rendert: eigene HTML/JS-Tabellenverwaltung in `module.html`, verbunden über
+einen WebHook (`/hook/ohubadmin<InstanzID>`) — Muster 1:1 von `NRGDashboardTile`
+übernommen (`RegisterHook()`/`MessageSink()`/`ProcessHookData()`, dort bereits
+verbundweit bewährt).
+- `GetVisualizationTile()` liefert die Kachel mit aktuellem Datenstand.
+- `ProcessHookData()` bedient sowohl die eingebettete Kachel als auch eine
+  eigenständige Seite (IPSView/Browser) und persistiert Änderungen je Bereich
+  (`?area=Fahrzeuge|Gruppen|Kunden|Zugaenge`) SOFORT per `IPS_SetProperty()`+
+  `IPS_ApplyChanges()` — anders als im Konsolenformular gibt es hier keinen
+  umschließenden "Übernehmen"-Dialog, der die Selbstpersistenz-Regel für
+  Formular-Buttons auslösen würde.
+- Serverseitige Whitelist+Typprüfung (`AREA_SCHEMA`/`sanitizeRows()`) je Bereich —
+  verhindert sowohl beliebige Property-Namen über `?area=` als auch Datenmüll durch
+  ungeprüfte JS-Werte (die fehlende Formular-Typprüfung der Konsole muss die Kachel
+  selbst nachholen).
+- "Karte anlernen" bekommt in der Kachel eine direktere Variante
+  (`adoptUnknownIdTagDirect()`): speichert sofort statt wie im Konsolenformular nur
+  zu stagen, da es hier keinen Konsolen-"Übernehmen"-Schritt gibt, der das nachholen
+  könnte.
+- Zugriffsschutz bewusst NICHT modul-eigen: läuft komplett über Symcons Standard-
+  WebFront-Sichtbarkeit je Instanz — ein separates, gesichertes WebFront zeigt diese
+  Instanz, ein normales Familien-WebFront nicht. Kein zusätzliches Passwort im Modul.
+
 ## 0.5.3 (31.08.2026)
 
 **Neue Funktion: Karte anlernen** — Dietmars Wunsch, nachdem er selbst wieder eine

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    --text: inherit;
+    --textmuted: rgba(128,128,128,0.95);
+    --border: rgba(128,128,128,0.35);
+    --border-soft: rgba(128,128,128,0.2);
+    --accent: #2f8f4e;
+    --accent-text: #fff;
+    --danger: #c0392b;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; background: transparent;
+    color: var(--text); font-family: var(--font); font-size: 13px;
+  }
+  body { padding: 10px 12px 16px; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  details { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  summary {
+    cursor: pointer; padding: 8px 12px; font-weight: 600; font-size: 13.5px;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+    user-select: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary:before { content: '▸'; display: inline-block; transition: transform 120ms; }
+  details[open] summary:before { transform: rotate(90deg); }
+  .panel-body { padding: 4px 12px 12px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
+  th, td { padding: 4px 6px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border-soft); }
+  th { font-size: 11.5px; font-weight: 600; color: var(--textmuted); white-space: nowrap; }
+  input[type=text], input[type=number], select {
+    width: 100%; min-width: 70px; font: inherit; color: inherit;
+    background: rgba(128,128,128,0.08); border: 1px solid var(--border); border-radius: 5px;
+    padding: 4px 6px;
+  }
+  input[type=checkbox] { width: 16px; height: 16px; }
+  .row-actions { white-space: nowrap; }
+  button {
+    font: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px;
+    background: rgba(128,128,128,0.10); color: inherit; cursor: pointer;
+  }
+  button:hover { background: rgba(128,128,128,0.20); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.08); }
+  button.danger-ghost { padding: 3px 7px; color: var(--danger); border-color: rgba(192,57,43,0.4); background: transparent; }
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .status-msg { font-size: 12px; color: var(--textmuted); }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: var(--danger); }
+  .empty-hint { color: var(--textmuted); font-size: 12px; padding: 4px 0 8px; }
+  .unknown-banner {
+    display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px solid rgba(217,164,6,0.5); background: rgba(217,164,6,0.12);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px;
+  }
+  .unknown-banner.show { display: flex; }
+  .unknown-banner b { font-family: monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>🪪 Kundenverwaltung</h1>
+
+  <div class="unknown-banner" id="unknownBanner">
+    <span>🆕 Unbekannte Karte erkannt: <b id="unknownTag"></b> (<span id="unknownAt"></span>)</span>
+    <button class="primary" onclick="adoptUnknown()">Als neuen Zugang übernehmen</button>
+  </div>
+
+  <div id="areas"></div>
+
+<script>
+let PAYLOAD = null;
+let HOOK_PATH = '';
+let DRAFTS = {};
+let TOUCHED = {};
+
+const AREAS = {
+  Fahrzeuge: {
+    icon: '🚙', title: 'Fahrzeuge', open: false,
+    columns: [
+      { key: 'tessieInstanceId', label: 'Tessie-Fahrzeug', type: 'select', options: 'tessieOptions', zero: '— keins —', def: 0 },
+      { key: 'name', label: 'Anzeigename', type: 'text', def: '' },
+      { key: 'kennzeichen', label: 'Kennzeichen', type: 'text', def: '' }
+    ]
+  },
+  Gruppen: {
+    icon: '👥', title: 'Gruppen', open: false,
+    columns: [
+      { key: 'name', label: 'Name', type: 'text', def: '' },
+      { key: 'maxKwhWeek', label: 'Limit/Woche (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhMonth', label: 'Limit/Monat (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhYear', label: 'Limit/Jahr (kWh)', type: 'number', def: 0 }
+    ]
+  },
+  Kunden: {
+    icon: '🙋', title: 'Kunden', open: false,
+    columns: [
+      { key: 'name', label: 'Name', type: 'text', def: '' },
+      { key: 'active', label: 'Aktiv', type: 'checkbox', def: true },
+      { key: 'groupId', label: 'Gruppe', type: 'select', options: 'gruppenOptions', zero: '— keine —', def: 0 },
+      { key: 'maxKwhWeek', label: 'Limit/Woche (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhMonth', label: 'Limit/Monat (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhYear', label: 'Limit/Jahr (kWh)', type: 'number', def: 0 }
+    ]
+  },
+  Zugaenge: {
+    icon: '🪪', title: 'Zugänge (Karten)', open: true,
+    columns: [
+      { key: 'idTag', label: 'idTag', type: 'text', def: '' },
+      { key: 'name', label: 'Anzeigename', type: 'text', def: '' },
+      { key: 'customerId', label: 'Kunde', type: 'select', options: 'kundenOptions', zero: '— keiner —', def: 0 },
+      { key: 'vehicleId', label: 'Fahrzeug', type: 'select', options: 'fahrzeugOptions', zero: '— keins —', def: 0 },
+      { key: 'active', label: 'Aktiv', type: 'checkbox', def: true },
+      { key: 'validUntil', label: 'Gültig bis', type: 'text', def: '', placeholder: 'JJJJ-MM-TT' },
+      { key: 'allowedFrom', label: 'Ab', type: 'text', def: '', placeholder: 'HH:MM' },
+      { key: 'allowedTo', label: 'Bis', type: 'text', def: '', placeholder: 'HH:MM' }
+    ]
+  }
+};
+
+function cloneRow(row) {
+  return Object.assign({}, row);
+}
+
+function defaultRow(area) {
+  const row = { id: 0 };
+  AREAS[area].columns.forEach(function (col) { row[col.key] = col.def; });
+  return row;
+}
+
+function ensureShell() {
+  const container = document.getElementById('areas');
+  if (container.dataset.built) {
+    return;
+  }
+  let html = '';
+  Object.keys(AREAS).forEach(function (area) {
+    const def = AREAS[area];
+    html += '<details id="details-' + area + '"' + (def.open ? ' open' : '') + '>'
+          + '<summary>' + def.icon + ' ' + def.title + '</summary>'
+          + '<div class="panel-body">'
+          + '<div id="tbl-' + area + '"></div>'
+          + '<div class="toolbar">'
+          + '<button onclick="addRow(\'' + area + '\')">➕ Zeile</button>'
+          + '<button class="primary" onclick="saveArea(\'' + area + '\')">💾 Speichern</button>'
+          + '<span class="status-msg" id="status-' + area + '"></span>'
+          + '</div></div></details>';
+  });
+  container.innerHTML = html;
+  container.dataset.built = '1';
+}
+
+function fieldHtml(area, col, row, idx) {
+  const value = row[col.key];
+  const onchange = 'onFieldChange(\'' + area + '\',' + idx + ',\'' + col.key + '\',this)';
+  if (col.type === 'select') {
+    const options = (PAYLOAD && PAYLOAD[col.options]) || [];
+    let html = '<select onchange="' + onchange + '">';
+    html += '<option value="0"' + (Number(value) === 0 ? ' selected' : '') + '>' + col.zero + '</option>';
+    options.forEach(function (o) {
+      html += '<option value="' + o.id + '"' + (Number(value) === Number(o.id) ? ' selected' : '') + '>' + escapeHtml(o.label) + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+  if (col.type === 'checkbox') {
+    return '<input type="checkbox" ' + (value ? 'checked' : '') + ' onchange="' + onchange + '">';
+  }
+  if (col.type === 'number') {
+    return '<input type="number" step="0.1" value="' + Number(value) + '" onchange="' + onchange + '">';
+  }
+  const placeholder = col.placeholder ? ' placeholder="' + col.placeholder + '"' : '';
+  return '<input type="text" value="' + escapeHtml(String(value ?? '')) + '"' + placeholder + ' onchange="' + onchange + '">';
+}
+
+function renderTable(area) {
+  const def = AREAS[area];
+  const rows = DRAFTS[area] || [];
+  const box = document.getElementById('tbl-' + area);
+  if (!box) return;
+  if (rows.length === 0) {
+    box.innerHTML = '<div class="empty-hint">Noch keine Einträge — auf „➕ Zeile" klicken.</div>';
+    return;
+  }
+  let html = '<table><thead><tr>';
+  def.columns.forEach(function (col) { html += '<th>' + col.label + '</th>'; });
+  html += '<th></th></tr></thead><tbody>';
+  rows.forEach(function (row, idx) {
+    html += '<tr>';
+    def.columns.forEach(function (col) { html += '<td>' + fieldHtml(area, col, row, idx) + '</td>'; });
+    html += '<td class="row-actions"><button class="danger-ghost" onclick="deleteRow(\'' + area + '\',' + idx + ')">🗑</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  box.innerHTML = html;
+}
+
+function onFieldChange(area, idx, key, el) {
+  const col = AREAS[area].columns.find(function (c) { return c.key === key; });
+  let value;
+  if (col.type === 'checkbox') {
+    value = el.checked;
+  } else if (col.type === 'number' || col.type === 'select') {
+    value = Number(el.value);
+  } else {
+    value = el.value;
+  }
+  DRAFTS[area][idx][key] = value;
+  TOUCHED[area] = true;
+}
+
+function addRow(area) {
+  DRAFTS[area] = DRAFTS[area] || [];
+  DRAFTS[area].push(defaultRow(area));
+  TOUCHED[area] = true;
+  document.getElementById('details-' + area).open = true;
+  renderTable(area);
+}
+
+function deleteRow(area, idx) {
+  DRAFTS[area].splice(idx, 1);
+  TOUCHED[area] = true;
+  renderTable(area);
+}
+
+function setStatus(area, text, isError) {
+  const el = document.getElementById('status-' + area);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'status-msg' + (isError ? ' err' : (text ? ' ok' : ''));
+  if (text && !isError) {
+    setTimeout(function () { if (el.textContent === text) { el.textContent = ''; el.className = 'status-msg'; } }, 4000);
+  }
+}
+
+function saveArea(area) {
+  if (!HOOK_PATH) return;
+  setStatus(area, 'Speichere …');
+  fetch(HOOK_PATH + '?area=' + area, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(DRAFTS[area] || [])
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      TOUCHED[area] = false;
+      handleMessage(data);
+      setStatus(area, 'Gespeichert.');
+    })
+    .catch(function () { setStatus(area, 'Fehler beim Speichern — bitte erneut versuchen.', true); });
+}
+
+function adoptUnknown() {
+  if (!HOOK_PATH) return;
+  fetch(HOOK_PATH + '?action=adoptUnknown')
+    .then(function (r) { return r.json(); })
+    .then(function (data) { handleMessage(data); })
+    .catch(function () {});
+}
+
+function renderUnknownBanner() {
+  const banner = document.getElementById('unknownBanner');
+  const tag = PAYLOAD && PAYLOAD.unknownIdTag;
+  if (!tag) {
+    banner.classList.remove('show');
+    return;
+  }
+  document.getElementById('unknownTag').textContent = tag;
+  const at = PAYLOAD.unknownIdTagAt ? new Date(PAYLOAD.unknownIdTagAt * 1000) : null;
+  document.getElementById('unknownAt').textContent = at ? at.toLocaleString('de-DE') : '';
+  banner.classList.add('show');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function handleMessage(payload) {
+  if (typeof payload === 'string') {
+    try { payload = JSON.parse(payload); } catch (e) { return; }
+  }
+  if (!payload || typeof payload !== 'object') return;
+  PAYLOAD = payload;
+  if (payload.hookPath) { HOOK_PATH = payload.hookPath; }
+  ensureShell();
+  Object.keys(AREAS).forEach(function (area) {
+    if (!TOUCHED[area]) {
+      DRAFTS[area] = (payload[area] || []).map(cloneRow);
+    }
+  });
+  renderUnknownBanner();
+  Object.keys(AREAS).forEach(renderTable);
+}
+
+setInterval(function () {
+  if (!HOOK_PATH) return;
+  fetch(HOOK_PATH + '?json=1')
+    .then(function (r) { return r.text(); })
+    .then(function (t) { handleMessage(t); })
+    .catch(function () {});
+}, 30000);
+</script>
+</body>
+</html>

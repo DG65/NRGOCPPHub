@@ -17,12 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.12';
+    private const VERSION = '0.3.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.2.12';
+    private const NEWS_VERSION = '0.3.0';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        'Neu: Konfigurationskachel — dieselbe Kundenverwaltung (Fahrzeuge/Gruppen/Kunden/Zugänge, Karte anlernen) gibt es jetzt auch als WebFront-Kachel dieser Instanz, die einem eigenen, gesicherten WebFront zugewiesen werden kann, ohne dafür Konsolen-Zugang zu vergeben.',
         'Karte anlernen: eine unbekannte Karte (idTag) wird jetzt oben im Formular angezeigt, sobald sie an einer Wallbox aufgelegt wurde — ein Klick auf „Als neuen Zugang übernehmen" trägt sie als Entwurf in die Zugänge-Liste ein, kein Abtippen aus dem Systemlog mehr nötig.',
         'Warnhinweis hinzugekommen, falls diese Instanz NICHT als direktes Kind eines OCPPHub-Splitters angelegt ist — dann wird sie vom Splitter nicht verwendet und hat keine Funktion (Duplikat/Fehlanlage).',
         'Fahrzeuge können jetzt direkt mit einem bereits im NRG-Stack-Verbund bekannten Tessie-Fahrzeug verknüpft werden — Name wird live übernommen, kein doppeltes Pflegen mehr.',
@@ -75,9 +76,227 @@ class OCPPHubAbrechnung extends IPSModule
 
         $this->SetStatus(102);
 
+        // Konfigurationskachel (31.08.2026, Dietmars Wunsch: "eine oder
+        // mehrere Konfigurationskacheln ... die gesicherten WebFronts
+        // zugeordnet werden können, mindestens das gleiche wie in der
+        // Konsole möglich"). Eigene HTML-Kachel (SetVisualizationType(1) +
+        // module.html) statt des Konsole-only-Formulars — die Zugriffs-
+        // steuerung übernimmt Symcon selbst über die Sichtbarkeit dieser
+        // Instanz je WebFront-Instanz (Standardmechanismus, kein Custom-
+        // Auth-Code nötig). Muster 1:1 von NRGDashboardTile übernommen
+        // (dortige RegisterHook()/MessageSink()/ProcessHookData()-Struktur,
+        // dort bereits verbundweit bewährt).
+        $this->SetVisualizationType(1);
+        if (IPS_GetKernelRunlevel() === KR_READY) {
+            $this->RegisterHook('/hook/ohubadmin' . $this->InstanceID);
+        } else {
+            $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+        }
+
         if ($changed) {
             @IPS_ApplyChanges($this->InstanceID);
         }
+    }
+
+    public function MessageSink($timestamp, $senderID, $message, $data)
+    {
+        if ($message === IPS_KERNELMESSAGE && isset($data[0]) && $data[0] === KR_READY) {
+            $this->ApplyChanges();
+        }
+    }
+
+    // Standard-WebHook-Registrierungsmuster (1:1 aus NRGDashboardTile
+    // übernommen, generischer Symcon-Mechanismus, keine modul-eigene Logik).
+    private function RegisterHook(string $WebHook): void
+    {
+        $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
+        if (count($ids) === 0) {
+            return;
+        }
+        $hooks = json_decode(IPS_GetProperty($ids[0], 'Hooks'), true);
+        if (!is_array($hooks)) {
+            $hooks = [];
+        }
+        foreach ($hooks as $index => $hook) {
+            if ($hook['Hook'] === $WebHook) {
+                if ((int)$hook['TargetID'] === $this->InstanceID) {
+                    return;
+                }
+                $hooks[$index]['TargetID'] = $this->InstanceID;
+                IPS_SetProperty($ids[0], 'Hooks', json_encode($hooks));
+                IPS_ApplyChanges($ids[0]);
+                return;
+            }
+        }
+        $hooks[] = ['Hook' => $WebHook, 'TargetID' => $this->InstanceID];
+        IPS_SetProperty($ids[0], 'Hooks', json_encode($hooks));
+        IPS_ApplyChanges($ids[0]);
+    }
+
+    public function GetVisualizationTile()
+    {
+        $html = file_get_contents(__DIR__ . '/module.html');
+        $html .= '<script>handleMessage(' . json_encode($this->buildTilePayload()) . ');</script>';
+        return $html;
+    }
+
+    // Bedient sowohl die eingebettete WebFront-Kachel (fetch()-Aufrufe aus
+    // module.html) als auch eine eigenständige Seite (IPSView/Browser-Popup,
+    // Muster Dashboard/Prognose). Schreibzugriffe (?area=…) persistieren
+    // SOFORT per IPS_SetProperty()+IPS_ApplyChanges() — anders als im
+    // Konsolenformular gibt es hier keinen umschließenden "Übernehmen"-
+    // Dialog, der die Selbstpersistenz-Regel für Formular-Buttons auslösen
+    // würde (siehe AdoptLastUnknownIdTag() dort).
+    public function ProcessHookData()
+    {
+        if (isset($_GET['action']) && $_GET['action'] === 'adoptUnknown') {
+            header('Content-Type: application/json; charset=utf-8');
+            $this->adoptUnknownIdTagDirect();
+            echo json_encode($this->buildTilePayload());
+            return;
+        }
+        if (isset($_GET['area'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            $area = (string)$_GET['area'];
+            if (!array_key_exists($area, self::AREA_SCHEMA)) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Unbekannter Bereich.']);
+                return;
+            }
+            $rows = json_decode((string)file_get_contents('php://input'), true);
+            if (!is_array($rows)) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Ungültige Daten.']);
+                return;
+            }
+            IPS_SetProperty($this->InstanceID, $area, json_encode($this->sanitizeRows($area, $rows)));
+            IPS_ApplyChanges($this->InstanceID);
+            echo json_encode($this->buildTilePayload());
+            return;
+        }
+        if (isset($_GET['json'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode($this->buildTilePayload());
+            return;
+        }
+        header('Content-Type: text/html; charset=utf-8');
+        $html = file_get_contents(__DIR__ . '/module.html');
+        $html .= '<script>handleMessage(' . json_encode($this->buildTilePayload()) . ');</script>';
+        echo $html;
+    }
+
+    // Whitelist der per Kachel schreibbaren Bereiche + Feldtypen — verhindert
+    // sowohl beliebige Property-Namen über ?area= (Sicherheit) als auch
+    // Datenmüll durch ungeprüfte JS-Werte (der Konsole nimmt Symcons
+    // Formular-Typprüfung dieselbe Arbeit ab, hier machen wir es selbst).
+    private const AREA_SCHEMA = [
+        'Fahrzeuge' => ['tessieInstanceId' => 'int', 'name' => 'string', 'kennzeichen' => 'string'],
+        'Gruppen'   => ['name' => 'string', 'maxKwhWeek' => 'float', 'maxKwhMonth' => 'float', 'maxKwhYear' => 'float'],
+        'Kunden'    => ['name' => 'string', 'active' => 'bool', 'groupId' => 'int', 'maxKwhWeek' => 'float', 'maxKwhMonth' => 'float', 'maxKwhYear' => 'float'],
+        'Zugaenge'  => ['idTag' => 'string', 'name' => 'string', 'customerId' => 'int', 'vehicleId' => 'int', 'active' => 'bool', 'validUntil' => 'string', 'allowedFrom' => 'string', 'allowedTo' => 'string'],
+    ];
+
+    private function sanitizeRows(string $area, array $rows): array
+    {
+        $schema = self::AREA_SCHEMA[$area];
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $clean = ['id' => (int)($row['id'] ?? 0)];
+            foreach ($schema as $field => $type) {
+                $value = $row[$field] ?? null;
+                switch ($type) {
+                    case 'int':
+                        $clean[$field] = (int)$value;
+                        break;
+                    case 'float':
+                        $clean[$field] = (float)$value;
+                        break;
+                    case 'bool':
+                        $clean[$field] = (bool)$value;
+                        break;
+                    default:
+                        $clean[$field] = (string)$value;
+                }
+            }
+            $out[] = $clean;
+        }
+        return $out;
+    }
+
+    private function buildTilePayload(): array
+    {
+        return [
+            'version'         => self::VERSION,
+            'hookPath'        => '/hook/ohubadmin' . $this->InstanceID,
+            'Fahrzeuge'       => $this->getFahrzeuge(),
+            'Gruppen'         => $this->getGruppen(),
+            'Kunden'          => $this->getKunden(),
+            'Zugaenge'        => $this->getZugaenge(),
+            'tessieOptions'   => $this->buildTessieOptions(),
+            'gruppenOptions'  => $this->buildIdLabelOptions($this->getGruppen()),
+            'kundenOptions'   => $this->buildIdLabelOptions($this->getKunden()),
+            'fahrzeugOptions' => $this->buildFahrzeugOptions(),
+            'unknownIdTag'    => $this->ReadAttributeString('LastUnknownIdTag'),
+            'unknownIdTagAt'  => $this->ReadAttributeInteger('LastUnknownIdTagAt'),
+        ];
+    }
+
+    private function buildIdLabelOptions(array $rows): array
+    {
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = ['id' => (int)($row['id'] ?? 0), 'label' => (string)($row['name'] ?? '')];
+        }
+        return $out;
+    }
+
+    private function buildFahrzeugOptions(): array
+    {
+        $out = [];
+        foreach ($this->getFahrzeuge() as $row) {
+            $out[] = ['id' => (int)($row['id'] ?? 0), 'label' => $this->resolveFahrzeugName($row)];
+        }
+        return $out;
+    }
+
+    private function buildTessieOptions(): array
+    {
+        $out = [];
+        foreach ((array)(@IPS_GetInstanceListByModuleID(self::TESSIE_VEHICLE_GUID) ?: []) as $id) {
+            $out[] = ['id' => (int)$id, 'label' => IPS_GetName((int)$id)];
+        }
+        return $out;
+    }
+
+    // Direktes Übernehmen (Kachel/WebHook, kein Konsolenformular-Kontext) —
+    // im Unterschied zu AdoptLastUnknownIdTag() (Konsole) hier bewusst
+    // SOFORTIGE Persistenz, s. Docblock ProcessHookData().
+    private function adoptUnknownIdTagDirect(): void
+    {
+        $tag = $this->ReadAttributeString('LastUnknownIdTag');
+        if ($tag === '') {
+            return;
+        }
+        $rows = $this->getZugaenge();
+        $rows[] = [
+            'idTag'       => $tag,
+            'name'        => '',
+            'customerId'  => 0,
+            'vehicleId'   => 0,
+            'active'      => true,
+            'validUntil'  => '',
+            'allowedFrom' => '',
+            'allowedTo'   => '',
+            'id'          => 0,
+        ];
+        IPS_SetProperty($this->InstanceID, 'Zugaenge', json_encode(array_values($rows)));
+        IPS_ApplyChanges($this->InstanceID);
+
+        $this->WriteAttributeString('LastUnknownIdTag', '');
+        $this->WriteAttributeInteger('LastUnknownIdTagAt', 0);
     }
 
     private function assignIds(string $propertyName): bool
@@ -256,6 +475,7 @@ class OCPPHubAbrechnung extends IPSModule
                         ['type' => 'Label', 'caption' => '⏱️ Verbrauchslimits (Woche/Monat/Jahr, 0 = kein Limit) gelten je Kunde UND je Gruppe unabhängig — das jeweils restriktivere Limit greift zuerst. Eine bereits laufende Ladung wird beim Erreichen NICHT abgebrochen, nur der nächste Kartenaufleger wird abgelehnt. Zählperiode ist die Kalenderwoche/-monat/-jahr, nicht rollierend.'],
                         ['type' => 'Label', 'caption' => '🕐 Zeitfenster am Zugang (Uhrzeit von/bis, Format HH:MM, leer = keine Einschränkung) — z. B. eine Gastkarte, die nur tagsüber laden darf.'],
                         ['type' => 'Label', 'caption' => 'ℹ️ Noch NICHT enthalten (Stufe 3): Tarife/Kostenberechnung, Berichte/CSV-Export, Reservierungsgebühr. Die Verbrauchsdaten (kWh je Transaktion) werden aber schon jetzt mitgeschrieben, damit ein späteres Zuschalten nicht auf fehlenden Rohdaten aufsetzen muss.'],
+                        ['type' => 'Label', 'caption' => '🧩 Konfigurationskachel: dieselbe Verwaltung (Fahrzeuge/Gruppen/Kunden/Zugänge, Karte anlernen) gibt es auch als WebFront-Kachel dieser Instanz — nützlich, um sie einem gesicherten WebFront zuzuweisen, ohne Konsolen-Zugang zu vergeben. Voraussetzung: eine WebHook-Control-Instanz muss im Objektbaum vorhanden sein (Symcon legt sie i. d. R. automatisch an); die Kachel meldet sich dort unter „/hook/ohubadmin' . $this->InstanceID . '" an. Zugriffsschutz läuft komplett über Symcons eigene WebFront-Sichtbarkeit je Instanz — kein zusätzliches Passwort in diesem Modul.'],
                     ],
                 ],
                 [
