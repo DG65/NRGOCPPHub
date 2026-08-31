@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.3 (31.08.2026)
+
+Nach dem ArgumentCountError-Fix (0.3.2) lief der Aufruf zwar durch, die Wallbox lud aber
+weiterhin nicht — Dashboard fand über die Netzwerk-Analyse `200 OK`/`{"ok":true}`, aber
+keine reale Ladung. Live per Debug-Dump bestätigt: go-e antwortete auf
+`RemoteStartTransaction` sofort mit `{"status":"Rejected"}` (kein Timeout, echte
+Ablehnung).
+
+- **Splitter 0.2.6**: `RemoteStartTransaction` fehlte das Feld `connectorId` — go-e
+  (und vermutlich andere Wallboxen mit mehreren gemeldeten Connectors, hier WB2 mit
+  Connector 0 = ganze Wallbox und Connector 1 = tatsächlicher Stecker) weiß dann nicht,
+  welchen Connector es starten soll, und lehnt strukturell ab. Jetzt fest
+  `connectorId: 1` gesetzt — live bestätigt als der Connector, über den eine echte
+  kartenausgelöste `StartTransaction` tatsächlich läuft.
+- **Ablehnungen jetzt dauerhaft sichtbar**: jede erkennbare Ablehnung (`CALLERROR` oder
+  ein `status` ungleich `"Accepted"`) auf einen von uns gesendeten Aufruf wird
+  zusätzlich per `IPS_LogMessage()` ins dauerhafte Systemlog geschrieben — vorher nur im
+  flüchtigen Debug-Fenster sichtbar, wodurch genau dieser Fehlschlag für Dashboard
+  komplett unsichtbar war (`{"ok":true}` kam trotzdem zurück, da wir den Rückgabewert
+  von `WC_PushMessage()`/die spätere Antwort bisher nicht auswerten).
+
 ## 0.3.2 (31.08.2026)
 
 **Kritischer Fix** (Dashboard-Sitzung fand den exakten Stacktrace beim Debuggen eines

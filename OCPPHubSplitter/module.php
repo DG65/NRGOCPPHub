@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.5';
+    private const VERSION = '0.2.6';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.5';
+    private const NEWS_VERSION = '0.2.6';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Dashboard-Fund, Live-Test): go-e lehnte jeden manuellen Ladestart mit "Rejected" ab, ohne dass das irgendwo sichtbar war. Ursache: RemoteStartTransaction fehlte das Feld connectorId — go-e wusste nicht, welchen Connector es starten soll. Jetzt fest auf 1 gesetzt (der tatsächlich ladende Connector, live an WB2 bestätigt). Außerdem: jede erkennbare Ablehnung (CALLERROR oder ein "status" ungleich "Accepted") auf einen von uns gesendeten Aufruf wird jetzt zusätzlich dauerhaft ins Systemlog geschrieben, nicht mehr nur ins flüchtige Debug-Fenster.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): manueller Ladestart über Dashboard/ctl_enable schlug mit einem PHP-Fatal-Error ab. Ursache: Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern — ein Aufruf mit nur 2 statt 3 Argumenten löste einen ArgumentCountError aus. Standardwert aus dem Quellcode entfernt, damit das nicht wieder passiert.',
         'Warnhinweis ergänzt: „OCPPHub Abrechnung" wird automatisch als Kind DIESER Splitter-Instanz angelegt — niemals selbst zusätzlich eine solche Instanz anlegen, eine zweite wird nie verwendet (live gefunden: Karten/Kunden in einer manuell angelegten zweiten Instanz blieben wirkungslos).',
         'Jede Kartenauflage (Authorize) wird jetzt zusätzlich ins dauerhafte Symcon-Systemlog geschrieben — vorher nur per SendDebug sichtbar, also unwiederbringlich weg, sobald das Debug-Fenster geschlossen war. Praktisch z. B. um den idTag einer neuen Karte nachträglich fürs Anlegen in der Abrechnung-Instanz nachzuschlagen.',
@@ -391,11 +392,36 @@ class OCPPHubSplitter extends IPSModule
             case self::OCPP_CALLRESULT:
             case self::OCPP_CALLERROR:
                 // Antworten auf von uns gesendete Aufrufe (RemoteStart/Stop,
-                // SetChargingProfile) — Stufe 1 protokolliert nur, keine
-                // Korrelationstabelle. TODO ab Stufe 2, falls nötig.
+                // SetChargingProfile) — keine Korrelationstabelle zum
+                // ursprünglichen Aufruf (Stufe 1/2-Scope), aber jede
+                // erkennbare Ablehnung (CALLERROR, oder ein "status" ungleich
+                // "Accepted") wird zusätzlich dauerhaft geloggt (Live-Bug
+                // 31.08.2026: ein von go-e abgelehntes RemoteStartTransaction
+                // blieb sonst nur im — meist längst geschlossenen —
+                // Debug-Fenster sichtbar, Dashboard hatte keinerlei Hinweis
+                // auf den stillen Fehlschlag).
+                if ((int)$message[0] === self::OCPP_CALLERROR || $this->responseIndicatesFailure($message[2] ?? null)) {
+                    IPS_LogMessage('OCPPHub', 'Ablehnung/Fehler auf gesendeten Aufruf [' . $cpid . ']: ' . $raw);
+                }
                 $this->SendDebug('OCPPHub CALLRESULT/CALLERROR [' . $cpid . ']', $raw, 0);
                 break;
         }
+    }
+
+    // Erkennt eine ablehnende Antwort in einem CALLRESULT-Payload — sowohl
+    // direkt ('status' auf oberster Ebene, z. B. RemoteStartTransaction.conf/
+    // ChangeConfiguration.conf) als auch verschachtelt ('idTagInfo.status',
+    // z. B. StartTransaction.conf). Kein Treffer ist NICHT gleichbedeutend
+    // mit Erfolg (manche Antworten haben gar kein 'status'-Feld, z. B.
+    // StatusNotification.conf `{}`) — bewusst konservativ, um keine
+    // Falschmeldungen zu erzeugen.
+    private function responseIndicatesFailure($payload): bool
+    {
+        if (!is_array($payload)) {
+            return false;
+        }
+        $status = $payload['status'] ?? $payload['idTagInfo']['status'] ?? null;
+        return $status !== null && $status !== 'Accepted';
     }
 
     private function checkBasicAuth(): bool
@@ -765,9 +791,20 @@ class OCPPHubSplitter extends IPSModule
     // ein Aufrufer, der sich auf einen Default verlässt, bekommt einen
     // ArgumentCountError. Jeder Aufrufer muss $idTag explizit übergeben
     // (z. B. 'symcon' für manuell/EMS-ausgelöste Starts ohne echte Karte).
+    // Live-Bug 31.08.2026 (Dashboard-Fund, go-e antwortete sofort mit
+    // {"status":"Rejected"}, kein Timeout): OCPP 1.6 erlaubt `connectorId` auf
+    // RemoteStartTransaction.req zwar als optional, go-e lehnt die Anfrage aber
+    // strukturell ab, wenn es fehlt — vermutlich weil WB2 zwei Connectors meldet
+    // (0 = ganze Wallbox, 1 = der tatsächliche Stecker) und ohne connectorId
+    // nicht weiß, welchen es starten soll. Live bestätigt: die ECHTE
+    // StartTransaction (durch Kartenauflegen ausgelöst) läuft immer mit
+    // "connectorId":1 — genau das jetzt auch hier fest mitgeben (Ladepunkt
+    // bildet aktuell nur einen einzelnen Connector pro Instanz ab, siehe
+    // .docs/architektur.md „Instanzmodell" — Mehr-Connector-Adressierung ist
+    // Stufe-3-Thema).
     public function RemoteStart(string $cpid, string $idTag): void
     {
-        $this->sendCall($cpid, 'RemoteStartTransaction', ['idTag' => $idTag]);
+        $this->sendCall($cpid, 'RemoteStartTransaction', ['connectorId' => 1, 'idTag' => $idTag]);
     }
 
     public function RemoteStop(string $cpid, int $transactionId): void

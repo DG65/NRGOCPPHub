@@ -176,7 +176,7 @@ beantworten, „sperren" bleibt OCPPHubs eigene UI):
 
 | OCPP (ausgehend)          | Auslöser                                                  |
 |---------------------------|-----------------------------------------------------------|
-| RemoteStartTransaction    | `ctl_enable` = an (mit internem idTag, wie Symcon: „symcon") |
+| RemoteStartTransaction    | `ctl_enable` = an (mit internem idTag, wie Symcon: „symcon"). **`connectorId` PFLICHT** (fest `1`) — go-e lehnt ohne dieses Feld strukturell mit `{"status":"Rejected"}` ab (Live-Bug 31.08.2026, WB2 meldet zwei Connectors: 0 = ganze Wallbox, 1 = tatsächlicher Stecker, ohne Angabe unklar welcher gemeint ist). |
 | RemoteStopTransaction     | `ctl_enable` = aus                                        |
 | SetChargingProfile        | `ctl_curr_limit` (TxDefaultProfile, Limit in A oder W — je Wallbox prüfen!) |
 | ChangeConfiguration       | u. a. MeterValueSampleInterval hochdrehen (Lehre aus dem Symcon-Modul: sonst „Datenausbeute gering") |
