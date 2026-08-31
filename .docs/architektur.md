@@ -738,6 +738,22 @@ WebFront-eigener Login) kann die URL auch ohne WebFront-Session erreichbar sein.
 Für eine wirklich gesicherte Konfigurationskachel sollte die WebHook-Control-Instanz
 entsprechend eingeschränkt bzw. nur im internen Netz erreichbar sein.
 
+**Kontrast-/Theming-Fix (31.08.2026, Abrechnung 0.3.1)**: Dietmars erste Live-
+Rückmeldung — *"Die Sichtbarkeit ist mehr schlecht als Recht."* Live in einem echten
+Browser nachgestellt (dunkles + helles Farbschema emuliert): `module.html` nutzte
+`color: inherit`, was ohne eigenes `color-scheme` verlässlich Schwarz liefert,
+unabhängig vom tatsächlichen Theme — im dunklen WebFront praktisch unlesbar (schwarz
+auf schwarz), im hellen zufällig lesbar. Fix: eigene helle/dunkle Farb-Tokens über
+`@media (prefers-color-scheme: dark)` + `color-scheme: light dark`, Panels bekommen
+zusätzlich eine leichte eigene Hintergrundfläche. Dabei auch ein eigener `<h1>`-Titel
+entfernt, der sich mit Symcons Instanzname-Überschrift überlagerte — Verbundregel
+„Kachel zeigt keinen eigenen Titel" ([[ips-kachel-kein-eigener-titel]]), hier beim
+ersten Bauen selbst übersehen. **Bekannte Grenze**: die Erkennung folgt
+`prefers-color-scheme` des Browsers/Betriebssystems — falls das WebFront-Theme davon
+unabhängig manuell umgeschaltet wird (nicht dem System folgt), kann die Kachel
+weiterhin im falschen Kontrast landen. Noch nicht als Sonderfall aufgetreten, aber
+nicht auszuschließen.
+
 ## Abrechnung (Datenmodell-Entwurf)
 
 Erweiterung 30.08.2026 (Dietmar): 1:1 „eine Karte = ein Nutzer" reicht nicht — Kunden

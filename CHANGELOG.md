@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.1 (31.08.2026)
+
+**Abrechnung 0.3.1**: Kontrast-/Theming-Fix an der neuen Konfigurationskachel.
+Dietmars Rückmeldung nach dem ersten Live-Blick: *"Die Sichtbarkeit ist mehr schlecht
+als Recht."* Live in einem echten Browser nachgestellt (dunkles UND helles WebFront-
+Theme): `module.html` nutzte `color: inherit` ohne eigenes `color-scheme` — dadurch
+blieb der Text im dunklen WebFront praktisch schwarz auf schwarz (Browser-Default,
+unabhängig vom tatsächlichen Theme, solange keine eigene Farbe gesetzt ist), nur im
+hellen Theme zufällig lesbar. Fix: eigene helle/dunkle Farbpalette über
+`@media (prefers-color-scheme: dark)`, `color-scheme: light dark` gesetzt, Panels
+bekommen jetzt außerdem eine leichte eigene Hintergrundfläche zur klareren optischen
+Abgrenzung. Zusätzlich entfernt: ein eigener `<h1>`-Titel in der Kachel, der sich mit
+Symcons eigener Instanzname-Überschrift überlagerte (Verbundregel „Kachel zeigt
+keinen eigenen Titel", hier selbst übersehen).
+
 ## 0.6.0 (31.08.2026)
 
 **Neue Funktion: Konfigurationskachel** — Dietmars Idee, nachdem die "Karte
