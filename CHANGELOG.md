@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.0 (31.08.2026)
+
+**Neue Funktion: automatische Ladefreigabe für erkannte Fahrzeuge** ("so etwas wie
+Autocharge", Dietmars Wunsch — nachdem die Recherche zeigte, dass echtes OCPP-
+Autocharge strukturell auf DC-Schnelllader beschränkt ist und für keine der hier
+relevanten AC-Heimwallboxen infrage kommt). Design vorher mit Dashboard abgestimmt
+(deren Zuständigkeit für Fahrzeug-Zeitkorrelation direkt berührt, siehe „EIN
+Korrelationsmechanismus im Verbund"-Regel).
+
+- **Abrechnung 0.2.11**: neue Methode `FindIdTagForVehicleName()` — reine Suche
+  (Fahrzeugname → verknüpfter Zugang → idTag), keine eigene Gültigkeitsprüfung.
+- **Splitter 0.2.8**: neue Methode `AutoAuthorizeVehicle($cpid, $vehicleName)` — findet
+  einen passenden idTag und jagt ihn durch DIESELBE `checkIdTag()`-Prüfung wie eine
+  echte Kartenauflage (Limits/Zeitfenster/Reservierung/Kunde aktiv gelten identisch,
+  keine laxere Sonderlogik), nur bei Betriebsart ②. Bei Erfolg: echter idTag (nicht
+  `'symcon'`) an `RemoteStart()`, damit `RecordConsumption()` den Verbrauch dem
+  richtigen Kunden zuordnet.
+- **Ladepunkt 0.2.6**: `OHUBL_SetVehicleName()` um `bool $TimeCorrelated` erweitert
+  (KEIN Standardwert — Symcons generierte globale Funktion ignoriert PHP-Standardwerte
+  ohnehin, siehe 0.2.2-Fund) — Dashboard setzt das künftig auf `true` bei echter
+  Zeitkorrelation (nicht bei deren Ein-Wallbox/Ein-Fahrzeug-Blindzuordnungs-
+  Sonderfall). Bei `true` + noch keiner Ladefreigabe: löst `AutoAuthorizeVehicle()`
+  aus, mit 60s-Sperrfrist gegen wiederholte Versuche (Dashboards Aufruf ist laut deren
+  eigener Aussage kein Einmal-Ereignis, sondern wiederholt sich bei jedem
+  Power-/SoC-Update oder deren 5-Minuten-Timer).
+
 ## 0.4.2 (31.08.2026)
 
 Klarstellung im Formular (Ladepunkt 0.2.5) und in `.docs/recherche.md`: go-e unterstützt

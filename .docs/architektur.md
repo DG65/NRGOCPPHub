@@ -435,10 +435,13 @@ Dietmars Vorgabe (30.08.2026): alle fahrzeugbezogenen Funktionen von ChargerHub 
 übernehmen. Gegenprüfung mit ChargerHub am echten Code (0.9.53) ergab: ChargerHub macht
 hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT im Hub.
 
-- **`OHUBL_SetVehicleName(int $LadepunktID, string $Name)`** (auf der Ladepunkt-Instanz):
-  dummer Setter ohne jede eigene Logik, schreibt nur `vehicle_name`. Analog
-  `CHUB_SetVehicleName()`. `vehicleNameID` steht bereits im Vertrag
-  (`GetContractEntry()`).
+- **`OHUBL_SetVehicleName(int $LadepunktID, string $Name, bool $TimeCorrelated)`** (auf
+  der Ladepunkt-Instanz): schreibt `vehicle_name`. Analog `CHUB_SetVehicleName()` (das
+  hat kein `$TimeCorrelated` — additiv nur bei uns, siehe „Auto-Autorisierung" unten).
+  `vehicleNameID` steht bereits im Vertrag (`GetContractEntry()`). **KEIN Standardwert**
+  auf `$TimeCorrelated` (Symcons generierte globale Funktion ignoriert PHP-Standardwerte
+  ohnehin, siehe RemoteStart()-Kommentar im Splitter) — jeder Aufrufer (auch Dashboard)
+  muss ihn explizit mitgeben.
 - **Keine eigene Korrelationslogik** (kein Zeitabgleich, keine Heuristik) — Verbund-
   Entscheidung nach Debatte ChargerHub/Tessie/Dashboard: EIN Korrelationsmechanismus im
   Verbund statt mehrerer konkurrierender. Die Zeitkorrelation beim Anstecken macht
@@ -450,6 +453,22 @@ hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT i
   Fahrzeugnamens (fest auf `CHUB_SetVehicleName()` verdrahtet) — dispatcht jetzt nach
   `$wallbox['transport']`: `'ocpp'` → `OHUBL_SetVehicleName()`, sonst weiter
   `CHUB_SetVehicleName()`, je hinter eigenem `function_exists()`.
+- **Auto-Autorisierung ("so etwas wie Autocharge", 31.08.2026, Dietmars Wunsch, Design
+  mit Dashboard abgestimmt)**: Dashboard ruft `OHUBL_SetVehicleName()` jetzt auch
+  UNABHÄNGIG von einer echten Kartenauflage auf, sobald es per `AssignVehicles()` ein
+  Fahrzeug erkennt, mit `$TimeCorrelated=true` NUR bei echter Zeitkorrelation (nicht
+  bei deren Ein-Wallbox/Ein-Fahrzeug-Blindzuordnungs-Sonderfall, siehe Dashboards
+  Rückmeldung 31.08.2026 — Fehlzuordnungsrisiko dort real, kein Automatismus
+  gewünscht). Bei `$TimeCorrelated=true` sucht der Splitter
+  (`AutoAuthorizeVehicle()`) über `OHUBA_FindIdTagForVehicleName()` einen passenden
+  Zugang und jagt dessen idTag durch DIESELBE `checkIdTag()`-Prüfung wie eine echte
+  Kartenauflage (Limits/Zeitfenster/Reservierung/Kunde aktiv gelten identisch, keine
+  laxere Sonderlogik). Nur bei Betriebsart ②. 60s-Sperrfrist gegen wiederholte
+  Versuche/Log-Spam (`LastAutoAuthAttempt`-Attribut), da Dashboards Aufruf laut deren
+  eigener Aussage kein Einmal-Ereignis ist, sondern bei jedem `buildPayload()`-Lauf
+  wiederholt (Power-/SoC-Update oder deren 5-Minuten-Timer). Bei Erfolg: echter idTag
+  (nicht `'symcon'`) an `RemoteStart()` — `StartTransaction.req` der Wallbox trägt ihn
+  zurück, `RecordConsumption()` rechnet den Verbrauch dadurch dem richtigen Kunden zu.
 - **Auto-Löschung beim Abstecken**: `vehicle_name` wird geleert, sobald `vehicle_plugged`
   auf `false` geht — NUR bei tatsächlich erkanntem Status (nicht bei unbekanntem OCPP-
   Status-String, sonst würde ein einfach nicht verstandener Status fälschlich als „kein

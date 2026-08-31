@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.7';
+    private const VERSION = '0.2.8';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.7';
+    private const NEWS_VERSION = '0.2.8';
     private const NEWS_ITEMS = [
+        'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch). Design mit Dashboard abgestimmt.',
         'Neue Diagnose bei eindeutiger Ladeablehnung (RemoteStartTransaction/SetChargingProfile): fragt automatisch beim verknüpften Tessie-Fahrzeug und optional Tibber Grid Rewards nach einer möglichen Erklärung — sichtbar am Ladepunkt in der neuen Variable `block_reason`.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): go-e lehnte jeden manuellen Ladestart mit "Rejected" ab, ohne dass das irgendwo sichtbar war. Ursache: RemoteStartTransaction fehlte das Feld connectorId — go-e wusste nicht, welchen Connector es starten soll. Jetzt fest auf 1 gesetzt (der tatsächlich ladende Connector, live an WB2 bestätigt). Außerdem: jede erkennbare Ablehnung (CALLERROR oder ein "status" ungleich "Accepted") auf einen von uns gesendeten Aufruf wird jetzt zusätzlich dauerhaft ins Systemlog geschrieben, nicht mehr nur ins flüchtige Debug-Fenster.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): manueller Ladestart über Dashboard/ctl_enable schlug mit einem PHP-Fatal-Error ab. Ursache: Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern — ein Aufruf mit nur 2 statt 3 Argumenten löste einen ArgumentCountError aus. Standardwert aus dem Quellcode entfernt, damit das nicht wieder passiert.',
@@ -660,7 +661,14 @@ class OCPPHubSplitter extends IPSModule
         // Zuordnung & SOC") — bei erfolgreicher Autorisierung mit
         // bekanntem Fahrzeug sofort setzen.
         if ($status === 'Accepted' && $ladepunktId !== 0 && !empty($result['vehicleName'])) {
-            OHUBL_SetVehicleName($ladepunktId, (string)$result['vehicleName']);
+            // $TimeCorrelated = false: diese Zuordnung läuft bereits mitten in
+            // einer ECHTEN Autorisierung (Karte war schon Accepted) — eine
+            // zusätzliche Auto-Autorisierung (siehe AutoAuthorizeVehicle()
+            // unten) wäre hier redundant und könnte sogar ein doppeltes
+            // RemoteStartTransaction auf eine bereits laufende Transaktion
+            // auslösen. Der Parameter ist NUR für Dashboards eigenständige,
+            // von keiner Autorisierung begleitete Fahrzeugerkennung gedacht.
+            OHUBL_SetVehicleName($ladepunktId, (string)$result['vehicleName'], false);
             // Additiv (Diagnose-Feature 31.08.2026): merkt sich die
             // verknüpfte Tessie-Instanz für eine spätere Ladeablehnung-
             // Diagnose (siehe OHUBL_DiagnoseBlockReason()) — 0 = kein
@@ -670,6 +678,45 @@ class OCPPHubSplitter extends IPSModule
         }
 
         return $status;
+    }
+
+    // "So etwas wie Autocharge" (Dietmars Wunsch 31.08.2026, Design mit
+    // Dashboard abgestimmt): Dashboard ruft OHUBL_SetVehicleName() künftig
+    // auch UNABHÄNGIG von einer echten Kartenauflage auf, sobald es per
+    // eigener Zeitkorrelation ein Fahrzeug erkennt (Ladepunkt reicht das als
+    // $TimeCorrelated=true hierher durch). Wir suchen dann selbst einen
+    // passenden Zugang und jagen dessen idTag durch DIESELBE checkIdTag()-
+    // Prüfung wie eine echte Kartenauflage — keine eigene, laxere Logik,
+    // alle Regeln (Limits/Zeitfenster/Reservierung/Kunde aktiv) gelten
+    // identisch, inklusive der bestehenden persistenten Ablehnungs-
+    // Protokollierung. Bewusst NUR bei Betriebsart ② — bei ① ist ohnehin
+    // schon alles offen, hier gibt es nichts zu automatisieren.
+    public function AutoAuthorizeVehicle(string $cpid, string $vehicleName): void
+    {
+        if ($vehicleName === '' || $this->ReadPropertyInteger('Betriebsart') !== 2) {
+            return;
+        }
+        $abrechnungId = $this->ensureAbrechnung();
+        if ($abrechnungId === 0) {
+            return;
+        }
+        $idTag = OHUBA_FindIdTagForVehicleName($abrechnungId, $vehicleName);
+        if ($idTag === '') {
+            return;
+        }
+        if ($this->checkIdTag($cpid, $idTag) !== 'Accepted') {
+            return;
+        }
+        $ladepunktId = $this->findLadepunkt($cpid);
+        if ($ladepunktId === 0) {
+            return;
+        }
+        // Echten idTag verwenden (nicht 'symcon' wie beim manuellen Dashboard-
+        // Start) — StartTransaction.req der Wallbox trägt ihn zurück,
+        // RecordConsumption() rechnet den Verbrauch dadurch dem richtigen
+        // Kunden zu.
+        OHUBL_ConfirmAutoStart($ladepunktId);
+        $this->RemoteStart($cpid, $idTag);
     }
 
     private function onStartTransaction(string $cpid, array $payload): array

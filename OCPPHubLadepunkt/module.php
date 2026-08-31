@@ -26,14 +26,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.5';
+    private const VERSION = '0.2.6';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.4';
+    private const NEWS_VERSION = '0.2.6';
     private const NEWS_ITEMS = [
+        'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage). Design mit Dashboard abgestimmt.',
         'Zwei Anzeige-Fixes (Dashboard-Fund, Live-Test): „Stromlimit" zeigte unsinnige Zehntel-Ampere (z. B. „10.0 A") — lag am geteilten NRG.Ampere-Profil, das auf diesem System als Float mit 1 Nachkommastelle existiert; ctl_curr_limit hat jetzt ein eigenes ganzzahliges Profil. „Fahrzeug angesteckt" zeigte das Symcon-Standard-Ein/Aus einer profillosen Bool-Variable — jetzt eigenes Profil mit Ja/Nein, analog ChargerHub.',
         'Neue Diagnose: bei einer eindeutigen Ladeablehnung wird — falls das Fahrzeug per Tessie verknüpft ist — automatisch nach einer Erklärung gefragt (eigene Ladeplanung aktiv, Ladelimit erreicht, oder Fahrzeug schläft gerade und wird automatisch aufgeweckt), sichtbar in der neuen Variable `block_reason`. Ergänzend ein unsicherer Tibber-Grid-Rewards-Namensabgleich, ausdrücklich als "möglicherweise" markiert.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): „Laden starten" schlug am Ladepunkt mit einem PHP-Fatal-Error ab (ArgumentCountError) — Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern, ein fehlender dritter Parameter ließ jeden manuellen Ladestart über Dashboard/ctl_enable scheitern.',
@@ -128,6 +129,9 @@ class OCPPHubLadepunkt extends IPSModule
         // verknüpftes Fahrzeug), siehe SetVehicleTessieId()/
         // DiagnoseBlockReason().
         $this->RegisterAttributeInteger('LastVehicleTessieId', 0);
+        // Auto-Autorisierung ("so etwas wie Autocharge", 31.08.2026) — siehe
+        // maybeAutoAuthorize(): Sperrfrist gegen wiederholte Versuche.
+        $this->RegisterAttributeInteger('LastAutoAuthAttempt', 0);
         // Tages-Override „heute Vollladen trotz PV-Vorrang" (Backend-Funktion
         // für Dashboard, siehe OHUB_SetDailyOverride am Splitter). Reset auf
         // "aus" übernimmt OCPPHub SELBST anhand von DailyOverrideDate (siehe
@@ -189,6 +193,7 @@ class OCPPHubLadepunkt extends IPSModule
                         ['type' => 'Label', 'caption' => '⚠️ „OCPPHub-Splitter" unten ist ein Pflichtfeld, auch wenn die Instanz automatisch über den Konfigurator angelegt wurde und dort schon vorausgefüllt sein sollte. Ohne diese Zuordnung findet der Splitter diesen Ladepunkt weder für eingehende OCPP-Nachrichten noch für Steuerbefehle (Ladefreigabe, Stromlimit) noch für den Dashboard-Vertrag — Symcons Position dieser Instanz im Objektbaum (welcher Kategorie/welchem Ordner sie in der Konsole zugeordnet ist) reicht dafür ausdrücklich NICHT, weil sich Instanzen dort frei verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
                         ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
                         ['type' => 'Label', 'caption' => '🩺 Ladeablehnung erklären (`block_reason`): lehnt die Wallbox einen Ladestart/eine Stromlimit-Änderung eindeutig ab, wird — falls das Fahrzeug per Tessie verknüpft ist (siehe „OCPPHub Abrechnung"-Instanz) — automatisch nachgefragt, ob eine eigene Ladeplanung im Fahrzeug aktiv ist, das Ladelimit schon erreicht ist, oder das Fahrzeug gerade schläft (dann wird automatisch ein Aufwecken angestoßen). Zusätzlich, aber ausdrücklich nur als unsicherer Hinweis: ein Namensabgleich gegen aktive Tibber-Grid-Rewards-Steuerungen. Ohne Tessie-Verknüpfung oder ohne eindeutige Ablehnung bleibt `block_reason` leer.'],
+                        ['type' => 'Label', 'caption' => '🔓 Automatische Ladefreigabe für erkannte Fahrzeuge: erkennt Dashboard per eigener Zeitkorrelation (nicht wir selbst — bewusst EIN Korrelationsmechanismus im Verbund) ein Fahrzeug an diesem Ladepunkt, das einem aktiven Zugang in der Abrechnung-Instanz zugeordnet ist, wird bei Betriebsart ② automatisch dessen Karte „aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch) — praktisch das Ergebnis von „Autocharge", ohne dass die Wallbox das selbst können muss. Kein Zwang zum sofortigen Losladen, nur zur Freigabe; wirkt erst, sobald das Ladepunkt-Modul der Dashboard-Sitzung diese Zuordnung meldet.'],
                         ['type' => 'Label', 'caption' => '🎫 RFID-Autorisierung/Verbrauchslimits: wird zentral in der „OCPPHub Abrechnung"-Instanz gepflegt, gilt aber nur, wenn am Splitter „② Mehrere Nutzer" ausgewählt ist — bei „① Einzelnutzer" wird jede Karte angenommen, unabhängig davon, was dort hinterlegt ist.'],
                         ['type' => 'Label', 'caption' => '🔒 Reservierung: unabhängig von der Splitter-Betriebsart nutzbar (Backend-Funktionen `OHUBL_Reserve`/`OHUBL_CancelReservation`, Dashboard baut die Bedienoberfläche). Solange eine Reservierung aktiv ist, wird jede Kartenauflage mit einem ANDEREN idTag abgelehnt — sichtbar in `reserved_by`/`reserved_until`. Diese Blockade prüfen wir selbst (unabhängig davon, ob die Wallbox den OCPP-Kernbefehl `ReserveNow` selbst unterstützt) — manche Modelle (z. B. go-e) lehnen `ReserveNow` mit „NotImplemented" ab, was nur eine etwaige eigene Anzeige an der Wallbox betrifft, nicht unsere Durchsetzung.'],
                     ],
@@ -484,9 +489,55 @@ class OCPPHubLadepunkt extends IPSModule
     // (Verbund-Entscheidung, siehe .docs/architektur.md „Fahrzeug-Zuordnung
     // & SOC"): die eigentliche Zeitkorrelation macht ausschließlich
     // Dashboards AssignVehicles(). Analog ChargerHubs CHUB_SetVehicleName().
-    public function SetVehicleName(string $name): void
+    //
+    // $TimeCorrelated (additiv 31.08.2026, "so etwas wie Autocharge", mit
+    // Dashboard abgestimmt): true nur, wenn Dashboard das Fahrzeug per
+    // ECHTER Zeitkorrelation erkannt hat (nicht bei deren Ein-Wallbox/Ein-
+    // Fahrzeug-Blindzuordnungs-Sonderfall) — löst dann bei uns eine
+    // automatische Autorisierung aus (siehe unten). KEIN Standardwert
+    // (Symcons generierte globale Funktion ignoriert PHP-Standardwerte
+    // ohnehin, siehe RemoteStart()-Kommentar im Splitter) — unser eigener
+    // Aufruf in OCPPHubSplitter::checkIdTagInternal() übergibt bewusst
+    // `false` (dort läuft schon eine echte Autorisierung, keine zusätzliche
+    // Auto-Autorisierung nötig/gewünscht).
+    public function SetVehicleName(string $name, bool $TimeCorrelated): void
     {
         $this->SetValue('vehicle_name', $name);
+        $this->maybeAutoAuthorize($name, $TimeCorrelated);
+    }
+
+    // Dashboards SetVehicleName()-Aufruf ist KEIN Einmal-Ereignis, sondern
+    // wiederholt sich bei jedem weiteren buildPayload()-Lauf (laut Dashboard
+    // z. B. bei jedem Leistungs-/SoC-Update oder spätestens ihrem 5-Minuten-
+    // Timer), solange die Zuordnung besteht — darum hier eine 60s-Sperrfrist
+    // gegen wiederholte Versuche/Log-Spam, zusätzlich zum ctl_enable-Guard
+    // (schon autorisiert → nichts zu tun).
+    private const AUTO_AUTH_COOLDOWN_SECONDS = 60;
+
+    private function maybeAutoAuthorize(string $name, bool $timeCorrelated): void
+    {
+        if (!$timeCorrelated || $name === '' || $this->GetValue('ctl_enable')) {
+            return;
+        }
+        if (time() - $this->ReadAttributeInteger('LastAutoAuthAttempt') < self::AUTO_AUTH_COOLDOWN_SECONDS) {
+            return;
+        }
+        $this->WriteAttributeInteger('LastAutoAuthAttempt', time());
+        $splitterId = $this->resolveSplitterId();
+        $cpid = $this->ReadPropertyString('CPID');
+        if ($splitterId > 0 && $cpid !== '') {
+            OHUB_AutoAuthorizeVehicle($splitterId, $cpid, $name);
+        }
+    }
+
+    // Vom Splitter aufgerufen, sobald AutoAuthorizeVehicle() erfolgreich war
+    // — mirrort den ctl_enable-Teil von RequestAction('ctl_enable', true),
+    // aber OHNE dort nochmal OHUB_RemoteStart() mit dem generischen
+    // 'symcon'-idTag auszulösen (der Splitter hat den echten idTag bereits
+    // selbst verwendet, siehe AutoAuthorizeVehicle()).
+    public function ConfirmAutoStart(): void
+    {
+        $this->SetValue('ctl_enable', true);
     }
 
     // Additiv (Diagnose-Feature 31.08.2026) — merkt sich, welche Tessie-

@@ -17,7 +17,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.10';
+    private const VERSION = '0.2.11';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     private const NEWS_VERSION = '0.2.9';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
@@ -576,5 +576,39 @@ class OCPPHubAbrechnung extends IPSModule
             return;
         }
         $this->addPeriodConsumption((int)($zugang['customerId'] ?? 0), $timestamp, $kWh);
+    }
+
+    // Diagnose/Automatisierungs-Feature 31.08.2026 ("so etwas wie Autocharge",
+    // Dietmars Wunsch, mit Dashboard abgestimmt): findet zu einem per
+    // Fahrzeugerkennung übergebenen Namen den idTag EINES darauf verweisenden
+    // Zugangs (erster Treffer bei mehreren) — reine Suche, KEINE eigene
+    // Gültigkeitsprüfung (aktiv/Zeitfenster/Limit). Der Splitter jagt den
+    // gefundenen idTag anschließend durch dieselbe checkIdTag()-Prüfung wie
+    // eine echte Kartenauflage, damit alle Regeln identisch greifen — hier
+    // keine Logik duplizieren. '' = kein passendes Fahrzeug/kein Zugang
+    // gefunden. Namensabgleich exakt (kein Fuzzy-Match) — Kollisionsrisiko
+    // bei zwei gleich benannten Fahrzeugen bewusst nicht behandelt (kleiner
+    // Nutzerkreis, Namen sind bei der Anlage frei wählbar).
+    public function FindIdTagForVehicleName(string $VehicleName): string
+    {
+        if ($VehicleName === '') {
+            return '';
+        }
+        $fahrzeugId = 0;
+        foreach ($this->getFahrzeuge() as $fahrzeug) {
+            if ($this->resolveFahrzeugName($fahrzeug) === $VehicleName) {
+                $fahrzeugId = (int)($fahrzeug['id'] ?? 0);
+                break;
+            }
+        }
+        if ($fahrzeugId === 0) {
+            return '';
+        }
+        foreach ($this->getZugaenge() as $zugang) {
+            if ((int)($zugang['vehicleId'] ?? 0) === $fahrzeugId) {
+                return (string)($zugang['idTag'] ?? '');
+            }
+        }
+        return '';
     }
 }
