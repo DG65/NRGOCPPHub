@@ -485,6 +485,78 @@ hier bewusst SEHR wenig — die Zuordnungs-Intelligenz liegt absichtlich NICHT i
   RFID-Kartenzähler-Äquivalent ist unsere eigene Kundenverwaltung/Transaktionshistorie
   (Stufe 2/3), nicht ein eigener Direktkanal wie ChargerHubs go-e-MQTT-Kartenzähler.
 
+## Ladeablehnung erklären (Diagnose-Feature, 31.08.2026)
+
+Auslöser: Dietmars Live-Test — go-e lehnte `RemoteStartTransaction` sauber mit
+`{"status":"Rejected"}` ab, ein `SetChargingProfile` wurde `Accepted`, blieb aber
+wirkungslos (`SuspendedEVSE`, 0 W), ohne dass irgendwo eine Begründung sichtbar war.
+Dietmars ausdrücklicher Wunsch: bei einer **eindeutigen** Ablehnung (nicht bei
+mysteriösen Netzwerkfehlern) eine echte, nachvollziehbare Erklärung im Dashboard zeigen
+statt Rätselraten — dafür bei den betroffenen Nachbarmodulen nachfragen, welche Signale
+sie liefern können.
+
+**Vorgehen bewusst offen, nicht nur die eigene Lösungsidee bestätigen lassen**
+(Dietmars ausdrückliche Anweisung): Problem beiden Sitzungen breit geschildert statt
+nur eng gefragt — beide brachten Erkenntnisse, die die ursprüngliche Idee verbessert
+bzw. korrigiert haben.
+
+- **Tibber Grid Rewards, strukturelle Einordnung (nicht nur Datenfrage)**: Tibber
+  greift ausschließlich auf der FAHRZEUGSEITE ein (Tesla-/Herstellercloud), spricht
+  nicht mit dem Charger. Eine Ablehnung VOR Sitzungsbeginn (wie unser Fall) kann Tibber
+  strukturell nicht verursachen — sie könnten höchstens NACH einem erfolgreichen
+  Sitzungsstart die Stromabnahme des Fahrzeugs drosseln. `TIBBERGR_GetActiveControls()`
+  wird trotzdem als Zusatzinfo abgefragt (kostet nichts, schließt eine Möglichkeit
+  aus), aber ausdrücklich nur als „möglicherweise, nicht sicher zuordenbar" markiert.
+  `deviceId` in diesem Vertrag ist Tibbers EIGENE `vehicleId`/`batteryId` (auf unsere
+  Nachfrage von `0` auf echte Werte nachgebessert, contractVersion 1.0→2.0, deren
+  Commit `0cecc66`) — keine Symcon-Instanz-ID, Zuordnung nur unscharf über
+  `name`/`make` gegen unseren `vehicle_name` möglich, ohne verlässliche
+  Kreuzreferenz. Wichtiger technischer Hinweis von Tibber, der die eigentliche Spur
+  zur echten Ursache legt: `SuspendedEVSE` (nicht `SuspendedEV`) bedeutet laut OCPP-1.6,
+  dass die STATION selbst keinen Strom anbietet — kein Fahrzeug-/Tibber-Entscheid. In
+  Kombination mit dem sauber abgelehnten `RemoteStartTransaction` deutet das eher auf
+  eine hängende alte Transaktion auf demselben Connector oder ein go-e-internes
+  `AuthorizeRemoteTxRequests`-Erfordernis hin (unabhängig von der App-Einstellung
+  „Zugangskontrolle: Offen") — **noch nicht abschließend verifiziert**, TODO beim
+  nächsten Live-Test (siehe unten).
+- **Tessie, live nachgeschaut statt spekuliert**: `TESSIE_GetVehicleState()` macht
+  KEINEN eigenen API-Aufruf (reine Lesung bereits vorhandener lokaler Symcon-
+  Variablenwerte) — beliebig oft aufrufbar, kein Tessie-API-Kontingent betroffen.
+  `scheduledChargingActive` (Feld liefert bewusst `null`, nicht `false`, bei fehlender
+  Telemetrie — strikte `=== true`-Prüfung ist sicher) und `chargeLimit` (echtes
+  Telemetriefeld, nicht die frühere veraltete Aktionsvariable) sind verlässliche
+  Signale. **Tessies eigener Zusatzfund**: `soc >= chargeLimit` ist ein unabhängiger,
+  unterscheidbarer Ablehnungsgrund („Ladelimit erreicht"), den die ursprüngliche Idee
+  noch nicht abdeckte. Staleness-Absicherung: `IPS_GetInstance($tessieId)
+  ['InstanceStatus'] === 203` heißt „Telemetrie seit über 15 Minuten nicht aktualisiert"
+  — bei 203 keine der anderen Feldwerte als sichere Begründung werten. **Live am
+  Testfahrzeug ("Kohlekasten") bestätigt**: Telemetrie war 140 Minuten alt trotz aktiv
+  gemeldeter WebSocket-Verbindung — typisches Schlafmodus-Muster, würde ALLE
+  beobachteten Symptome gleichzeitig erklären (Fahrzeug verhandelt nicht aktiv mit der
+  Wallbox). Tessie hat daraufhin `TESSIE_WakeUp($id)` als neue Funktion ergänzt (nutzt
+  denselben `/wake`-Endpunkt wie ihre eigene interne `ensureAwake()`, keine neue
+  Risikofläche, deren Commit `4e47688`) — bei Status 203 rufen wir das automatisch auf
+  (asynchron, kein Block-Warten in der OCPP-Nachrichtenverarbeitung).
+
+**Umsetzung**: additive Kette durch alle drei eigenen Instanzen —
+`OHUBA_CheckAuthorization()` liefert zusätzlich `vehicleTessieInstanceId` (0 = keins) →
+Splitter merkt sich das bei der idTag-Direktzuordnung am Ladepunkt
+(`OHUBL_SetVehicleTessieId()`, Attribut, beim Abstecken zurückgesetzt wie
+`vehicle_name`) → bei einer über eine leichte Aufruf-Korrelation (`PendingCalls`-
+Attribut am Splitter, uniqueId→Aktion, Einträge >5 Min verworfen) erkannten
+eindeutigen Ablehnung von `RemoteStartTransaction`/`SetChargingProfile` ruft der
+Splitter `OHUBL_DiagnoseBlockReason()` auf, die neue Ladepunkt-Variable `block_reason`
+füllt sich mit der besten verfügbaren Erklärung (leer = keine erkennbare Ursache).
+`TESSIE_*`/`TIBBERGR_*` sind ECHTE Fremdmodule (anders als `OHUBA_`/`OHUBL_`) — beide
+Aufrufe hinter `function_exists()` abgesichert.
+
+**Noch offen**: die eigentliche `Rejected`-Ursache (hängende Transaktion vs.
+`AuthorizeRemoteTxRequests`) ist noch nicht verifiziert, da das Testfahrzeug abgesteckt
+wurde, bevor weiter eingegrenzt werden konnte — beim nächsten Live-Test zuerst per
+`GetConfiguration` nach `AuthorizeRemoteTxRequests` fragen (bereits einmal live
+angestoßen, Antwort noch nicht ausgewertet) und prüfen, ob eine alte Transaktion auf
+Connector 1 hängt.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string

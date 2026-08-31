@@ -26,14 +26,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.2';
+    private const VERSION = '0.2.3';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.2';
+    private const NEWS_VERSION = '0.2.3';
     private const NEWS_ITEMS = [
+        'Neue Diagnose: bei einer eindeutigen Ladeablehnung wird — falls das Fahrzeug per Tessie verknüpft ist — automatisch nach einer Erklärung gefragt (eigene Ladeplanung aktiv, Ladelimit erreicht, oder Fahrzeug schläft gerade und wird automatisch aufgeweckt), sichtbar in der neuen Variable `block_reason`. Ergänzend ein unsicherer Tibber-Grid-Rewards-Namensabgleich, ausdrücklich als "möglicherweise" markiert.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): „Laden starten" schlug am Ladepunkt mit einem PHP-Fatal-Error ab (ArgumentCountError) — Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern, ein fehlender dritter Parameter ließ jeden manuellen Ladestart über Dashboard/ctl_enable scheitern.',
         'Stufe 2: Reservierung hinzugekommen — OHUBL_Reserve($idTag, $bisWann)/OHUBL_CancelReservation(), sichtbar in den neuen Variablen reserved_by/reserved_until. Eine aktive Reservierung blockiert jede Kartenauflage mit einem anderen idTag, unabhängig von der Splitter-Betriebsart.',
         'RFID-Autorisierung/Verbrauchslimits (Betriebsart ② am Splitter) wirken sich jetzt aus — vorher wurde jede Karte unabhängig von der Kundenverwaltung angenommen.',
@@ -121,6 +122,11 @@ class OCPPHubLadepunkt extends IPSModule
         // Frische-Wache fürs Überschussladen (ChargerHub-Empfehlung
         // 30.08.2026) — siehe UpdateMeterValues()/Update().
         $this->RegisterAttributeInteger('LastMeterValuesAt', 0);
+        // Diagnose-Feature 31.08.2026 (Ladeablehnung erklären) — vom
+        // Splitter bei idTag-Direktzuordnung mitgesetzt (0 = kein Tessie-
+        // verknüpftes Fahrzeug), siehe SetVehicleTessieId()/
+        // DiagnoseBlockReason().
+        $this->RegisterAttributeInteger('LastVehicleTessieId', 0);
         // Tages-Override „heute Vollladen trotz PV-Vorrang" (Backend-Funktion
         // für Dashboard, siehe OHUB_SetDailyOverride am Splitter). Reset auf
         // "aus" übernimmt OCPPHub SELBST anhand von DailyOverrideDate (siehe
@@ -180,7 +186,8 @@ class OCPPHubLadepunkt extends IPSModule
                         ['type' => 'Label', 'caption' => 'Was diese Instanz macht: eine „OCPPHub Ladepunkt"-Instanz je Wallbox/Connector — sie hält die sichtbaren Messwerte und Steuervariablen (Ladeleistung, Energiezähler, Status, Ladefreigabe, Stromlimit) und trägt optional das eigenständige PV-Überschussladen. Die eigentliche OCPP-Kommunikation läuft komplett über den zugeordneten Splitter; diese Instanz selbst hält keine WebSocket-Verbindung.'],
                         ['type' => 'Label', 'caption' => '🆔 Charge-Point-Identity: muss exakt zu dem Namen passen, den die Wallbox selbst in ihrer eigenen OCPP-Konfiguration als letztes Pfadstück der Backend-URL mitschickt (Groß-/Kleinschreibung zählt). Am einfachsten über „OCPPHub Konfigurator" anlegen — der zeigt bereits verbundene Wallboxen an und füllt dieses Feld beim Erstellen automatisch korrekt aus, inklusive der Splitter-Zuordnung unten.'],
                         ['type' => 'Label', 'caption' => '⚠️ „OCPPHub-Splitter" unten ist ein Pflichtfeld, auch wenn die Instanz automatisch über den Konfigurator angelegt wurde und dort schon vorausgefüllt sein sollte. Ohne diese Zuordnung findet der Splitter diesen Ladepunkt weder für eingehende OCPP-Nachrichten noch für Steuerbefehle (Ladefreigabe, Stromlimit) noch für den Dashboard-Vertrag — Symcons Position dieser Instanz im Objektbaum (welcher Kategorie/welchem Ordner sie in der Konsole zugeordnet ist) reicht dafür ausdrücklich NICHT, weil sich Instanzen dort frei verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
+                        ['type' => 'Label', 'caption' => '🩺 Ladeablehnung erklären (`block_reason`): lehnt die Wallbox einen Ladestart/eine Stromlimit-Änderung eindeutig ab, wird — falls das Fahrzeug per Tessie verknüpft ist (siehe „OCPPHub Abrechnung"-Instanz) — automatisch nachgefragt, ob eine eigene Ladeplanung im Fahrzeug aktiv ist, das Ladelimit schon erreicht ist, oder das Fahrzeug gerade schläft (dann wird automatisch ein Aufwecken angestoßen). Zusätzlich, aber ausdrücklich nur als unsicherer Hinweis: ein Namensabgleich gegen aktive Tibber-Grid-Rewards-Steuerungen. Ohne Tessie-Verknüpfung oder ohne eindeutige Ablehnung bleibt `block_reason` leer.'],
                         ['type' => 'Label', 'caption' => '🎫 RFID-Autorisierung/Verbrauchslimits: wird zentral in der „OCPPHub Abrechnung"-Instanz gepflegt, gilt aber nur, wenn am Splitter „② Mehrere Nutzer" ausgewählt ist — bei „① Einzelnutzer" wird jede Karte angenommen, unabhängig davon, was dort hinterlegt ist.'],
                         ['type' => 'Label', 'caption' => '🔒 Reservierung: unabhängig von der Splitter-Betriebsart nutzbar (Backend-Funktionen `OHUBL_Reserve`/`OHUBL_CancelReservation`, Dashboard baut die Bedienoberfläche). Solange eine Reservierung aktiv ist, wird jede Kartenauflage mit einem ANDEREN idTag abgelehnt — sichtbar in `reserved_by`/`reserved_until`.'],
                     ],
@@ -363,6 +370,12 @@ class OCPPHubLadepunkt extends IPSModule
         // Reservierung (Stufe 2) — siehe Reserve()/CancelReservation().
         $this->MaintainVariable('reserved_by', 'Reserviert für', VARIABLETYPE_STRING, '', 90, true);
         $this->MaintainVariable('reserved_until', 'Reserviert bis', VARIABLETYPE_STRING, '', 100, true);
+
+        // Diagnose-Feature 31.08.2026 (Ladeablehnung erklären, siehe
+        // DiagnoseBlockReason()) — leer im Normalfall, nur befüllt nach
+        // einer eindeutigen Ablehnung von RemoteStartTransaction/
+        // SetChargingProfile durch die Wallbox.
+        $this->MaintainVariable('block_reason', 'Möglicher Grund für Ladeablehnung', VARIABLETYPE_STRING, '', 110, true);
     }
 
     // Property zuerst, Objektbaum-Position nur als Rückfall (siehe FIX-
@@ -438,6 +451,8 @@ class OCPPHubLadepunkt extends IPSModule
             $this->SetValue('vehicle_plugged', $plugged);
             if (!$plugged) {
                 $this->SetValue('vehicle_name', '');
+                $this->WriteAttributeInteger('LastVehicleTessieId', 0);
+                $this->SetValue('block_reason', '');
             }
         }
     }
@@ -449,6 +464,107 @@ class OCPPHubLadepunkt extends IPSModule
     public function SetVehicleName(string $name): void
     {
         $this->SetValue('vehicle_name', $name);
+    }
+
+    // Additiv (Diagnose-Feature 31.08.2026) — merkt sich, welche Tessie-
+    // Instanz (falls überhaupt) zum aktuell zugeordneten Fahrzeug gehört,
+    // für eine spätere DiagnoseBlockReason(). 0 = kein Tessie-verknüpftes
+    // Fahrzeug.
+    public function SetVehicleTessieId(int $TessieInstanceId): void
+    {
+        $this->WriteAttributeInteger('LastVehicleTessieId', $TessieInstanceId);
+    }
+
+    // Diagnose-Feature 31.08.2026 ("Ladeablehnung erklären", siehe
+    // .docs/architektur.md und OCPPHubSplitter::handleCall() CALLRESULT/
+    // CALLERROR) — wird vom Splitter aufgerufen, wenn go-e ein
+    // RemoteStartTransaction/SetChargingProfile eindeutig ablehnt. Fragt das
+    // verknüpfte Tessie-Fahrzeug (falls vorhanden) und Tibber Grid Rewards
+    // (nur als unsicherer Namensabgleich, siehe Tibber-Rückmeldung
+    // 31.08.2026: deviceId ist Tibbers eigene ID, keine Symcon-Instanz-ID)
+    // nach einer möglichen Erklärung. TESSIE_*/TIBBERGR_* sind ECHTE
+    // Fremdmodule (anders als OHUBA_/OHUBL_) — beide Aufrufe darum hinter
+    // function_exists() abgesichert (Verbund-Regel 1).
+    public function DiagnoseBlockReason(): void
+    {
+        $reason = $this->diagnoseFromTessie();
+        if ($reason === '') {
+            $reason = $this->diagnoseFromTibber();
+        }
+        $this->SetValue('block_reason', $reason);
+    }
+
+    // Vom Splitter aufgerufen, sobald derselbe Aufruftyp (RemoteStart/
+    // SetChargingProfile) doch angenommen wird — eine zuvor gesetzte
+    // Begründung wäre sonst veraltet und stünde fälschlich weiter im
+    // Dashboard.
+    public function ClearBlockReason(): void
+    {
+        $this->SetValue('block_reason', '');
+    }
+
+    private function diagnoseFromTessie(): string
+    {
+        $tessieId = $this->ReadAttributeInteger('LastVehicleTessieId');
+        if ($tessieId <= 0 || !@IPS_InstanceExists($tessieId) || !function_exists('TESSIE_GetVehicleState')) {
+            return '';
+        }
+
+        // Telemetrie veraltet (>15 Min, Status 203 laut Tessie-Rückmeldung
+        // 31.08.2026) — typisches Muster für ein schlafendes Fahrzeug, das
+        // gerade nicht mit der Wallbox verhandelt. Aufwecken anstoßen
+        // (asynchron, Tesla braucht oft >30s — hier NICHT block-wartend,
+        // das würde die OCPP-Nachrichtenverarbeitung aufhalten), aber die
+        // Werte aus diesem Aufruf nicht mehr als sichere Begründung werten.
+        $status = @IPS_GetInstance($tessieId)['InstanceStatus'] ?? 0;
+        if ($status === 203) {
+            if (function_exists('TESSIE_WakeUp')) {
+                @TESSIE_WakeUp($tessieId);
+            }
+            return 'Fahrzeug antwortet gerade nicht (evtl. im Ruhemodus) — Aufwecken angestoßen, bitte in Kürze erneut versuchen.';
+        }
+
+        $state = json_decode((string)@TESSIE_GetVehicleState($tessieId), true);
+        if (!is_array($state)) {
+            return '';
+        }
+        if (($state['scheduledChargingActive'] ?? null) === true) {
+            return 'Fahrzeug hat eine eigene Ladeplanung aktiv (geplante Abfahrtszeit).';
+        }
+        if (isset($state['soc'], $state['chargeLimit']) && (float)$state['soc'] >= (float)$state['chargeLimit']) {
+            return 'Ladelimit im Fahrzeug ist bereits erreicht.';
+        }
+        return '';
+    }
+
+    // Nur ein unsicherer Namensabgleich (siehe Tibber-Rückmeldung
+    // 31.08.2026: GetActiveControls() liefert Tibbers eigene deviceId, keine
+    // Symcon-Instanz-ID — ohne manuellen Abgleich nicht zuverlässig einem
+    // Fahrzeug zuordenbar) UND laut Tibber strukturell unwahrscheinlich als
+    // Grund für eine Ablehnung VOR Sitzungsbeginn (sie greifen erst nach
+    // Sitzungsstart auf Fahrzeugseite ein) — deshalb bewusst nur als
+    // "möglicherweise" markiert, nie als sichere Aussage.
+    private function diagnoseFromTibber(): string
+    {
+        if (!function_exists('TIBBERGR_GetActiveControls')) {
+            return '';
+        }
+        $vehicleName = (string)$this->GetValue('vehicle_name');
+        if ($vehicleName === '') {
+            return '';
+        }
+        $controls = @TIBBERGR_GetActiveControls();
+        if (!is_array($controls)) {
+            return '';
+        }
+        foreach ($controls as $control) {
+            $name = (string)($control['name'] ?? '');
+            if ($name !== '' && stripos($vehicleName, $name) !== false) {
+                $reason = (string)($control['reason'] ?? 'kein Grund angegeben');
+                return 'Möglicherweise (nicht sicher zuordenbar): Tibber Grid Rewards ist für dieses Fahrzeug aktiv — ' . $reason;
+            }
+        }
+        return '';
     }
 
     public function StartTransaction(int $transactionId, string $idTag, int $meterStartWh): void
@@ -648,13 +764,14 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
         return [
-            'contractVersion'   => '1.1',
+            'contractVersion'   => '1.2',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
             // Splitter-ID als instanceID für Konsumenten NICHT, jeder Eintrag
             // braucht seine EIGENE (Ladepunkt-)Instanz-ID für Steuerungs-
             // aufrufe wie OHUBL_ManualStart(). Additiv, kein Bruch.
+            // 1.2 (Diagnose-Feature 31.08.2026): blockReasonID additiv.
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -671,6 +788,7 @@ class OCPPHubLadepunkt extends IPSModule
             'vehicleNameID'     => $this->GetIDForIdent('vehicle_name'),
             'transport'         => 'ocpp',
             'ocppVersion'       => '1.6',
+            'blockReasonID'     => $this->GetIDForIdent('block_reason'),
         ];
     }
 

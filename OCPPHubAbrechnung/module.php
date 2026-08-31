@@ -17,7 +17,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.2.9';
+    private const VERSION = '0.2.10';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     private const NEWS_VERSION = '0.2.9';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
@@ -495,17 +495,23 @@ class OCPPHubAbrechnung extends IPSModule
 
         $vehicleId = (int)($zugang['vehicleId'] ?? 0);
         $vehicleName = '';
+        $vehicleTessieInstanceId = 0;
         if ($vehicleId > 0) {
             $fahrzeug = $this->findById($this->getFahrzeuge(), $vehicleId);
             if ($fahrzeug !== null) {
                 $vehicleName = $this->resolveFahrzeugName($fahrzeug);
+                $vehicleTessieInstanceId = (int)($fahrzeug['tessieInstanceId'] ?? 0);
             }
         }
 
         return [
-            'status'      => 'Accepted',
-            'customerId'  => $customerId,
-            'vehicleName' => $vehicleName,
+            'status'                  => 'Accepted',
+            'customerId'              => $customerId,
+            'vehicleName'             => $vehicleName,
+            // Additiv (Diagnose-Feature 31.08.2026, siehe .docs/architektur.md
+            // „Ladeablehnung erklären") — 0, wenn kein Fahrzeug oder kein
+            // Tessie-verknüpftes Fahrzeug zugeordnet ist.
+            'vehicleTessieInstanceId' => $vehicleTessieInstanceId,
         ];
     }
 

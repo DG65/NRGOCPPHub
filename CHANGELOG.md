@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.0 (31.08.2026)
+
+**Neue Funktion: Ladeablehnung erklären.** Auslöser: Dietmar testete live einen
+Ladestart, go-e lehnte `RemoteStartTransaction` sauber mit `Rejected` ab und ein
+`SetChargingProfile` wurde zwar `Accepted`, blieb aber wirkungslos — ohne jede
+Begründung im Dashboard sichtbar ("Ich hasse es, wenn etwas nicht funktioniert und man
+keine möglichen Fehlermeldungen erhält"). Vor dem Bauen mit den betroffenen
+Nachbar-Sitzungen abgestimmt (Problem geschildert, nicht nur die eigene Lösungsidee
+abgefragt) — dabei fand Tibber Grid Rewards strukturell überzeugend, dass sie als
+Ursache für eine Ablehnung VOR Sitzungsbeginn unwahrscheinlich sind (sie greifen erst
+nach Sitzungsstart auf Fahrzeugseite ein), und Tessie fand live einen konkreten Befund:
+140 Minuten alte Telemetrie am Testfahrzeug — typisches Muster für ein schlafendes
+Tesla, das gerade nicht mit der Wallbox verhandelt.
+
+- **Splitter 0.2.7**: leichte Korrelation gesendete-uniqueId → Aktion (`PendingCalls`-
+  Attribut, Einträge >5 Min verworfen) — bei einer eindeutigen Ablehnung (`CALLERROR`
+  oder `status` ≠ `Accepted`) auf `RemoteStartTransaction`/`SetChargingProfile` wird
+  jetzt `OHUBL_DiagnoseBlockReason()` am zugehörigen Ladepunkt aufgerufen; klappt
+  derselbe Aufruftyp später doch, wird eine zuvor gesetzte Begründung über
+  `OHUBL_ClearBlockReason()` wieder gelöscht.
+- **Ladepunkt 0.2.3**: neue Variable `block_reason` (auch additiv im
+  `GetContractEntry()`-Vertrag, `blockReasonID`, contractVersion 1.1→1.2). Bei einer
+  Ablehnung: verknüpftes Tessie-Fahrzeug abfragen (`TESSIE_GetVehicleState()`) —
+  `scheduledChargingActive` → „eigene Ladeplanung aktiv", `soc >= chargeLimit` →
+  „Ladelimit erreicht", veraltete Telemetrie (`InstanceStatus === 203`) → automatisch
+  `TESSIE_WakeUp()` anstoßen und „Fahrzeug antwortet gerade nicht" melden. Ergänzend ein
+  Namensabgleich gegen `TIBBERGR_GetActiveControls()`, ausdrücklich als „möglicherweise,
+  nicht sicher zuordenbar" markiert (Tibber selbst empfiehlt das nur als Ausschluss-
+  Zusatzinfo, siehe oben). `LastVehicleTessieId`-Attribut wird beim Abstecken
+  zurückgesetzt, analog `vehicle_name`.
+- **Abrechnung 0.2.10**: `CheckAuthorization()` liefert additiv
+  `vehicleTessieInstanceId`, damit der Splitter bei der idTag-Direktzuordnung die
+  verknüpfte Tessie-Instanz an den Ladepunkt weiterreichen kann
+  (`OHUBL_SetVehicleTessieId()`).
+- **Nebenbei**: Tibber Grid Rewards hat auf unsere Nachfrage `TIBBERGR_GetActiveControls()`
+  selbst nachgebessert — `deviceId` liefert jetzt echte Tibber-`vehicleId`/`batteryId`
+  statt hart `0` (contractVersion 1.0→2.0, deren Commit `0cecc66`). Tessie hat parallel
+  `TESSIE_WakeUp($id)` als neue öffentliche Funktion ergänzt (deren Commit `4e47688`).
+
 ## 0.3.3 (31.08.2026)
 
 Nach dem ArgumentCountError-Fix (0.3.2) lief der Aufruf zwar durch, die Wallbox lud aber

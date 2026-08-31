@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.6';
+    private const VERSION = '0.2.7';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.6';
+    private const NEWS_VERSION = '0.2.7';
     private const NEWS_ITEMS = [
+        'Neue Diagnose bei eindeutiger Ladeablehnung (RemoteStartTransaction/SetChargingProfile): fragt automatisch beim verknüpften Tessie-Fahrzeug und optional Tibber Grid Rewards nach einer möglichen Erklärung — sichtbar am Ladepunkt in der neuen Variable `block_reason`.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): go-e lehnte jeden manuellen Ladestart mit "Rejected" ab, ohne dass das irgendwo sichtbar war. Ursache: RemoteStartTransaction fehlte das Feld connectorId — go-e wusste nicht, welchen Connector es starten soll. Jetzt fest auf 1 gesetzt (der tatsächlich ladende Connector, live an WB2 bestätigt). Außerdem: jede erkennbare Ablehnung (CALLERROR oder ein "status" ungleich "Accepted") auf einen von uns gesendeten Aufruf wird jetzt zusätzlich dauerhaft ins Systemlog geschrieben, nicht mehr nur ins flüchtige Debug-Fenster.',
         'Kritischer Fix (Dashboard-Fund, Live-Test): manueller Ladestart über Dashboard/ctl_enable schlug mit einem PHP-Fatal-Error ab. Ursache: Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern — ein Aufruf mit nur 2 statt 3 Argumenten löste einen ArgumentCountError aus. Standardwert aus dem Quellcode entfernt, damit das nicht wieder passiert.',
         'Warnhinweis ergänzt: „OCPPHub Abrechnung" wird automatisch als Kind DIESER Splitter-Instanz angelegt — niemals selbst zusätzlich eine solche Instanz anlegen, eine zweite wird nie verwendet (live gefunden: Karten/Kunden in einer manuell angelegten zweiten Instanz blieben wirkungslos).',
@@ -94,6 +95,11 @@ class OCPPHubSplitter extends IPSModule
         // Charge-Point-Identities — vom Konfigurator gelesen.
         // Struktur: { "<cpid>": <unix-timestamp letzte Sichtung> }
         $this->RegisterAttributeString('SeenChargePoints', '{}');
+
+        // uniqueId → {cpid, action, ts} für gesendete Aufrufe, siehe
+        // rememberPendingCall()/resolvePendingCall() — nur für die Block-
+        // Diagnose (Ladeablehnung erklären), keine vollständige Historie.
+        $this->RegisterAttributeString('PendingCalls', '{}');
 
         // Hook-Registrierung braucht die WebHook-Control-Instanz, die beim
         // ersten ApplyChanges() nach einem Symcon-Neustart evtl. noch nicht
@@ -392,16 +398,35 @@ class OCPPHubSplitter extends IPSModule
             case self::OCPP_CALLRESULT:
             case self::OCPP_CALLERROR:
                 // Antworten auf von uns gesendete Aufrufe (RemoteStart/Stop,
-                // SetChargingProfile) — keine Korrelationstabelle zum
-                // ursprünglichen Aufruf (Stufe 1/2-Scope), aber jede
-                // erkennbare Ablehnung (CALLERROR, oder ein "status" ungleich
-                // "Accepted") wird zusätzlich dauerhaft geloggt (Live-Bug
-                // 31.08.2026: ein von go-e abgelehntes RemoteStartTransaction
-                // blieb sonst nur im — meist längst geschlossenen —
-                // Debug-Fenster sichtbar, Dashboard hatte keinerlei Hinweis
-                // auf den stillen Fehlschlag).
-                if ((int)$message[0] === self::OCPP_CALLERROR || $this->responseIndicatesFailure($message[2] ?? null)) {
+                // SetChargingProfile) — jede erkennbare Ablehnung (CALLERROR,
+                // oder ein "status" ungleich "Accepted") wird zusätzlich
+                // dauerhaft geloggt (Live-Bug 31.08.2026: ein von go-e
+                // abgelehntes RemoteStartTransaction blieb sonst nur im —
+                // meist längst geschlossenen — Debug-Fenster sichtbar,
+                // Dashboard hatte keinerlei Hinweis auf den stillen
+                // Fehlschlag).
+                $isFailure = (int)$message[0] === self::OCPP_CALLERROR || $this->responseIndicatesFailure($message[2] ?? null);
+                if ($isFailure) {
                     IPS_LogMessage('OCPPHub', 'Ablehnung/Fehler auf gesendeten Aufruf [' . $cpid . ']: ' . $raw);
+                }
+                // Ladeablehnung erklären (Diagnose-Feature 31.08.2026, siehe
+                // .docs/architektur.md): nur bei einer EINDEUTIGEN Ablehnung
+                // auf genau die beiden Aktionen, die tatsächlich einen
+                // Ladevorgang anstoßen sollen — eine abgelehnte
+                // ChangeConfiguration o. ä. braucht keine Fahrzeugdiagnose.
+                $action = $this->resolvePendingCall((string)($message[1] ?? ''));
+                if (in_array($action, ['RemoteStartTransaction', 'SetChargingProfile'], true)) {
+                    $ladepunktId = $this->findLadepunkt($cpid);
+                    if ($ladepunktId !== 0) {
+                        if ($isFailure) {
+                            OHUBL_DiagnoseBlockReason($ladepunktId);
+                        } else {
+                            // War zuvor eine Begründung gesetzt und jetzt
+                            // klappt derselbe Aufruftyp doch (z. B. nach
+                            // Aufwecken des Fahrzeugs) — nicht stehen lassen.
+                            OHUBL_ClearBlockReason($ladepunktId);
+                        }
+                    }
                 }
                 $this->SendDebug('OCPPHub CALLRESULT/CALLERROR [' . $cpid . ']', $raw, 0);
                 break;
@@ -636,6 +661,12 @@ class OCPPHubSplitter extends IPSModule
         // bekanntem Fahrzeug sofort setzen.
         if ($status === 'Accepted' && $ladepunktId !== 0 && !empty($result['vehicleName'])) {
             OHUBL_SetVehicleName($ladepunktId, (string)$result['vehicleName']);
+            // Additiv (Diagnose-Feature 31.08.2026): merkt sich die
+            // verknüpfte Tessie-Instanz für eine spätere Ladeablehnung-
+            // Diagnose (siehe OHUBL_DiagnoseBlockReason()) — 0 = kein
+            // Tessie-verknüpftes Fahrzeug, dann bleibt die Diagnose auf den
+            // Tibber-Namensabgleich beschränkt.
+            OHUBL_SetVehicleTessieId($ladepunktId, (int)($result['vehicleTessieInstanceId'] ?? 0));
         }
 
         return $status;
@@ -868,9 +899,49 @@ class OCPPHubSplitter extends IPSModule
         return $id;
     }
 
+    // Leichte Korrelation gesendete-uniqueId → Aktion (nur für die Block-
+    // Diagnose gebraucht, siehe handleCall()/OCPP_CALLRESULT — KEINE
+    // vollständige Aufruf-Historie). Attribut statt Property (Laufzeitdaten),
+    // Einträge älter als 5 Minuten werden bei jedem Schreiben verworfen,
+    // falls nie eine Antwort kam (Wallbox offline o. ä.).
+    private const PENDING_CALL_MAX_AGE = 300;
+
     private function sendCall(string $cpid, string $action, array $payload): void
     {
-        $this->sendRaw($cpid, [self::OCPP_CALL, uniqid('ohub_', true), $action, $payload]);
+        $uniqueId = uniqid('ohub_', true);
+        $this->rememberPendingCall($uniqueId, $cpid, $action);
+        $this->sendRaw($cpid, [self::OCPP_CALL, $uniqueId, $action, $payload]);
+    }
+
+    private function rememberPendingCall(string $uniqueId, string $cpid, string $action): void
+    {
+        $pending = json_decode($this->ReadAttributeString('PendingCalls'), true);
+        if (!is_array($pending)) {
+            $pending = [];
+        }
+        $now = time();
+        foreach ($pending as $id => $entry) {
+            if ($now - (int)($entry['ts'] ?? 0) > self::PENDING_CALL_MAX_AGE) {
+                unset($pending[$id]);
+            }
+        }
+        $pending[$uniqueId] = ['cpid' => $cpid, 'action' => $action, 'ts' => $now];
+        $this->WriteAttributeString('PendingCalls', json_encode($pending));
+    }
+
+    // Liefert die Aktion zur uniqueId und entfernt den Eintrag (einmal
+    // abgeholt, nicht mehr gebraucht) — leerer String, falls unbekannt/
+    // schon verworfen (z. B. bei einem sehr späten CALLRESULT).
+    private function resolvePendingCall(string $uniqueId): string
+    {
+        $pending = json_decode($this->ReadAttributeString('PendingCalls'), true);
+        if (!is_array($pending) || !isset($pending[$uniqueId])) {
+            return '';
+        }
+        $action = (string)($pending[$uniqueId]['action'] ?? '');
+        unset($pending[$uniqueId]);
+        $this->WriteAttributeString('PendingCalls', json_encode($pending));
+        return $action;
     }
 
     // Erzwingt kurze MeterValues-Intervalle (ChargerHub-Empfehlung
