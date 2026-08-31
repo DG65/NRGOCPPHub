@@ -37,7 +37,13 @@
     margin: 0; padding: 0; width: 100%; background: transparent;
     color: var(--text); font-family: var(--font); font-size: 13px;
   }
-  body { padding: 10px 12px 16px; }
+  /* Symcon zeichnet über eigenen Kachel-Inhalten eine eigene Titelzeile
+     (Instanzname + Symbol), deren Höhe zwischen kompakter Grid-Kachel und
+     aufgezogener/Vollbild-Ansicht sichtbar variiert (Live-Fund 31.08.2026,
+     zwei Screenshots verglichen — DESHALB ist eine einzelne feste px-Zahl
+     hier seit jeher falsch gewesen, nicht nur bei uns). Deshalb bewusst
+     ein Anteil der Kachelhöhe (vh) statt fixer px, mit sinnvollen Grenzen. */
+  body { padding: clamp(28px, 9vh, 100px) 12px 16px; }
   details { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
   summary {
     cursor: pointer; padding: 8px 12px; font-weight: 600; font-size: 13.5px;

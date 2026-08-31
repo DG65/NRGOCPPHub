@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.2 (31.08.2026)
+
+**Abrechnung 0.3.2**: zweiter Kachel-Feinschliff nach Dietmars nächstem
+Live-Screenshot — Symcons eigene Titelzeile (Instanzname + Symbol) über der Kachel
+überlagerte weiterhin den Anfang des Inhalts. Dietmars pragmatischer Vorschlag: "10px
+mehr Abstand nach unten". Screenshot-Vergleich (kompakte Grid-Kachel vs. die jetzt
+gezeigte größere/aufgezogene Ansicht) zeigt aber: der von Symcon beanspruchte Bereich
+oben ist NICHT konstant, sondern skaliert sichtbar mit der Kachelgröße — ein fester
+px-Wert kann darum niemals für beide Ansichten gleichzeitig stimmen (vermutlich der
+Grund, warum das laut Dietmar bei bisher KEINER Kachel im Verbund je sauber gelöst
+wurde). Fix daher bewusst nicht 10px, sondern ein von der Kachelhöhe abhängiger
+Abstand (`padding-top: clamp(28px, 9vh, 100px)`) statt eines festen Pixelwerts —
+sollte sich automatisch an kompakte und vergrößerte Ansicht anpassen. Noch nicht
+final mit echtem Live-Blick verifiziert, ob die Formel in beiden Fällen genau genug
+trifft.
+
 ## 0.6.1 (31.08.2026)
 
 **Abrechnung 0.3.1**: Kontrast-/Theming-Fix an der neuen Konfigurationskachel.

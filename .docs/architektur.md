@@ -754,6 +754,23 @@ unabhängig manuell umgeschaltet wird (nicht dem System folgt), kann die Kachel
 weiterhin im falschen Kontrast landen. Noch nicht als Sonderfall aufgetreten, aber
 nicht auszuschließen.
 
+**Titelzeilen-Überlappung — variable Höhe statt fixer px-Wert (31.08.2026, Abrechnung
+0.3.2)**: Nächster Live-Screenshot zeigte, dass der eigene Kachel-Inhalt weiterhin
+unter Symcons eigener Titelzeile (Instanzname + Symbol) startet — Dietmars
+pragmatischer Vorschlag "10px mehr Abstand" hätte den sichtbaren Überlapp nicht
+annähernd behoben. Vergleich zweier Screenshots (kompakte Grid-Kachel vs. eine
+größere/aufgezogene Ansicht) legt nahe: **der von Symcon oben beanspruchte Bereich
+ist NICHT konstant, sondern skaliert mit der Kachel-/Ansichtsgröße** — vermutlich
+der Grund, warum das laut Dietmar bislang bei KEINER Kachel im Verbund sauber gelöst
+wurde (ein einzelner fester px-Wert kann für kompakte UND vergrößerte Ansicht
+gleichzeitig nie stimmen). Fix: `padding-top: clamp(28px, 9vh, 100px)` statt eines
+festen Pixelwerts — an zwei simulierten Viewport-Höhen (kompakt/groß) im Browser
+verifiziert, ergibt in beiden Fällen einen plausiblen Abstand. **Noch nicht
+abschließend mit einem echten Live-Blick bestätigt** — falls die Formel daneben
+liegt, sollte als Nächstes eine echte Pixel-Messung (z. B. testweise eingeblendete
+Lineal-Markierungen in der Kachel) her, um die Symcon-Titelzeilenhöhe endlich
+verbundweit exakt zu dokumentieren, statt erneut zu schätzen.
+
 ## Abrechnung (Datenmodell-Entwurf)
 
 Erweiterung 30.08.2026 (Dietmar): 1:1 „eine Karte = ein Nutzer" reicht nicht — Kunden
