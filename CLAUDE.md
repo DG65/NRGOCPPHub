@@ -63,12 +63,16 @@ Sitzungen** gearbeitet:
    „📖 Dokumentation & Hilfe" mit Versionsnummer, `🆕`-Präfixe, ausblendbare Hinweise per
    Attribut + `UpdateFormField`.
 
-## Verbund-Manifest SUITE.md
+## Verbund-Manifest SUITE.md — Bezugsquelle (geändert 31.08.2026)
 
-Primärquelle aller Verbund-Konventionen: `SUITE.md` im EMS-Repo
-(https://github.com/DG65/NRGEMS, während der EMS-Integrationsphase Branch
-`ems-integration`). Sync-Kopie hier im Root, NIEMALS lokal editieren. Bitte in der
-EMS-Sitzung melden, dass dieses Repo in den `sync-suite`-Workflow aufgenommen wird.
+SUITE.md liegt seit 31.08.2026 NICHT mehr in einem GitHub-Repo (die Modul-Repos sind
+öffentlich, SUITE.md enthält das komplette Architektur-/Debugging-Know-how des
+Verbunds — Dietmars Entscheidung). Primärquelle ist ausschließlich die lokale Datei
+`/Users/dietmar/Nextcloud/Claude/SUITE.md` auf Dietmars Maschine, versioniert in
+einem eigenen lokalen Git-Repo ohne Remote. Dieses Repo hatte nie eine committete
+SUITE.md-Kopie (geprüft 01.09.2026, `git log --all -- SUITE.md` leer) — nichts zu
+bereinigen. Kein Fallback-Link mehr — ohne lokalen Zugriff auf Dietmars Maschine ist
+SUITE.md nicht einsehbar.
 
 ## Branch-Regel
 
