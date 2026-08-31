@@ -403,6 +403,18 @@ wird — bei Einzelnutzer gibt es niemanden, vor dem reserviert werden müsste).
   Dashboard").
 - Reservierung nicht angetreten (Fahrzeug steckt nicht innerhalb Zeitfenster) → Ereignis
   (siehe „Benachrichtigungen / Ereignisse"), automatisches Verfallen nach Zeitfenster-Ende.
+- **Live-Fund 31.08.2026 (isolierter Test ohne Fahrzeug, WB1)**: go-e beantwortet den
+  OCPP-Kernbefehl `ReserveNow` mit `CALLERROR "NotImplemented"` — die native OCPP-
+  Reservierungsfunktion ist auf dieser Hardware nicht implementiert (deckt sich mit
+  go-es eigener Kompatibilitätstabelle: „Reservation: –"). Das ist **unschädlich für
+  unsere eigentliche Durchsetzung**: `OCPPHubSplitter::checkIdTag()` blockt eine fremde
+  Karte rein serverseitig bei JEDER `Authorize`-Anfrage, unabhängig davon, ob `ReserveNow`
+  bei der Wallbox angekommen ist — nur eine etwaige kosmetische Anzeige AN der Wallbox
+  selbst (falls das Modell sowas hätte) bliebe aus. Der Fehlschlag wird bereits über die
+  bestehende dauerhafte Ablehnungs-Protokollierung sichtbar (siehe „Ladeablehnung
+  erklären"). **Noch nicht live verifiziert** (fehlte ein physisches Kartenauflegen zum
+  Testzeitpunkt): dass eine tatsächlich aufgelegte fremde Karte während einer aktiven
+  Reservierung wirklich mit `Blocked` abgewiesen wird.
 - **Reservierungsgebühr** (Ergänzung 30.08.2026, Dietmar): Reservieren kann selbst Geld
   kosten, und zwar variabel je nach Bedingung — genau wie beim Laden (z. B. Reservierung
   während eines günstigen Tarif-Fensters billiger/teurer als außerhalb). Kein eigener
