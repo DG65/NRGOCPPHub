@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.10';
+    private const VERSION = '0.2.11';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.9';
+    private const NEWS_VERSION = '0.2.10';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Live-Fund, erster echter Ladeversuch): jede Ablehnung einer Karte/eines Zugangs (nicht registriert, gesperrt, abgelaufen, Zeitfenster, Verbrauchslimit, Reservierung) zeigt jetzt sofort den genauen Grund am Ladepunkt (`block_reason`) — vorher landete das nur unsichtbar im Systemlog. Der manuelle „Ladefreigabe"-Schalter versucht außerdem zuerst den echten, registrierten Zugang eines bereits erkannten Fahrzeugs (neue Funktion OHUB_ManualStart()) statt eines internen Platzhalters, der unter Betriebsart ② ohnehin nie funktionieren konnte.',
         'Neue Diagnosefunktion OHUB_GetConfigurationKeys() — fragt beliebige OCPP-Konfigurationsschlüssel einer Wallbox ab, Antwort landet jetzt IMMER dauerhaft im Systemlog (nicht nur bei Ablehnung), da eine erfolgreiche GetConfiguration-Antwort kein "status"-Feld hat und darum bisher nur flüchtig im Debug-Fenster sichtbar war.',
         'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch). Design mit Dashboard abgestimmt.',
         'Neue Diagnose bei eindeutiger Ladeablehnung (RemoteStartTransaction/SetChargingProfile): fragt automatisch beim verknüpften Tessie-Fahrzeug und optional Tibber Grid Rewards nach einer möglichen Erklärung — sichtbar am Ladepunkt in der neuen Variable `block_reason`.',
@@ -661,6 +662,7 @@ class OCPPHubSplitter extends IPSModule
         if ($ladepunktId !== 0) {
             $reservedIdTag = OHUBL_GetActiveReservationIdTag($ladepunktId);
             if ($reservedIdTag !== '' && $reservedIdTag !== $idTag) {
+                OHUBL_ReportBlockedStart($ladepunktId, $this->explainAuthStatus('Blocked', 'reserviert'));
                 return 'Blocked';
             }
         }
@@ -682,6 +684,24 @@ class OCPPHubSplitter extends IPSModule
         }
         $result = OHUBA_CheckAuthorization($abrechnungId, $idTag);
         $status = (string)($result['status'] ?? 'Invalid');
+        $reason = (string)($result['reason'] ?? '');
+
+        // Live-Fund 01.09.2026 (Dietmars erster echter Ladeversuch): eine
+        // abgelehnte Autorisierung landete bis hierher NUR im Systemlog
+        // (IPS_LogMessage in checkIdTag()), nicht sichtbar am Ladepunkt
+        // selbst — genau die Art stiller Fehlschlag, die block_reason
+        // eigentlich verhindern sollte. Anders als bei DiagnoseBlockReason()
+        // (Tessie/Tibber-Rätselraten für eine vom Charger selbst
+        // abgelehnte RemoteStartTransaction/SetChargingProfile OHNE
+        // erkennbaren Grund) kennen wir den Grund hier bereits exakt aus
+        // unserer eigenen Zugänge-Prüfung — kein Rätselraten nötig.
+        if ($ladepunktId !== 0) {
+            if ($status === 'Accepted') {
+                OHUBL_ClearBlockReason($ladepunktId);
+            } else {
+                OHUBL_ReportBlockedStart($ladepunktId, $this->explainAuthStatus($status, $reason));
+            }
+        }
 
         // idTag-Direktzuordnung (Vorrang vor Dashboards Zeitkorrelation,
         // mit Dashboard abgestimmt, siehe architektur.md „Fahrzeug-
@@ -723,18 +743,27 @@ class OCPPHubSplitter extends IPSModule
         if ($vehicleName === '' || $this->ReadPropertyInteger('Betriebsart') !== 2) {
             return;
         }
+        // $ladepunktId schon hier auflösen (nicht erst nach dem Accepted-
+        // Fall wie zuvor) — wird jetzt auch für den "kein Zugang gefunden"-
+        // Fehlerpfad gebraucht (Live-Fund 01.09.2026: dieser Fall blieb
+        // bislang komplett stumm, kein block_reason, keine Erklärung).
+        $ladepunktId = $this->findLadepunkt($cpid);
         $abrechnungId = $this->ensureAbrechnung();
         if ($abrechnungId === 0) {
             return;
         }
         $idTag = OHUBA_FindIdTagForVehicleName($abrechnungId, $vehicleName);
         if ($idTag === '') {
+            if ($ladepunktId !== 0) {
+                OHUBL_ReportBlockedStart($ladepunktId, 'Kein Zugang für „' . $vehicleName . '" registriert — bitte Karte anlernen oder Zugang anlegen.');
+            }
             return;
         }
         if ($this->checkIdTag($cpid, $idTag) !== 'Accepted') {
+            // checkIdTagInternal() hat block_reason bereits mit dem
+            // konkreten Grund (gesperrt/abgelaufen/Limit/...) gesetzt.
             return;
         }
-        $ladepunktId = $this->findLadepunkt($cpid);
         if ($ladepunktId === 0) {
             return;
         }
@@ -744,6 +773,64 @@ class OCPPHubSplitter extends IPSModule
         // Kunden zu.
         OHUBL_ConfirmAutoStart($ladepunktId);
         $this->RemoteStart($cpid, $idTag);
+    }
+
+    // Für den manuellen "Ladefreigabe"-Schalter (RequestAction('ctl_enable',
+    // true) im Ladepunkt). Live-Fund 01.09.2026 (Dietmars Rückfrage "das muss
+    // doch aber auch anders funktionieren!"): der Schalter sendete bisher
+    // immer den Platzhalter 'symcon', der unter Betriebsart ② zu Recht als
+    // nicht-registrierte Karte abgelehnt wird — der Schalter hatte damit
+    // unter "Mehrere Nutzer" praktisch nie eine Chance zu funktionieren,
+    // sobald ein Fahrzeug bereits erkannt war. Jetzt: ist ein Fahrzeug
+    // bekannt UND Betriebsart ②, denselben Weg wie die Auto-Autorisierung
+    // nehmen (dessen ECHTEN, registrierten Zugang suchen und darüber
+    // starten) — sonst (kein Fahrzeug bekannt, oder Betriebsart ①, wo
+    // ohnehin jede Karte akzeptiert wird) weiter der einfache
+    // 'symcon'-Weg.
+    public function ManualStart(string $cpid): void
+    {
+        $ladepunktId = $this->findLadepunkt($cpid);
+        $vehicleName = $ladepunktId !== 0 ? OHUBL_GetVehicleName($ladepunktId) : '';
+        if ($vehicleName !== '' && $this->ReadPropertyInteger('Betriebsart') === 2) {
+            $this->AutoAuthorizeVehicle($cpid, $vehicleName);
+            return;
+        }
+        $this->RemoteStart($cpid, 'symcon');
+    }
+
+    // Zentrale Übersetzung der Abrechnung-Statuscodes (siehe
+    // OCPPHubAbrechnung::CheckAuthorization()) in einen für Dietmar direkt
+    // verständlichen Text — hier ist der Grund bereits exakt bekannt, anders
+    // als bei DiagnoseBlockReason() (das für eine vom Charger selbst ohne
+    // erkennbaren Grund abgelehnte RemoteStartTransaction/SetChargingProfile
+    // bei Tessie/Tibber nachfragen muss).
+    private function explainAuthStatus(string $status, string $reason): string
+    {
+        if ($status === 'Invalid') {
+            return 'Karte/Zugang ist nicht registriert.';
+        }
+        if ($status === 'Expired') {
+            return 'Zugang ist abgelaufen.';
+        }
+        if ($status === 'Blocked') {
+            switch ($reason) {
+                case 'zugang-gesperrt':
+                    return 'Zugang ist gesperrt.';
+                case 'ausserhalb-zeitfenster':
+                    return 'Außerhalb des erlaubten Zeitfensters für diesen Zugang.';
+                case 'kein-kunde-zugeordnet':
+                    return 'Zugang ist keinem aktiven Kunden zugeordnet.';
+                case 'kunde-gesperrt':
+                    return 'Kunde ist gesperrt.';
+                case 'limit-erreicht':
+                    return 'Verbrauchslimit ist erreicht.';
+                case 'reserviert':
+                    return 'Für diesen Zeitraum ist die Wallbox reserviert.';
+                default:
+                    return 'Zugang ist gesperrt.';
+            }
+        }
+        return '';
     }
 
     private function onStartTransaction(string $cpid, array $payload): array

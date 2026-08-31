@@ -27,14 +27,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.8';
+    private const VERSION = '0.2.9';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.6';
+    private const NEWS_VERSION = '0.2.7';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Live-Fund, erster echter Ladeversuch): der manuelle „Ladefreigabe"-Schalter sendete bislang immer einen internen Platzhalter statt einer echten Karte — unter Betriebsart ② wurde das zu Recht abgelehnt, der Schalter zeigte aber trotzdem „an", ohne dass sichtbar war, dass nichts startet. Der Schalter versucht jetzt zuerst den echten, registrierten Zugang des bereits erkannten Fahrzeugs zu benutzen (derselbe Weg wie die Auto-Autorisierung); bei einem Fehlschlag springt er sofort zurück auf „aus" UND zeigt den genauen Grund in `block_reason` (z. B. „Zugang ist gesperrt.", „Verbrauchslimit ist erreicht.") — jede Ablehnung einer Karte/eines Zugangs ist damit jetzt sofort sichtbar, nicht nur eine vom Charger selbst ohne Begründung abgelehnte RemoteStartTransaction.',
         'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage). Design mit Dashboard abgestimmt.',
         'Zwei Anzeige-Fixes (Dashboard-Fund, Live-Test): „Stromlimit" zeigte unsinnige Zehntel-Ampere (z. B. „10.0 A") — lag am geteilten NRG.Ampere-Profil, das auf diesem System als Float mit 1 Nachkommastelle existiert; ctl_curr_limit hat jetzt ein eigenes ganzzahliges Profil. „Fahrzeug angesteckt" zeigte das Symcon-Standard-Ein/Aus einer profillosen Bool-Variable — jetzt eigenes Profil mit Ja/Nein, analog ChargerHub.',
         'Neue Diagnose: bei einer eindeutigen Ladeablehnung wird — falls das Fahrzeug per Tessie verknüpft ist — automatisch nach einer Erklärung gefragt (eigene Ladeplanung aktiv, Ladelimit erreicht, oder Fahrzeug schläft gerade und wird automatisch aufgeweckt), sichtbar in der neuen Variable `block_reason`. Ergänzend ein unsicherer Tibber-Grid-Rewards-Namensabgleich, ausdrücklich als "möglicherweise" markiert.',
@@ -428,10 +429,21 @@ class OCPPHubLadepunkt extends IPSModule
                 $this->SetValue($Ident, (bool)$Value);
                 if ($splitterId > 0 && $cpid !== '') {
                     if ($Value) {
-                        // 'symcon' = manuell/über Dashboard ausgelöst, keine echte
-                        // Karte (siehe Kommentar an RemoteStart() im Splitter, warum
-                        // dieser dritte Parameter zwingend mitgegeben werden muss).
-                        OHUB_RemoteStart($splitterId, $cpid, 'symcon');
+                        // Live-Fund 01.09.2026 (Dietmar klickte wiederholt den
+                        // Schalter, ohne dass sichtbar war, dass nichts
+                        // startet): unter Betriebsart ② wird der interne
+                        // Platzhalter 'symcon' zu Recht als "Invalid"
+                        // abgelehnt (keine echte, registrierte Karte) — der
+                        // Schalter zeigte trotzdem optimistisch "an". Jetzt
+                        // OHUB_ManualStart(): versucht zuerst das bereits
+                        // erkannte Fahrzeug über dessen ECHTEN, registrierten
+                        // Zugang zu autorisieren (dieselbe Prüfung wie eine
+                        // echte Kartenauflage), fällt nur ohne bekanntes
+                        // Fahrzeug oder bei Betriebsart ① auf 'symcon'
+                        // zurück. Bei Fehlschlag meldet der Splitter über
+                        // ReportBlockedStart() den genauen Grund zurück UND
+                        // setzt ctl_enable wieder auf false.
+                        OHUB_ManualStart($splitterId, $cpid);
                     } else {
                         OHUB_RemoteStop($splitterId, $cpid, $this->ReadAttributeInteger('LastTransactionId'));
                     }
@@ -576,6 +588,31 @@ class OCPPHubLadepunkt extends IPSModule
     public function ClearBlockReason(): void
     {
         $this->SetValue('block_reason', '');
+    }
+
+    // Für OHUB_ManualStart() im Splitter — braucht das aktuell erkannte
+    // Fahrzeug, um bei einem manuellen Klick dessen ECHTEN, registrierten
+    // Zugang zu versuchen statt des Platzhalters 'symcon' (Live-Fund
+    // 01.09.2026, siehe RequestAction()).
+    public function GetVehicleName(): string
+    {
+        return (string)$this->GetValue('vehicle_name');
+    }
+
+    // Gegenstück zu ConfirmAutoStart()/ClearBlockReason() für den Fall, dass
+    // eine Autorisierung (egal ob echte Kartenauflage, Auto-Autorisierung
+    // oder manueller Klick) definitiv scheitert und der Splitter den Grund
+    // bereits genau kennt (kein Rätselraten wie bei DiagnoseBlockReason() —
+    // unsere eigene Zugänge-Prüfung sagt ja bereits exakt, woran es liegt).
+    // Setzt ctl_enable zurück auf false: RequestAction() setzt es beim Klick
+    // OPTIMISTISCH auf true, bevor die eigentliche (asynchrone)
+    // Autorisierung zurückkommt — ohne diesen Reset zeigte der Schalter
+    // weiterhin "an", obwohl nichts gestartet ist (Live-Fund 01.09.2026,
+    // Dietmar klickte wiederholt, ohne dass der Fehlschlag sichtbar war).
+    public function ReportBlockedStart(string $Reason): void
+    {
+        $this->SetValue('ctl_enable', false);
+        $this->SetValue('block_reason', $Reason);
     }
 
     private function diagnoseFromTessie(): string

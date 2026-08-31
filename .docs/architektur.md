@@ -639,6 +639,45 @@ Argument, unabhängig von der PHP-Methodensignatur) — hier trotz Kenntnis der 
 selbst wiederholt. Gefixt (Ladepunkt 0.2.8): erste gefundene Tibber-Instanz wird
 jetzt korrekt mitgegeben.
 
+**Der manuelle Schalter war der eigentliche Dauerbrenner der Nacht (01.09.2026,
+Splitter 0.2.11 / Ladepunkt 0.2.9)**: Dietmars berechtigter Einwand *"das muss doch
+aber auch anders funktionieren!"*, nachdem der manuelle „Ladefreigabe"-Schalter
+wiederholt wirkungslos blieb. Root Cause: der Schalter sandte immer den internen
+Platzhalter `'symcon'` — unter Betriebsart ② zu Recht als nicht-registrierte Karte
+abgelehnt, aber `RequestAction()` setzt `ctl_enable` beim Klick OPTIMISTISCH auf
+`true`, bevor die (asynchrone) Ablehnung zurückkommt. Der Schalter zeigte also
+scheinbaren Erfolg, ohne dass irgendwo ein Fehlschlag sichtbar war — Dietmar
+klickte mehrfach ins Leere. Fix, zwei Teile:
+1. Neue Methode `OHUB_ManualStart($cpid)` (Splitter): versucht zuerst den echten,
+   registrierten Zugang des bereits erkannten Fahrzeugs (derselbe Weg wie die
+   bestehende Auto-Autorisierung) — nur ohne bekanntes Fahrzeug oder bei
+   Betriebsart ① fällt es auf `'symcon'` zurück.
+2. `checkIdTagInternal()` meldet jetzt bei JEDER Ablehnung (nicht nur bei einer vom
+   Charger selbst ohne Grund abgelehnten `RemoteStartTransaction`/
+   `SetChargingProfile`) den konkreten, bereits bekannten Grund über die neue
+   Ladepunkt-Methode `OHUBL_ReportBlockedStart($reason)` — die setzt `ctl_enable`
+   zurück auf `false` UND `block_reason` auf den Klartext-Grund
+   (`explainAuthStatus()` übersetzt die Abrechnung-Statuscodes). `AutoAuthorizeVehicle()`s
+   bisher komplett stummer "kein Zugang für dieses Fahrzeug gefunden"-Fall meldet
+   jetzt ebenfalls einen konkreten Grund.
+
+Damit deckt `block_reason` jetzt zwei unabhängige Ablehnungsklassen ab: eine vom
+Charger selbst ohne erkennbaren Grund abgelehnte `RemoteStartTransaction`/
+`SetChargingProfile` (Tessie/Tibber-Diagnose, 31.08.) UND eine von unserer eigenen
+Zugänge-Prüfung abgelehnte Autorisierung (hier bereits exakt bekannt).
+
+**Trotzdem noch nicht am selben Abend final verifiziert**: ein anschließender
+physischer Kartentest (Svetlana-Karte an WB2 gehalten) erzeugte GAR KEIN
+`Authorize`-Ereignis im Systemlog — die Karte scheint den Central-System-Server gar
+nicht erst erreicht zu haben. Nach dem intensiven Hin und Her dieser Nacht
+(mehrfaches RemoteStart/RemoteStop, viele Transaktions-IDs in kurzer Folge, 14→21)
+liegt der Verdacht nahe, dass sich der go-e selbst in einem unklaren
+Firmware-/Verbindungszustand befindet, der sich nur durch einen echten
+Stecker-Aus/Einsteck-Zyklus zurücksetzen lässt — kein Software-Befehl kann das von
+außen erzwingen. **TODO**: nach einem physischen Reset (Kabel aus-/wieder
+einstecken) erneut mit der registrierten Karte ODER (nach Dietmars nächstem
+Modul-Update) dem reparierten manuellen Schalter testen.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string

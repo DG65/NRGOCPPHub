@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.6 (01.09.2026)
+
+**"Das muss doch auch anders funktionieren!"** — Dietmars berechtigter Einwand, nachdem
+der manuelle „Ladefreigabe"-Schalter im Dashboard wiederholt wirkungslos blieb. Root
+Cause: der Schalter sendete immer den internen Platzhalter `'symcon'` als idTag —
+unter Betriebsart ② („Mehrere Nutzer") wird das zu Recht als nicht-registrierte
+Karte abgelehnt (`Invalid`), aber der Schalter zeigte trotzdem optimistisch „an",
+ohne dass irgendwo sichtbar war, dass die Autorisierung im Hintergrund gescheitert
+war — Dietmar klickte mehrfach, ohne jede Rückmeldung.
+
+**Splitter 0.2.11**:
+- Neue Methode `ManualStart($cpid)`: versucht zuerst den echten, registrierten
+  Zugang des bereits erkannten Fahrzeugs (derselbe Weg wie die bestehende
+  Auto-Autorisierung) — nur ohne bekanntes Fahrzeug oder bei Betriebsart ① (wo
+  ohnehin jede Karte akzeptiert wird) fällt es auf `'symcon'` zurück.
+- `checkIdTagInternal()` meldet jetzt bei JEDER Ablehnung (nicht registriert,
+  gesperrt, abgelaufen, außerhalb Zeitfenster, Kunde gesperrt, Verbrauchslimit
+  erreicht, Reservierung eines anderen) den konkreten Grund an den Ladepunkt
+  (`OHUBL_ReportBlockedStart()`) — vorher landete das nur unsichtbar im
+  Systemlog. Neue private Methode `explainAuthStatus()` übersetzt die
+  Abrechnung-Statuscodes in verständlichen Text.
+- `AutoAuthorizeVehicle()`: der bisher komplett stumme Fehlerfall "kein Zugang für
+  dieses Fahrzeug gefunden" meldet jetzt ebenfalls einen konkreten Grund.
+
+**Ladepunkt 0.2.9**:
+- Neue Methode `ReportBlockedStart($reason)`: setzt `ctl_enable` zurück auf
+  `false` (der Schalter hatte es beim Klick optimistisch auf `true` gesetzt, bevor
+  die asynchrone Antwort zurückkam) UND `block_reason` auf den konkreten Grund.
+- Neue Methode `GetVehicleName()` — für `OHUB_ManualStart()` im Splitter.
+
+Damit deckt `block_reason` jetzt zwei unabhängige Ablehnungsklassen ab: eine vom
+Charger selbst ohne erkennbaren Grund abgelehnte `RemoteStartTransaction`/
+`SetChargingProfile` (Tessie/Tibber-Diagnose, seit 31.08.) UND eine von unserer
+eigenen Zugänge-Prüfung abgelehnte Autorisierung (jetzt, Grund bereits exakt
+bekannt, kein Rätselraten nötig).
+
 ## 0.6.5 (01.09.2026)
 
 **Erster echter Live-Ladeversuch mit angestecktem Fahrzeug** — endlich der reale Test,
