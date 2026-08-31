@@ -581,16 +581,15 @@ füllt sich mit der besten verfügbaren Erklärung (leer = keine erkennbare Ursa
 `TESSIE_*`/`TIBBERGR_*` sind ECHTE Fremdmodule (anders als `OHUBA_`/`OHUBL_`) — beide
 Aufrufe hinter `function_exists()` abgesichert.
 
-**Noch offen**: die eigentliche `Rejected`-Ursache (hängende Transaktion vs.
-`AuthorizeRemoteTxRequests`) ist noch nicht verifiziert — ein erster Versuch (Ad-hoc-
-Rohbefehl per Live-Zugriff, ohne `sendCall()`) lief in genau die Sackgasse, die
-`block_reason` eigentlich lösen sollte: keine Korrelation, keine dauerhafte
-Protokollierung einer erfolgreichen Antwort ohne `status`-Feld — nur im Debug-Fenster
-sichtbar gewesen, das schon zu war. Fix (Splitter 0.2.9): neue Funktion
-`OHUB_GetConfigurationKeys($cpid, $keys)`, Antworten auf `GetConfiguration` werden
-jetzt immer dauerhaft geloggt. Beim nächsten Live-Test: `OHUB_GetConfigurationKeys($id,
-'WB1', ['AuthorizeRemoteTxRequests'])` aufrufen, Antwort diesmal im Systemlog nach
-„GetConfiguration" suchen, und prüfen, ob eine alte Transaktion auf Connector 1 hängt.
+**Teilweise geklärt (31.08.2026)**: `AuthorizeRemoteTxRequests` steht bei WB1 auf
+`false` (live per neuer `OHUB_GetConfigurationKeys()`-Funktion verifiziert, Antwort
+jetzt korrekt dauerhaft im Systemlog gelandet — der erste Versuch war noch ein Ad-hoc-
+Rohbefehl ohne `sendCall()`, lief in dieselbe Sackgasse wie `block_reason` eigentlich
+lösen sollte, siehe „Meta-Lehre" in `project_nrgocpphub`-Memory). Damit ist Tibbers
+erste Hypothese (go-e verlangt eine zusätzliche Rückfrage-Autorisierung) widerlegt.
+**Noch offen**: die zweite Hypothese — eine alte, nicht sauber beendete Transaktion
+blockiert Connector 1 — lässt sich nur mit einem echten Ladeversuch bei angestecktem
+Fahrzeug klären, nicht per reiner Konfigurationsabfrage.
 
 ## Authentifizierung (RFID & Alternativen)
 
