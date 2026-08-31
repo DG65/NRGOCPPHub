@@ -607,21 +607,26 @@ nur die Handvoll, die eine einzelne Wallbox lokal speichern kann. Recherche-Erge
   Chargekeeper-Backends), bei dem die Wallbox während des Anstöpsel-Handshakes die
   MAC-Adresse des EVCC (Electric Vehicle Communication Controller, NICHT die
   WLAN/Bluetooth-MAC des Fahrzeugs) als virtuellen idTag im selben `Authorize.req`
-  schickt, Format z. B. `VID:A014310E004E`. **Modul unterstützt das bereits generisch,
-  ohne jede Sonderbehandlung**: `idTag` ist einfach ein String/Whitelist-Eintrag — ein
-  Autocharge-Tag ist technisch nur ein weiterer idTag-Typ, unser Datenmodell/
-  `Authorize`-Pfad braucht dafür keine Änderung. Wirkt bei JEDER Wallbox, deren
-  Hardware das Fahrzeug-Handshake beherrscht (ISO 15118) — betrifft also den ganzen
-  Nutzerkreis des Moduls, nicht nur Dietmars Anlage.
-  **Hardware-Notiz zu Dietmars go-e (31.08.2026, nur diese eine Marke betreffend)**: die
-  go-eCharger-Geräte KÖNNEN das nicht senden — laut go-e-Maintainer (GitHub-Diskussion
-  `goecharger/go-eCharger-API-v2#182`) fehlt den Geräten ISO 15118 komplett, sie
-  kommunizieren nur über PWM-Pulsweitensignale (IEC 61851), keine digitale
-  Fahrzeugkommunikation. Kein Bug/keine fehlende Konfiguration bei uns oder bei go-e,
-  sondern eine Hardware-Generation-Grenze dieser einen Marke. Für WB1/WB2 bleibt darum
-  bei der Fahrzeugzuordnung (siehe unten) `AssignVehicles()` + idTag-Direktzuordnung
-  der einzig mögliche Weg — laut demselben go-e-Maintainer auch der allgemein
-  empfohlene Workaround für ISO-15118-lose Hardware.
+  schickt. **Format verifiziert (31.08.2026, Chargekeeper-Spec)**: `VID:` + 12-stellige
+  Hex-MAC ohne Trenner, Großschreibung, z. B. `VID:A014310E004E` — Modul unterstützt das
+  bereits generisch, ohne jede Sonderbehandlung: `idTag` ist einfach ein
+  String/Whitelist-Eintrag, ein Autocharge-Tag ist technisch nur ein weiterer idTag-
+  Typ, `Authorize`-Pfad/Datenmodell brauchen dafür keine Änderung.
+  **Wichtige Einschränkung, unabhängig vom Wallbox-Fabrikat (31.08.2026, zwei
+  unabhängige Quellen: Chargekeeper-Spec „nur DC-Charger mit CCS", emobilitysimplified
+  „will only work with CCS-based vehicles")**: Autocharge ist strukturell auf
+  DC-Schnellladen (CCS/CHAdeMO) beschränkt — keine der für dieses Modul relevanten
+  AC-Heimwallboxen (go-e, Easee, KEBA, Alfen …) wird das je senden, unabhängig vom
+  Fabrikat. Das ist also kein go-e-spezifisches Thema, sondern ein Kategorie-Thema
+  (AC-Wallbox vs. DC-Schnelllader). Relevanter für die Zukunft ist **ISO-15118
+  „Plug & Charge"** (die zertifikatsbasierte Nachfolgetechnik), die zunehmend auch für
+  AC-Laden ausgerollt wird — unser generisches `idTag`-Modell würde das genauso ohne
+  Änderung aufnehmen. **Hardware-Notiz go-e (nur diese eine Marke)**: aktuelle
+  go-eCharger-Geräte haben laut deren Maintainer (GitHub-Diskussion
+  `goecharger/go-eCharger-API-v2#182`) noch gar keine ISO-15118-Kommunikationshardware
+  (nur PWM-Pulsweitensignale nach IEC 61851) — für WB1/WB2 bleibt darum
+  `AssignVehicles()` + idTag-Direktzuordnung der einzig mögliche Weg zur
+  Fahrzeugzuordnung (siehe unten), unabhängig vom Autocharge/DC-Thema oben.
 
 ## Abrechnung (Datenmodell-Entwurf)
 

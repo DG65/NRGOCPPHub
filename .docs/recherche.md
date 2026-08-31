@@ -83,6 +83,23 @@ OCPP-Steuerungs- und Abrechnungsmodul für Symcon?" — Antwort: **ja**, siehe F
 - **Easee**: von Dietmar als möglicher Nutzerkreis genannt (31.08.2026) — OCPP-1.6-
   Unterstützung inkl. Reservation-Profil noch nicht recherchiert, TODO bei Bedarf.
 
+## Autocharge (Fahrzeug-MAC als idTag) — Recherche 31.08.2026
+
+Auf Dietmars Nachfrage recherchiert, ob ANDERE Wallbox-Fabrikate das können, was go-e
+nicht kann (siehe `.docs/architektur.md` „Authentifizierung"). Ergebnis: **Autocharge
+ist strukturell auf DC-Schnellladen (CCS/CHAdeMO) beschränkt** — zwei unabhängige
+Quellen: Chargekeeper-Spec („compatible chargers: only DC chargers with a Combo CCS
+connector"), emobilitysimplified.com („Autocharge will only work with CCS-based
+vehicles"). Format: `VID:` + 12-stellige Hex-MAC ohne Trenner, Großschreibung (Beispiel
+`VID:A014310E004E`, Quelle Chargekeeper-Doku, deckt sich mit dem schon vorher in
+architektur.md notierten Beispiel). **Konsequenz**: KEINE der für dieses Modul
+relevanten AC-Heimwallboxen (go-e, Easee, KEBA, Alfen, Heidelberg) wird Autocharge im
+klassischen Sinne je senden, unabhängig vom Fabrikat — das ist ein Kategorie-Thema
+(AC-Wallbox vs. DC-Schnelllader), kein go-e-spezifisches. Relevanter für die Zukunft:
+ISO-15118 „Plug & Charge" (zertifikatsbasiert), zunehmend auch für AC-Laden — unser
+generisches `idTag`-Datenmodell nimmt das ohne Änderung auf, sobald erste AC-Wallboxen
+damit ausgeliefert werden.
+
 ## Was kommerzielle Anbieter besser machen (bewusst außerhalb unseres Scopes)
 
 Eichrechtskonforme signierte Zählwerte + Transparenzsoftware, OCPI/Roaming
