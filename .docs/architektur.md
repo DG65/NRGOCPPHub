@@ -840,6 +840,22 @@ Grund, kein Fehler im Code; und Firmware 60.3 hatte vertauschte Bytes bei
 32-Bit-Werten (Float64-Register), betrifft `FORCE_STATE` als reines U16 aber
 vermutlich nicht.
 
+**Regression im Ausweichweg gefunden und gefixt (01.09.2026, Splitter 0.2.17 /
+Ladepunkt 0.2.12)**: Dietmars Live-Dump zeigte eine echte Oszillation statt einer
+stabilen Ladung. Nach einem automatischen Reset startete go-e selbstständig
+LOKAL (`StartTransaction` mit `idTag="no-card"`, ohne unser Zutun) — es floss kurz
+echter Strom (~1440–1450 W). OCPPHub versuchte aber weiterhin, mit dem echten
+idTag zu autorisieren, wurde dabei abgelehnt (es lief ja schon eine Sitzung), und
+unser gerade gebauter Ausweichweg löste DARAUFHIN erneut einen Reset aus — der
+die gerade laufende, funktionierende Ladung wieder unterbrach. Ergebnis: kurze
+Ladeimpulse alle paar Sekunden statt einer durchgängigen Sitzung, schlimmer als
+der Ausgangszustand. **Kernerkenntnis**: ein abgelehntes `RemoteStartTransaction`
+bedeutet nicht zwingend „nichts läuft" — es kann auch heißen, die Wallbox fährt
+bereits eine ANDERE Sitzung (hier: lokal von go-e selbst gestartet), die dann in
+Ruhe gelassen werden sollte. Fix: neue Ladepunkt-Methode `GetState()`, der
+Ausweichweg prüft jetzt vor jedem Reset-/frc-Versuch, ob der Status bereits
+„Charging" ist, und greift nur ein, wenn nicht.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string

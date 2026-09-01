@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.12 (01.09.2026)
+
+**Regression im gerade gebauten Reset-/frc-Ausweichweg gefunden und gefixt** —
+Dietmars Live-Dump zeigte eine echte Oszillation: nach einem automatischen Reset
+startete go-e selbstständig lokal (`idTag="no-card"`), es floss kurz echter Strom
+(1440–1450 W). Weil OCPPHub aber weiterhin versuchte, mit dem echten idTag zu
+autorisieren, wurde DAS abgelehnt (es lief ja schon eine Sitzung) — und unser
+frisch gebauter Ausweichweg löste daraufhin ERNEUT einen Reset aus, der die
+gerade laufende, funktionierende Ladung wieder unterbrach. Ergebnis: kurze
+Ladeimpulse alle paar Sekunden statt einer stabilen Sitzung — schlimmer als der
+ursprüngliche Zustand.
+
+**Splitter 0.2.17 / Ladepunkt 0.2.12**: der Reset-/frc-Ausweichweg prüft jetzt
+zuerst über die neue Methode `OHUBL_GetState()`, ob am Ladepunkt bereits
+tatsächlich geladen wird (Status „Charging"), bevor er eingreift — eine
+Ablehnung von `RemoteStartTransaction` bedeutet nicht zwingend „nichts läuft",
+sondern kann auch heißen, dass die Wallbox bereits eine andere (z. B. lokal
+gestartete) Sitzung fährt, die dann in Ruhe gelassen werden soll.
+
 ## 0.6.11 (01.09.2026)
 
 **Splitter 0.2.16**: Bugfix VOR dem ersten Live-Test des neuen go-e-Modbus-

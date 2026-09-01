@@ -28,7 +28,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.11';
+    private const VERSION = '0.2.12';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -841,6 +841,16 @@ class OCPPHubLadepunkt extends IPSModule
     public function GetLastTransactionId(): int
     {
         return $this->ReadAttributeInteger('LastTransactionId');
+    }
+
+    // Für den Splitter, um vor einem automatischen Reset-/frc-Ausweichweg
+    // zu prüfen, ob tatsächlich schon geladen wird (Live-Fund 01.09.2026:
+    // ein abgelehntes RemoteStartTransaction kann auch bedeuten, dass die
+    // Wallbox bereits eine ANDERE, z. B. lokal selbst gestartete Sitzung
+    // fährt — ein Reset würde die dann grundlos unterbrechen).
+    public function GetState(): int
+    {
+        return (int)$this->GetValue('state');
     }
 
     // ---------------------------------------------------------------------

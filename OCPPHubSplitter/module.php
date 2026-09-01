@@ -42,14 +42,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.16';
+    private const VERSION = '0.2.17';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.13';
+    private const NEWS_VERSION = '0.2.14';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Live-Fund, direkt nach Einführung des Reset-/frc-Ausweichwegs entdeckt): schlug RemoteStartTransaction fehl, WEIL die Wallbox schon eine andere Sitzung fuhr (z. B. go-e nach einem Reset selbst lokal gestartet), löste unser Ausweichweg trotzdem einen Reset aus und unterbrach damit eine bereits laufende, funktionierende Ladung — sichtbar als kurze Ladeimpulse statt einer stabilen Sitzung. Der Ausweichweg prüft jetzt zuerst, ob am Ladepunkt schon tatsächlich geladen wird, und greift nur noch ein, wenn nicht.',
         'go-e-Ausweichweg für hängende Ladefreigabe: schlägt RemoteStartTransaction bei einer go-e-Wallbox fehl, versucht OCPPHub jetzt automatisch, deren privates FORCE_STATE-Register zurückzusetzen — zuerst über ChargerHub (CHUB_ClearForceLock(), falls installiert, auch wenn dessen Instanz deaktiviert ist), sonst per eigenem, bewusst minimalem Modbus-Schreibzugriff, damit das auch OHNE installiertes ChargerHub funktioniert. Bei jedem anderen Hersteller wirkungslos, kein Risiko.',
         'Neuer, herstellerneutraler Ausweichweg bei abgelehntem Ladestart: schlägt `RemoteStartTransaction` fehl, schickt OCPPHub jetzt automatisch einen OCPP-Standard-`Reset` (Soft) hinterher — ein Pflichtbestandteil von OCPP 1.6, den jeder konforme Hersteller unterstützen muss, kein Sonderweg für eine einzelne Marke.',
         'Kritischer Fix (Live-Fund): go-e lehnte `RemoteStopTransaction` bei einer laufenden Ladung wiederholt ab, obwohl die Sitzung nachweislich lief — Ladefreigabe „aus" hatte damit keine Wirkung. Automatischer Ausweichweg: wird der reguläre Stopp abgelehnt, schickt OCPPHub jetzt selbstständig ein Stromlimit von 0 A hinterher, das go-e zuverlässig annimmt und die Ladung tatsächlich beendet.',
@@ -496,13 +497,31 @@ class OCPPHubSplitter extends IPSModule
                 // Retry würde nur wieder scheitern) — der nächste reguläre
                 // Start (manuell oder Auto-Autorisierung) greift danach.
                 if ($action === 'RemoteStartTransaction' && $isFailure) {
-                    IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.');
-                    $this->Reset($cpid, 'Soft');
-                    // go-e-spezifisch, additiv zum Reset oben (siehe
-                    // tryClearGoeForceLock()-Docblock) — bei jedem anderen
-                    // Hersteller wirkungslos (Vendor-Prüfung/Verbindungs-
-                    // fehlschlag), kein Risiko für Nicht-go-e-Wallboxen.
-                    $this->tryClearGoeForceLock($cpid);
+                    // Live-Fund 01.09.2026 (Dietmar, echte Oszillation
+                    // beobachtet): ein abgelehntes RemoteStartTransaction
+                    // heißt NICHT zwingend "nichts läuft" — die Wallbox kann
+                    // bereits eine ANDERE Sitzung fahren (z. B. go-e nach
+                    // einem Reset selbst lokal mit idTag "no-card"
+                    // gestartet). Ein Reset/frc-Ausweichweg würde eine
+                    // bereits laufende, funktionierende Ladung dann grundlos
+                    // unterbrechen — genau das ist passiert (kurze
+                    // Ladeimpulse statt einer stabilen Sitzung). Deshalb
+                    // JETZT ERST prüfen, ob am Ladepunkt schon `Charging`
+                    // ansteht, und den Ausweichweg nur auslösen, wenn nicht.
+                    $ladepunktIdForRecovery = $this->findLadepunkt($cpid);
+                    $alreadyCharging = $ladepunktIdForRecovery !== 0 && OHUBL_GetState($ladepunktIdForRecovery) === 2;
+                    if ($alreadyCharging) {
+                        IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — Ladepunkt lädt aber bereits (vermutlich andere Sitzung), Reset/frc-Ausweichweg übersprungen.');
+                    } else {
+                        IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.');
+                        $this->Reset($cpid, 'Soft');
+                        // go-e-spezifisch, additiv zum Reset oben (siehe
+                        // tryClearGoeForceLock()-Docblock) — bei jedem
+                        // anderen Hersteller wirkungslos (Vendor-Prüfung/
+                        // Verbindungsfehlschlag), kein Risiko für
+                        // Nicht-go-e-Wallboxen.
+                        $this->tryClearGoeForceLock($cpid);
+                    }
                 }
                 $this->SendDebug('OCPPHub CALLRESULT/CALLERROR [' . $cpid . ']', $raw, 0);
                 break;
