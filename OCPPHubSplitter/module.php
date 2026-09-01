@@ -41,7 +41,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.11';
+    private const VERSION = '0.2.12';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -391,6 +391,7 @@ class OCPPHubSplitter extends IPSModule
 
         $this->SendDebug('OCPPHub Receive [' . $cpid . ']', $raw, 0);
         $this->rememberSeenChargePoint($cpid);
+        $this->forwardSourceIp($cpid);
 
         // FIX 30.08.2026 (Live-Fund WB2, Fatal Error bei jedem MeterValues):
         // json_decode() OHNE den Assoziativ-Parameter lässt verschachtelte
@@ -543,6 +544,28 @@ class OCPPHubSplitter extends IPSModule
         }
         $seen[$cpid] = time();
         $this->WriteAttributeString('SeenChargePoints', json_encode($seen));
+    }
+
+    // Cross-Hub-Erkennung (Live-Fund 01.09.2026, siehe .docs/architektur.md
+    // „Ladeablehnung erklären" — ChargerHub und OCPPHub hatten sich an
+    // derselben physischen Wallbox gegenseitig blockiert, stundenlang ohne
+    // jede Fehlermeldung). Da eine Wallbox sich per WebSocket bei UNS
+    // meldet (nicht umgekehrt), kennen wir ihre Quell-IP aus jeder
+    // eingehenden Anfrage — reicht als Heuristik, um sie mit ChargerHubs
+    // konfigurierter Modbus-IP (Property „Host") abzugleichen. Nur an den
+    // Ladepunkt weitergereicht, wenn die Instanz schon existiert — vor
+    // deren Anlage (nur „gesehene" Charge-Point-Identity) gibt es noch
+    // keine Instanz, die die Warnung anzeigen könnte.
+    private function forwardSourceIp(string $cpid): void
+    {
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($ip === '') {
+            return;
+        }
+        $ladepunktId = $this->findLadepunkt($cpid);
+        if ($ladepunktId !== 0) {
+            OHUBL_SetSourceIP($ladepunktId, $ip);
+        }
     }
 
     // Für den Konfigurator: gesehene, aber noch nicht angelegte Charge-Point-

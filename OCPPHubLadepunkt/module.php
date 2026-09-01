@@ -22,19 +22,21 @@ class OCPPHubLadepunkt extends IPSModule
     private const EMS_GUID          = '{90286A25-E6C9-4A66-BD4E-0CFB707C2C6C}';
     private const SPLITTER_GUID     = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const TIBBER_GUID       = '{E92F62F4-88A6-4C6E-9F0D-E76C3B1C9A01}';
+    private const CHARGERHUB_GUID   = '{9256C34E-5CFD-4F37-8BFE-E65390EBB37C}';
 
     private const MIN_CURRENT_HARD = 6; // A — kleinster IEC-61851-Ladestrom
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.9';
+    private const VERSION = '0.2.10';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.7';
+    private const NEWS_VERSION = '0.2.8';
     private const NEWS_ITEMS = [
+        'Neu: Cross-Hub-Warnung — meldet sich ChargerHub UND OCPPHub gleichzeitig an derselben Wallbox an (per IP-Abgleich erkannt), warnt das Formular jetzt deutlich. Live-Fund: das kann die Ladefreigabe komplett blockieren, ohne dass eine der beiden Seiten eine Fehlermeldung zeigt — die OCPP-Ebene meldete "Accepted", aber es floss kein Strom, sogar die Hersteller-App der Wallbox konnte nicht laden.',
         'Kritischer Fix (Live-Fund, erster echter Ladeversuch): der manuelle „Ladefreigabe"-Schalter sendete bislang immer einen internen Platzhalter statt einer echten Karte — unter Betriebsart ② wurde das zu Recht abgelehnt, der Schalter zeigte aber trotzdem „an", ohne dass sichtbar war, dass nichts startet. Der Schalter versucht jetzt zuerst den echten, registrierten Zugang des bereits erkannten Fahrzeugs zu benutzen (derselbe Weg wie die Auto-Autorisierung); bei einem Fehlschlag springt er sofort zurück auf „aus" UND zeigt den genauen Grund in `block_reason` (z. B. „Zugang ist gesperrt.", „Verbrauchslimit ist erreicht.") — jede Ablehnung einer Karte/eines Zugangs ist damit jetzt sofort sichtbar, nicht nur eine vom Charger selbst ohne Begründung abgelehnte RemoteStartTransaction.',
         'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage). Design mit Dashboard abgestimmt.',
         'Zwei Anzeige-Fixes (Dashboard-Fund, Live-Test): „Stromlimit" zeigte unsinnige Zehntel-Ampere (z. B. „10.0 A") — lag am geteilten NRG.Ampere-Profil, das auf diesem System als Float mit 1 Nachkommastelle existiert; ctl_curr_limit hat jetzt ein eigenes ganzzahliges Profil. „Fahrzeug angesteckt" zeigte das Symcon-Standard-Ein/Aus einer profillosen Bool-Variable — jetzt eigenes Profil mit Ja/Nein, analog ChargerHub.',
@@ -142,6 +144,11 @@ class OCPPHubLadepunkt extends IPSModule
         // der Zustand ohnehin hier bei uns liegt.
         $this->RegisterAttributeBoolean('DailyOverride', false);
         $this->RegisterAttributeString('DailyOverrideDate', '');
+        // Cross-Hub-Erkennung (Live-Fund 01.09.2026) — Quell-IP der
+        // eingehenden WebSocket-Verbindung, vom Splitter durchgereicht
+        // (siehe SetSourceIP()/forwardSourceIp()), für einen Heuristik-
+        // Abgleich gegen ChargerHubs konfigurierte Modbus-IP.
+        $this->RegisterAttributeString('SourceIP', '');
 
         $this->RegisterTimer('SurplusTimer', 0, 'OHUBL_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('EnableActionsTimer', 0, 'OHUBL_EnableActions($_IPS[\'TARGET\']);');
@@ -275,6 +282,16 @@ class OCPPHubLadepunkt extends IPSModule
         $banner = $this->newsBanner();
         if ($banner !== null) {
             array_unshift($form['elements'], $banner);
+        }
+
+        $conflictId = $this->findConflictingChargerHubInstance();
+        if ($conflictId !== 0) {
+            array_unshift($form['elements'], [
+                'type'  => 'RowLayout',
+                'items' => [
+                    ['type' => 'Label', 'caption' => '⚠️ Diese Wallbox (IP ' . $this->ReadAttributeString('SourceIP') . ') scheint GLEICHZEITIG von ChargerHub verwaltet zu werden (Instanz „' . @IPS_GetName($conflictId) . '"). Live-Fund 01.09.2026: das kann die Ladefreigabe blockieren, OHNE dass eine der beiden Seiten eine Fehlermeldung zeigt (Symptom damals: OCPP meldete überall „Accepted", aber es floss kein Strom, sogar die Hersteller-App der Wallbox konnte nicht laden). Bitte pro Wallbox nur EINEN Kanal aktiv lassen — entweder ChargerHub (Modbus) ODER OCPPHub (OCPP), nicht beides. Heuristik über die IP-Adresse — bei Hostname-Konfiguration bei ChargerHub kann dieser Hinweis fehlen, auch wenn ein Konflikt vorliegt.'],
+                ],
+            ]);
         }
 
         return json_encode($form);
@@ -597,6 +614,42 @@ class OCPPHubLadepunkt extends IPSModule
     public function GetVehicleName(): string
     {
         return (string)$this->GetValue('vehicle_name');
+    }
+
+    // Vom Splitter bei jeder eingehenden Nachricht dieser Wallbox
+    // durchgereicht (siehe OCPPHubSplitter::forwardSourceIp()) — Grundlage
+    // für die Cross-Hub-Warnung in GetConfigurationForm().
+    public function SetSourceIP(string $IP): void
+    {
+        if ($IP !== '' && $IP !== $this->ReadAttributeString('SourceIP')) {
+            $this->WriteAttributeString('SourceIP', $IP);
+        }
+    }
+
+    // Cross-Hub-Erkennung (Live-Fund 01.09.2026, siehe .docs/architektur.md
+    // „Ladeablehnung erklären"): ChargerHub (Modbus) und OCPPHub (OCPP)
+    // hatten sich an derselben physischen Wallbox gegenseitig blockiert —
+    // OCPP-Ebene meldete überall korrekt „Accepted", aber ChargerHubs
+    // eigenes Ladefreigabe-Register verhinderte die tatsächliche Ladung,
+    // ohne jede sichtbare Fehlermeldung auf beiden Seiten. Reine Heuristik
+    // (Text-Abgleich unserer beobachteten Quell-IP gegen ChargerHubs
+    // konfigurierte „Host"-Property) — erkennt KEINEN Konflikt, wenn
+    // ChargerHub per Hostname statt IP konfiguriert ist, ist aber besser
+    // als gar keine Warnung. `IPS_GetProperty()` ist für Properties
+    // (anders als Attribute) generisch cross-instance lesbar, kein eigener
+    // ChargerHub-Vertrag nötig.
+    private function findConflictingChargerHubInstance(): int
+    {
+        $ip = $this->ReadAttributeString('SourceIP');
+        if ($ip === '') {
+            return 0;
+        }
+        foreach (@IPS_GetInstanceListByModuleID(self::CHARGERHUB_GUID) ?: [] as $id) {
+            if ((string)@IPS_GetProperty($id, 'Host') === $ip) {
+                return $id;
+            }
+        }
+        return 0;
     }
 
     // Gegenstück zu ConfirmAutoStart()/ClearBlockReason() für den Fall, dass

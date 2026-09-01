@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.7 (01.09.2026)
+
+**Neue Funktion: Cross-Hub-Erkennung** — direkte Folge der heutigen Nacht: Dietmar
+hatte dieselbe Wallbox gleichzeitig über ChargerHub (Modbus) und OCPPHub (OCPP)
+angebunden. ChargerHub hat den genauen Mechanismus bestätigt (`FORCE_STATE`-Register
+am go-eCharger blieb bei einem Regler-Wechsel fälschlich auf „erzwungen aus" stehen,
+Vorrang vor JEDEM anderen Kanal inkl. App) und bei sich gefixt — hier die
+ergänzende Absicherung: eine automatische Warnung, falls das nochmal passiert.
+
+**Splitter 0.2.12**: neue `forwardSourceIp()` — jede eingehende WebSocket-Nachricht
+einer Wallbox trägt deren Quell-IP mit sich (`$_SERVER['REMOTE_ADDR']`), wird an
+die passende Ladepunkt-Instanz weitergereicht (`OHUBL_SetSourceIP()`).
+
+**Ladepunkt 0.2.10**: `GetConfigurationForm()` gleicht die beobachtete Quell-IP
+gegen alle ChargerHub-Instanzen ab (deren `Host`-Property, generisch über
+`IPS_GetProperty()` lesbar — kein eigener ChargerHub-Vertrag nötig) und zeigt bei
+einem Treffer einen unübersehbaren Warnhinweis ganz oben im Formular. Reine
+Heuristik (Text-Abgleich auf IP-Ebene) — bei einer ChargerHub-Instanz, die per
+Hostname statt IP konfiguriert ist, kann der Hinweis ausbleiben, auch wenn ein
+Konflikt vorliegt; besser als gar keine Warnung.
+
 ## 0.6.6 (01.09.2026)
 
 **"Das muss doch auch anders funktionieren!"** — Dietmars berechtigter Einwand, nachdem

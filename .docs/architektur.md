@@ -712,12 +712,25 @@ ChargerHub-Sitzung proaktiv gemeldet, von ihnen bestätigt+behoben (01.09.2026,
 kein Auftrag unsererseits nötig — ihr eigenes Register, ihr eigener Fix). EMS hat
 den Fund als Warnhinweis in SUITE.md aufgenommen (Abschnitt "Warnung: Zwei
 Hub-Module am selben physischen Gerät"), wird aktualisiert, sobald eine
-Erkennungslösung steht. **Offener Punkt, noch nicht umgesetzt**: eine
-Cross-Hub-Erkennung/Warnung bei uns (analog der Zwei-Instanzen-Warnung bei der
-Abrechnung, siehe „Konfigurationskachel" oben) — z. B. beim Konfigurieren einer
-Ladepunkt-Instanz prüfen, ob dieselbe IP/derselbe CPID bereits als ChargerHub-
-Instanz existiert. Absichtlich noch nicht gebaut — erst mit ChargerHub abstimmen,
-ob eine IP-basierte Erkennung zuverlässig genug wäre, EMS dann Bescheid geben.
+Erkennungslösung steht.
+
+**Cross-Hub-Erkennung gebaut (01.09.2026, Splitter 0.2.12 / Ladepunkt 0.2.10)**:
+Dietmar wollte an diesem Punkt weiterbauen, ohne dass gerade ein Auto angesteckt
+war — gut geeignet, da reine Konfigurationsprüfung, kein echter Ladevorgang nötig.
+Da eine Wallbox sich per WebSocket bei UNS meldet (nicht umgekehrt), kennt der
+Splitter ihre Quell-IP aus jeder eingehenden Nachricht (`$_SERVER['REMOTE_ADDR']`,
+neue `forwardSourceIp()`) und reicht sie an die passende Ladepunkt-Instanz weiter
+(`OHUBL_SetSourceIP()`). `GetConfigurationForm()` gleicht diese IP gegen alle
+ChargerHub-Instanzen ab — deren `Host`-Property ist generisch über
+`IPS_GetProperty()` lesbar (Properties sind, anders als Attribute, immer
+cross-instance lesbar — kein eigener ChargerHub-Vertrag nötig, kein
+`function_exists()`-Aufwand, da nur generische `IPS_*`-Kernel-Funktionen benutzt
+werden, die auch ohne installiertes ChargerHub sicher eine leere Liste liefern).
+Bei einem Treffer erscheint ein unübersehbarer Warnhinweis ganz oben im
+Ladepunkt-Formular, mit Verweis auf den genauen `FORCE_STATE`-Mechanismus. Reine
+Heuristik — bei einer ChargerHub-Instanz, die per Hostname statt IP konfiguriert
+ist, bleibt der Hinweis aus, auch wenn ein Konflikt vorliegt. **TODO**: EMS/
+ChargerHub Bescheid geben, sobald das läuft (Zusage aus dem vorherigen Fund).
 
 ## Authentifizierung (RFID & Alternativen)
 
