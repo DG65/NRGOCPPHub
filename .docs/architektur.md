@@ -826,6 +826,20 @@ abgelehntem `RemoteStartTransaction` (zusätzlich zum bereits vorhandenen
    gegengeprüft, siehe Commit-Historie), TODO beim nächsten Live-Test mit
    deaktiviertem ChargerHub.
 
+**Bugfix vor dem ersten Live-Test (Splitter 0.2.16)**: ChargerHub prüfte den
+Entwurf gegen die verbindliche Herstellerquelle und fand einen echten Fehler —
+go-e unterstützt laut offizieller Doku FC 6 (Write Single Register) gar nicht,
+Schreibzugriffe laufen ausschließlich über **FC 16** (Write Multiple Registers,
+0x10, auch für ein einzelnes Register: `Quantity=1`, `ByteCount=2`). Ohne diese
+Korrektur wäre der erste Live-Test schlicht am falschen Funktionscode gescheitert
+— Register (337) und Wert (0) waren bereits richtig. Zwei weitere Hinweise von
+ChargerHub aus eigener Erfahrung mit demselben Register, im Code dokumentiert:
+Modbus muss am go-e erst per App/HTTP-API aktiviert werden (`men=true`) — meldet
+der Verbindungsversuch „abgelehnt"/„Port zu", ist DAS der wahrscheinlichste
+Grund, kein Fehler im Code; und Firmware 60.3 hatte vertauschte Bytes bei
+32-Bit-Werten (Float64-Register), betrifft `FORCE_STATE` als reines U16 aber
+vermutlich nicht.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string

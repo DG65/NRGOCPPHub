@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.11 (01.09.2026)
+
+**Splitter 0.2.16**: Bugfix VOR dem ersten Live-Test des neuen go-e-Modbus-
+Fallbacks (0.2.15) — ChargerHub prüfte den Entwurf gegen die verbindliche
+Herstellerquelle und fand einen echten Fehler: go-e unterstützt laut offizieller
+Doku FC 6 (Write Single Register) gar nicht, Schreibzugriffe laufen dort
+ausschließlich über FC 16 (Write Multiple Registers), auch für ein einzelnes
+Register. Ohne diese Korrektur wäre der erste Live-Test schlicht am falschen
+Funktionscode gescheitert. Register (337) und Wert (0) waren bereits richtig.
+
 ## 0.6.10 (01.09.2026)
 
 **go-e-`frc`-Ausweichweg, zweistufig** — Dietmars Wunsch: er will pro Wallbox

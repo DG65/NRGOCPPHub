@@ -42,7 +42,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.15';
+    private const VERSION = '0.2.16';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -1128,6 +1128,14 @@ class OCPPHubSplitter extends IPSModule
     //     (BootNotification-Herstellername geprüft), bei jedem anderen
     //     Hersteller/falscher IP schlägt der Verbindungsversuch einfach
     //     folgenlos fehl (kurzer Timeout, alles in try/catch).
+    // ChargerHub-Hinweise 01.09.2026 aus eigener Erfahrung mit demselben
+    // Register: (a) Modbus muss am go-e erst per App/HTTP-API aktiviert
+    // werden (`men=true`) — meldet der Verbindungsversuch "abgelehnt"/
+    // "Port zu", ist das der wahrscheinlichste Grund, kein Fehler hier im
+    // Code. (b) Firmware 60.3 hatte vertauschte Bytes bei 32-Bit-Werten
+    // (Float64-Register wie das Energie-Limit) — betrifft FORCE_STATE als
+    // reines U16 vermutlich nicht, nur relevant, falls dieser Code je auf
+    // weitere Register erweitert wird.
     private function tryClearGoeForceLock(string $cpid): void
     {
         $vendors = json_decode($this->ReadAttributeString('ChargePointVendor'), true);
@@ -1184,7 +1192,14 @@ class OCPPHubSplitter extends IPSModule
             return false;
         }
         stream_set_timeout($socket, 2);
-        $pdu = chr(0x06) . pack('n', $register) . pack('n', $value);
+        // FC 16 (Write Multiple Registers, 0x10) — NICHT FC 6 (Write Single
+        // Register). ChargerHub-Korrektur 01.09.2026, gegen die
+        // Herstellerquelle geprüft: go-e unterstützt FC 6 laut offizieller
+        // Doku gar nicht, Schreibzugriffe laufen dort ausschließlich über
+        // FC 16, auch für ein einzelnes Register (Quantity=1, ByteCount=2).
+        // Ohne diesen Hinweis wäre der erste Live-Test schlicht am
+        // falschen Funktionscode gescheitert.
+        $pdu = chr(0x10) . pack('n', $register) . pack('n', 1) . chr(2) . pack('n', $value);
         $mbap = pack('n', random_int(1, 65535)) . pack('n', 0x0000) . pack('n', strlen($pdu) + 1) . chr($unitId);
         $written = @fwrite($socket, $mbap . $pdu);
         if ($written === false) {
@@ -1193,7 +1208,9 @@ class OCPPHubSplitter extends IPSModule
         }
         $response = @fread($socket, 260);
         @fclose($socket);
-        return is_string($response) && strlen($response) >= 8 && ord($response[7]) === 0x06;
+        // FC16-Erfolgsantwort echot FunctionCode+StartAddress+Quantity
+        // (KEIN ByteCount/Value wie bei FC6) — reicht als Erfolgsprüfung.
+        return is_string($response) && strlen($response) >= 8 && ord($response[7]) === 0x10;
     }
 
     // $ampere: gewünschtes Stromlimit. connectorId 0 = ganze Wallbox (bei
