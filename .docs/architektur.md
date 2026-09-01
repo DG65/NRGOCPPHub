@@ -729,8 +729,24 @@ werden, die auch ohne installiertes ChargerHub sicher eine leere Liste liefern).
 Bei einem Treffer erscheint ein unübersehbarer Warnhinweis ganz oben im
 Ladepunkt-Formular, mit Verweis auf den genauen `FORCE_STATE`-Mechanismus. Reine
 Heuristik — bei einer ChargerHub-Instanz, die per Hostname statt IP konfiguriert
-ist, bleibt der Hinweis aus, auch wenn ein Konflikt vorliegt. **TODO**: EMS/
-ChargerHub Bescheid geben, sobald das läuft (Zusage aus dem vorherigen Fund).
+ist, bleibt der Hinweis aus, auch wenn ein Konflikt vorliegt.
+
+**ENDGÜLTIG BESTÄTIGT UND BEHOBEN (01.09.2026, live von ChargerHub verifiziert)**:
+`FORCE_STATE` stand tatsächlich auf `1` (erzwungen aus) — ChargerHub hat es per
+direktem Modbus-Schreibzugriff auf `0` (Neutral) gesetzt, Rücklesen bestätigt.
+WB2 lud danach sofort mit über 10 kW. **Wichtiger Zusatzfund von ChargerHub**:
+ihre WB2-Instanz war seit Dietmars Workaround von heute Nacht (07:27 Uhr)
+`Active=false` — pollt/schreibt WB2 also aktuell gar nicht mehr, kämpft folglich
+nicht mehr gegen uns. Der Registerwert bleibt daher stabil, solange das so bleibt.
+ChargerHub hat zusätzlich vorsorglich „Wer regelt diesen Ladepunkt?" bei sich für
+WB2 auf „Anderer" gesetzt, falls Dietmar ihre Instanz später wieder aktiviert —
+dann greift ihre neue `ReleaseForceLockOnHandoff()` zusätzlich automatisch.
+**Für den Dauerbetrieb**: ChargerHub bleibt für WB2 am besten deaktiviert, solange
+OCPPHub sie führt — genau das bestätigt nochmal die Kernregel „nur ein aktiver
+Regler pro Wallbox", die die neue Cross-Hub-Warnung oben durchsetzen soll.
+
+**TODO**: EMS Bescheid geben, dass die Cross-Hub-Erkennung jetzt läuft und der
+konkrete Vorfall vollständig aufgeklärt ist (Zusage aus dem vorherigen Fund).
 
 ## Authentifizierung (RFID & Alternativen)
 
