@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.12';
+    private const VERSION = '0.2.13';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.10';
+    private const NEWS_VERSION = '0.2.11';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Live-Fund): go-e lehnte `RemoteStopTransaction` bei einer laufenden Ladung wiederholt ab, obwohl die Sitzung nachweislich lief — Ladefreigabe „aus" hatte damit keine Wirkung. Automatischer Ausweichweg: wird der reguläre Stopp abgelehnt, schickt OCPPHub jetzt selbstständig ein Stromlimit von 0 A hinterher, das go-e zuverlässig annimmt und die Ladung tatsächlich beendet.',
         'Kritischer Fix (Live-Fund, erster echter Ladeversuch): jede Ablehnung einer Karte/eines Zugangs (nicht registriert, gesperrt, abgelaufen, Zeitfenster, Verbrauchslimit, Reservierung) zeigt jetzt sofort den genauen Grund am Ladepunkt (`block_reason`) — vorher landete das nur unsichtbar im Systemlog. Der manuelle „Ladefreigabe"-Schalter versucht außerdem zuerst den echten, registrierten Zugang eines bereits erkannten Fahrzeugs (neue Funktion OHUB_ManualStart()) statt eines internen Platzhalters, der unter Betriebsart ② ohnehin nie funktionieren konnte.',
         'Neue Diagnosefunktion OHUB_GetConfigurationKeys() — fragt beliebige OCPP-Konfigurationsschlüssel einer Wallbox ab, Antwort landet jetzt IMMER dauerhaft im Systemlog (nicht nur bei Ablehnung), da eine erfolgreiche GetConfiguration-Antwort kein "status"-Feld hat und darum bisher nur flüchtig im Debug-Fenster sichtbar war.',
         'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch). Design mit Dashboard abgestimmt.',
@@ -457,6 +458,19 @@ class OCPPHubSplitter extends IPSModule
                             OHUBL_ClearBlockReason($ladepunktId);
                         }
                     }
+                }
+                // Live-Fund 01.09.2026 (Dietmar, live erlebt): go-e lehnte
+                // RemoteStopTransaction wiederholt konsequent mit "Rejected"
+                // ab, obwohl eine Sitzung nachweislich lief — SetChargingProfile
+                // mit 0 A wurde dagegen zuverlässig angenommen und hat den
+                // Ladevorgang tatsächlich beendet (Status-Übergang auf
+                // "Finishing", live verifiziert). Automatischer Ausweichweg
+                // statt eines manuellen Tricks, den nur wir kennen — Dietmars
+                // berechtigter Einwand: "es kann doch nicht sein, dass man
+                // solche Tricks und Unfähigkeiten leben soll".
+                if ($action === 'RemoteStopTransaction' && $isFailure) {
+                    IPS_LogMessage('OCPPHub', 'RemoteStopTransaction abgelehnt [' . $cpid . '] — versuche Stromlimit 0 A als Ausweichweg.');
+                    $this->SetCurrentLimit($cpid, 0.0);
                 }
                 $this->SendDebug('OCPPHub CALLRESULT/CALLERROR [' . $cpid . ']', $raw, 0);
                 break;

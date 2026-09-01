@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.10';
+    private const VERSION = '0.2.11';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.8';
+    private const NEWS_VERSION = '0.2.9';
     private const NEWS_ITEMS = [
+        'Fix: `power` blieb nach dem Ende einer Ladung auf dem letzten Wert stehen (z. B. dauerhaft „10760 W" trotz beendeter Sitzung), weil ohne aktives Laden keine neue Messwert-Nachricht mehr kommt, die das korrigiert hätte. Jeder Status außer „Charging" setzt `power` jetzt selbst auf 0 W.',
         'Neu: Cross-Hub-Warnung — meldet sich ChargerHub UND OCPPHub gleichzeitig an derselben Wallbox an (per IP-Abgleich erkannt), warnt das Formular jetzt deutlich. Live-Fund: das kann die Ladefreigabe komplett blockieren, ohne dass eine der beiden Seiten eine Fehlermeldung zeigt — die OCPP-Ebene meldete "Accepted", aber es floss kein Strom, sogar die Hersteller-App der Wallbox konnte nicht laden.',
         'Kritischer Fix (Live-Fund, erster echter Ladeversuch): der manuelle „Ladefreigabe"-Schalter sendete bislang immer einen internen Platzhalter statt einer echten Karte — unter Betriebsart ② wurde das zu Recht abgelehnt, der Schalter zeigte aber trotzdem „an", ohne dass sichtbar war, dass nichts startet. Der Schalter versucht jetzt zuerst den echten, registrierten Zugang des bereits erkannten Fahrzeugs zu benutzen (derselbe Weg wie die Auto-Autorisierung); bei einem Fehlschlag springt er sofort zurück auf „aus" UND zeigt den genauen Grund in `block_reason` (z. B. „Zugang ist gesperrt.", „Verbrauchslimit ist erreicht.") — jede Ablehnung einer Karte/eines Zugangs ist damit jetzt sofort sichtbar, nicht nur eine vom Charger selbst ohne Begründung abgelehnte RemoteStartTransaction.',
         'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage). Design mit Dashboard abgestimmt.',
@@ -511,6 +512,17 @@ class OCPPHubLadepunkt extends IPSModule
                 $this->SetValue('vehicle_name', '');
                 $this->WriteAttributeInteger('LastVehicleTessieId', 0);
                 $this->SetValue('block_reason', '');
+            }
+            // Live-Fund 01.09.2026 (Dietmar): `power` blieb nach einem
+            // Stopp einfach auf dem letzten Wert stehen (z. B. „10760 W"
+            // dauerhaft), weil eine `MeterValues`-Nachricht nur WÄHREND
+            // aktiven Ladens gesendet wird — ohne neue Messung gibt es
+            // nichts, das den alten Wert korrigiert. Nur „Charging" liefert
+            // echte Leistung; jeder andere Status bedeutet zuverlässig
+            // 0 W, unabhängig davon, ob/wann die nächste MeterValues-
+            // Nachricht kommt.
+            if ($ocppStatus !== 'Charging') {
+                $this->SetValue('power', 0);
             }
         }
     }

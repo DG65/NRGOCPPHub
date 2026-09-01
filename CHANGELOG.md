@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.8 (01.09.2026)
+
+**"Es kann doch aber nicht sein, dass man solche Tricks und Unfähigkeiten leben
+soll"** — Dietmars berechtigter Einwand, nachdem ein Stopp-Versuch nur per
+manuellem Ausweichweg (Stromlimit auf 0 A statt des eigentlichen Stopp-Befehls)
+funktionierte. Beide dabei entdeckten echten Bugs jetzt fest im Code, nicht nur
+als Handgriff, den nur wir kennen:
+
+- **Splitter 0.2.13**: `RemoteStopTransaction` wurde von go-e bei einer
+  nachweislich laufenden Ladung wiederholt mit „Rejected" abgelehnt — die
+  Ladefreigabe „aus" hatte dadurch keine Wirkung. Automatischer Ausweichweg:
+  schlägt der reguläre Stopp fehl, schickt OCPPHub jetzt selbstständig ein
+  Stromlimit von 0 A hinterher (`SetChargingProfile`, live verifiziert
+  zuverlässig angenommen, beendet die Ladung tatsächlich — Status wechselt auf
+  „Finishing").
+- **Ladepunkt 0.2.11**: `power` blieb nach Ladeende auf dem letzten Wert stehen
+  (z. B. dauerhaft „10760 W"), weil ohne aktives Laden keine neue
+  `MeterValues`-Nachricht mehr kommt, die das korrigiert hätte. Jeder Status
+  außer „Charging" setzt `power` jetzt selbst zuverlässig auf 0 W.
+
 ## 0.6.7 (01.09.2026)
 
 **Neue Funktion: Cross-Hub-Erkennung** — direkte Folge der heutigen Nacht: Dietmar

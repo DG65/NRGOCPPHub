@@ -748,6 +748,24 @@ Regler pro Wallbox", die die neue Cross-Hub-Warnung oben durchsetzen soll.
 **TODO**: EMS Bescheid geben, dass die Cross-Hub-Erkennung jetzt läuft und der
 konkrete Vorfall vollständig aufgeklärt ist (Zusage aus dem vorherigen Fund).
 
+**Nachtrag — Stopp-Befehl unzuverlässig, jetzt mit Ausweichweg (01.09.2026,
+Splitter 0.2.13 / Ladepunkt 0.2.11)**: Nachdem die Ladung lief, wollte Dietmar
+WB2 wieder stoppen — `RemoteStopTransaction` wurde von go-e wiederholt (zweimal
+live geprüft) mit `{"status":"Rejected"}` abgelehnt, obwohl die Transaktions-ID
+nachweislich korrekt war. Manueller Ausweichweg (`SetChargingProfile` mit 0 A,
+ein anderer OCPP-Befehl) hat sofort funktioniert — Status wechselte auf
+„Finishing". Dietmars berechtigter Einwand: *"Es kann doch aber auch nicht sein,
+dass man solche Tricks und Unfähigkeiten leben soll."* Beide dabei entdeckten
+echten Bugs jetzt fest im Code:
+1. Schlägt `RemoteStopTransaction` fehl, schickt der Splitter jetzt automatisch
+   `SetCurrentLimit($cpid, 0.0)` als Ausweichweg hinterher (Hook im bestehenden
+   CALLRESULT/CALLERROR-Handler, gleiche Korrelation wie die
+   `block_reason`-Diagnose).
+2. `power` blieb nach dem Stopp auf dem letzten Wert stehen (keine neue
+   `MeterValues`-Nachricht ohne aktives Laden, die das je korrigiert hätte) —
+   `UpdateStatus()` setzt `power` jetzt bei jedem Status außer „Charging"
+   selbst auf 0.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string
