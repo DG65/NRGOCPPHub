@@ -678,6 +678,47 @@ außen erzwingen. **TODO**: nach einem physischen Reset (Kabel aus-/wieder
 einstecken) erneut mit der registrierten Karte ODER (nach Dietmars nächstem
 Modul-Update) dem reparierten manuellen Schalter testen.
 
+**AUFGELÖST — echte Ursache war ein Cross-Modul-Konflikt, keine OCPPHub-Baustelle
+(01.09.2026)**: Dietmars eigener Test brachte den Durchbruch — selbst die go-e-App
+konnte keine Ladung auslösen. Er hat daraufhin **ChargerHub** (Modbus-Anbindung
+derselben Wallbox) komplett deaktiviert — sofort ließ sich per App laden, und
+direkt danach auch per OCPP (nach einem `RemoteStop` einer zwischenzeitlich
+wieder hängengebliebenen Transaktion, dasselbe Muster wie zuvor). **Root Cause**:
+Dietmar hatte dieselbe physische Wallbox gleichzeitig über ChargerHub (Modbus) UND
+OCPPHub (OCPP) angebunden — zwei unabhängige NRG-Stack-Module, die beide versucht
+haben, dieselbe Wallbox zu steuern.
+
+**Exakter Mechanismus, von ChargerHub selbst bestätigt und gefixt (01.09.2026,
+deren Commit `b9ea162`/`5f9c73e`, 0.9.55-beta.1)**: ChargerHub mappt `ctl_enable`
+beim go-eCharger auf dessen Modbus-Register `FORCE_STATE` (337): `0`=Neutral
+(Gerät/App/Backend entscheidet frei), `1`=Aus ERZWUNGEN, `2`=An ERZWUNGEN.
+ChargerHub schrieb bei `ctl_enable=false` immer `1`, nie `0`. `FORCE_STATE=1` ist
+laut go-e-Firmware ein geräteseitiger HARD-LOCK mit Vorrang vor JEDEM anderen
+Kanal — App, OCPP-Backend, alles. Der eigentliche Auslöser war dabei nicht "hält
+per Default aus", sondern ein KONTROLLÜBERGANG: als bei ChargerHub „Wer regelt
+diesen Ladepunkt?" von „Niemand" auf einen anderen Wert (z. B. OCPPHub) umgestellt
+wurde, blieb ein zuvor gesetztes `FORCE_STATE=1` einfach liegen — der neue Regler
+kennt dieses Register gar nicht, gibt es also nie frei. Das erklärt exakt den
+Befund: OCPP-Ebene meldete überall korrekt „Accepted"/gestartet, aber am Gerät
+selbst blieb der harte Deckel drauf, sogar für die App. ChargerHub-Fix:
+`ReleaseForceLockOnHandoff()` in `ApplyChanges()` erkennt genau diesen Übergang
+(Niemand → anderer Wert) und schreibt `FORCE_STATE=0` zurück, falls die
+Ladefreigabe gerade „aus" war.
+
+**Wichtigste Lehre der ganzen Nacht**: eine Wallbox darf niemals gleichzeitig von
+zwei Hub-Modulen (Modbus UND OCPP) verwaltet werden — bislang bei uns NICHT
+technisch erkannt (ChargerHub hat ihre Seite bereits gefixt/dokumentiert). An die
+ChargerHub-Sitzung proaktiv gemeldet, von ihnen bestätigt+behoben (01.09.2026,
+kein Auftrag unsererseits nötig — ihr eigenes Register, ihr eigener Fix). EMS hat
+den Fund als Warnhinweis in SUITE.md aufgenommen (Abschnitt "Warnung: Zwei
+Hub-Module am selben physischen Gerät"), wird aktualisiert, sobald eine
+Erkennungslösung steht. **Offener Punkt, noch nicht umgesetzt**: eine
+Cross-Hub-Erkennung/Warnung bei uns (analog der Zwei-Instanzen-Warnung bei der
+Abrechnung, siehe „Konfigurationskachel" oben) — z. B. beim Konfigurieren einer
+Ladepunkt-Instanz prüfen, ob dieselbe IP/derselbe CPID bereits als ChargerHub-
+Instanz existiert. Absichtlich noch nicht gebaut — erst mit ChargerHub abstimmen,
+ob eine IP-basierte Erkennung zuverlässig genug wäre, EMS dann Bescheid geben.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string
