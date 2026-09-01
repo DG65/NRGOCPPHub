@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.10 (01.09.2026)
+
+**go-e-`frc`-Ausweichweg, zweistufig** — Dietmars Wunsch: er will pro Wallbox
+„entweder ChargerHub ODER OCPPHub" installieren, nicht beides gleichzeitig
+(genau das hatte ja die ganze Nacht das Problem verursacht). Ein reiner
+Cross-Hub-Aufruf hätte trotzdem ein installiertes ChargerHub vorausgesetzt —
+darum jetzt zweistufig:
+
+**Splitter 0.2.15**:
+1. **Erste Wahl**: `CHUB_ClearForceLock($InstanceID)` — ChargerHub hat auf unseren
+   Vorschlag hin diese Methode gebaut (deren Commit `9dcc517`, 0.9.56-beta.1) und sie
+   bewusst UNABHÄNGIG von `Active`/`ManagedBy` gemacht, damit sie auch bei
+   deaktivierter ChargerHub-Instanz funktioniert. Bei jedem anderen Hersteller ein
+   wirkungsloses No-Op laut deren Zusage.
+2. **Fällt ChargerHub komplett weg** (nicht installiert): eigener, bewusst
+   minimaler Modbus-TCP-Client (nur "ein Register schreiben", Funktion 6,
+   Register 337, Wert 0 — kein allgemeiner Modbus-Stack, keine laufende
+   Überwachung). Zieladresse kommt aus der ohnehin schon vorhandenen
+   Cross-Hub-Erkennung (`$_SERVER['REMOTE_ADDR']` der eingehenden
+   WebSocket-Verbindung). Nur versucht, wenn `BootNotification` den Hersteller
+   als "go-e" gemeldet hat — bei jedem anderen Hersteller/falscher Verbindung
+   schlägt der Versuch einfach folgenlos fehl (2 s Timeout, alles in try/catch).
+
+Beide Wege additiv zum bereits vorhandenen herstellerneutralen `Reset`-Fallback
+(0.2.14) — automatisch ausgelöst, sobald `RemoteStartTransaction` abgelehnt wird.
+
 ## 0.6.9 (01.09.2026)
 
 **Root Cause endgültig recherchiert und dokumentiert**: Dietmars Bitte "schau doch mal

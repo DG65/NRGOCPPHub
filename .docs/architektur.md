@@ -800,8 +800,31 @@ andere Wallbox-Marken. **Für den go-e-Fall selbst**: als Cross-Hub-Kooperation 
 ChargerHub vorgeschlagen (die haben über Modbus bereits direkten `frc`-Zugriff) —
 mit der neuen Cross-Hub-Erkennung (IP-Abgleich) ließe sich künftig automatisch
 erkennen, dass eine ChargerHub-Instanz dasselbe Gerät kennt, und sie bitten, den
-Force-Lock zu lösen, bevor ein erneuter Start versucht wird. Braucht eine neue,
-kleine Funktion auf ChargerHub-Seite — noch nicht umgesetzt, nur vorgeschlagen.
+Force-Lock zu lösen, bevor ein erneuter Start versucht wird.
+
+**Umgesetzt, zweistufig (01.09.2026, Splitter 0.2.15)**: Dietmar stellte klar, dass
+er pro Wallbox bewusst „entweder ChargerHub ODER OCPPHub" installieren will, nicht
+beides gleichzeitig (genau das war ja die Hauptursache der ganzen Nacht) — ein
+reiner Cross-Hub-Aufruf hätte trotzdem eine installierte ChargerHub-Instanz
+vorausgesetzt. Deshalb zwei gestaffelte Versuche, ausgelöst automatisch bei
+abgelehntem `RemoteStartTransaction` (zusätzlich zum bereits vorhandenen
+`Reset`-Fallback):
+1. `CHUB_ClearForceLock($InstanceID)` — ChargerHub hat diese Methode auf unseren
+   Vorschlag hin gebaut (deren Commit `9dcc517`, 0.9.56-beta.1), bewusst
+   UNABHÄNGIG von `Active`/`ManagedBy` (funktioniert also auch bei deaktivierter
+   ChargerHub-Instanz), bei jedem anderen Hersteller ein wirkungsloses No-Op.
+   `function_exists()`-abgesichert, da echtes Fremdmodul.
+2. Fehlt ChargerHub komplett: eigener, bewusst minimaler Modbus-TCP-Client
+   (`writeModbusRegister()`) — schreibt NUR ein einzelnes Register (Funktion 6,
+   Register 337, Wert 0), kein allgemeiner Modbus-Stack, keine laufende
+   Überwachung, 2 s Timeout. Zieladresse kommt aus derselben
+   `$_SERVER['REMOTE_ADDR']`-Quelle wie die Cross-Hub-Erkennung. Nur versucht,
+   wenn `BootNotification` den Hersteller als „go-e" gemeldet hat
+   (`ChargePointVendor`-Attribut, cpid→Herstellername) — bei jedem anderen
+   Hersteller/einer falschen Verbindung schlägt der Versuch einfach folgenlos
+   fehl. **Noch nicht gegen ein echtes Gerät verifiziert** (Frame-Aufbau lokal
+   gegengeprüft, siehe Commit-Historie), TODO beim nächsten Live-Test mit
+   deaktiviertem ChargerHub.
 
 ## Authentifizierung (RFID & Alternativen)
 

@@ -34,6 +34,7 @@ class OCPPHubSplitter extends IPSModule
 
     private const LADEPUNKT_GUID = '{27A1625F-A006-4945-8A36-FFBAA38A5FB5}';
     private const ABRECHNUNG_GUID = '{64980198-6B36-45D5-A84F-A0EAE9CCC63A}';
+    private const CHARGERHUB_GUID = '{9256C34E-5CFD-4F37-8BFE-E65390EBB37C}';
 
     private const OCPP_CALL       = 2;
     private const OCPP_CALLRESULT = 3;
@@ -41,14 +42,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.14';
+    private const VERSION = '0.2.15';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.12';
+    private const NEWS_VERSION = '0.2.13';
     private const NEWS_ITEMS = [
+        'go-e-Ausweichweg für hängende Ladefreigabe: schlägt RemoteStartTransaction bei einer go-e-Wallbox fehl, versucht OCPPHub jetzt automatisch, deren privates FORCE_STATE-Register zurückzusetzen — zuerst über ChargerHub (CHUB_ClearForceLock(), falls installiert, auch wenn dessen Instanz deaktiviert ist), sonst per eigenem, bewusst minimalem Modbus-Schreibzugriff, damit das auch OHNE installiertes ChargerHub funktioniert. Bei jedem anderen Hersteller wirkungslos, kein Risiko.',
         'Neuer, herstellerneutraler Ausweichweg bei abgelehntem Ladestart: schlägt `RemoteStartTransaction` fehl, schickt OCPPHub jetzt automatisch einen OCPP-Standard-`Reset` (Soft) hinterher — ein Pflichtbestandteil von OCPP 1.6, den jeder konforme Hersteller unterstützen muss, kein Sonderweg für eine einzelne Marke.',
         'Kritischer Fix (Live-Fund): go-e lehnte `RemoteStopTransaction` bei einer laufenden Ladung wiederholt ab, obwohl die Sitzung nachweislich lief — Ladefreigabe „aus" hatte damit keine Wirkung. Automatischer Ausweichweg: wird der reguläre Stopp abgelehnt, schickt OCPPHub jetzt selbstständig ein Stromlimit von 0 A hinterher, das go-e zuverlässig annimmt und die Ladung tatsächlich beendet.',
         'Kritischer Fix (Live-Fund, erster echter Ladeversuch): jede Ablehnung einer Karte/eines Zugangs (nicht registriert, gesperrt, abgelaufen, Zeitfenster, Verbrauchslimit, Reservierung) zeigt jetzt sofort den genauen Grund am Ladepunkt (`block_reason`) — vorher landete das nur unsichtbar im Systemlog. Der manuelle „Ladefreigabe"-Schalter versucht außerdem zuerst den echten, registrierten Zugang eines bereits erkannten Fahrzeugs (neue Funktion OHUB_ManualStart()) statt eines internen Platzhalters, der unter Betriebsart ② ohnehin nie funktionieren konnte.',
@@ -105,6 +107,13 @@ class OCPPHubSplitter extends IPSModule
         // rememberPendingCall()/resolvePendingCall() — nur für die Block-
         // Diagnose (Ladeablehnung erklären), keine vollständige Historie.
         $this->RegisterAttributeString('PendingCalls', '{}');
+
+        // go-e-frc-Ausweichweg (01.09.2026, siehe .docs/architektur.md
+        // „Ladeablehnung erklären" — Recherche zu trx/frc) — Herstellername
+        // je cpid aus BootNotification gemerkt, damit der Modbus-Ausweichweg
+        // NUR bei go-e versucht wird, nicht bei jedem Hersteller blind.
+        // Struktur: { "<cpid>": "<chargePointVendor>" }
+        $this->RegisterAttributeString('ChargePointVendor', '{}');
 
         // Hook-Registrierung braucht die WebHook-Control-Instanz, die beim
         // ersten ApplyChanges() nach einem Symcon-Neustart evtl. noch nicht
@@ -489,6 +498,11 @@ class OCPPHubSplitter extends IPSModule
                 if ($action === 'RemoteStartTransaction' && $isFailure) {
                     IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.');
                     $this->Reset($cpid, 'Soft');
+                    // go-e-spezifisch, additiv zum Reset oben (siehe
+                    // tryClearGoeForceLock()-Docblock) — bei jedem anderen
+                    // Hersteller wirkungslos (Vendor-Prüfung/Verbindungs-
+                    // fehlschlag), kein Risiko für Nicht-go-e-Wallboxen.
+                    $this->tryClearGoeForceLock($cpid);
                 }
                 $this->SendDebug('OCPPHub CALLRESULT/CALLERROR [' . $cpid . ']', $raw, 0);
                 break;
@@ -657,13 +671,22 @@ class OCPPHubSplitter extends IPSModule
     private function onBootNotification(string $cpid, array $payload): array
     {
         $ladepunktId = $this->findLadepunkt($cpid);
+        $vendor = (string)($payload['chargePointVendor'] ?? '');
         if ($ladepunktId !== 0) {
             OHUBL_UpdateBootInfo(
                 $ladepunktId,
-                (string)($payload['chargePointVendor'] ?? ''),
+                $vendor,
                 (string)($payload['chargePointModel'] ?? ''),
                 (string)($payload['chargePointSerialNumber'] ?? '')
             );
+        }
+        if ($vendor !== '') {
+            $vendors = json_decode($this->ReadAttributeString('ChargePointVendor'), true);
+            if (!is_array($vendors)) {
+                $vendors = [];
+            }
+            $vendors[$cpid] = $vendor;
+            $this->WriteAttributeString('ChargePointVendor', json_encode($vendors));
         }
         return [
             'status'      => 'Accepted',
@@ -1084,6 +1107,93 @@ class OCPPHubSplitter extends IPSModule
     public function Reset(string $cpid, string $Type): void
     {
         $this->sendCall($cpid, 'Reset', ['type' => $Type]);
+    }
+
+    // go-e-spezifischer Ausweichweg (01.09.2026, Dietmars ausdrücklicher
+    // Wunsch: "entweder oder installieren, nicht Modbus UND OCPP" — OCPPHub
+    // soll für go-e-Wallboxen auch OHNE installiertes ChargerHub
+    // funktionieren). Recherchiert (siehe .docs/architektur.md): der
+    // go-e-App-Startknopf setzt Transaktion UND das private Register
+    // `frc`/`FORCE_STATE` gleichzeitig — RemoteStartTransaction über OCPP
+    // löst nur die Transaktion aus. `frc` liegt außerhalb des OCPP-
+    // Standards, ein Modbus-Schreibzugriff ist der einzige Weg, es
+    // zurückzusetzen. Bewusst NUR dieser eine, schmale Zweck (ein Register
+    // schreiben) — kein allgemeiner Modbus-Client, keine laufende
+    // Überwachung, kein Ersatz für ChargerHub. Zwei Wege probiert:
+    // (1) ChargerHubs eigene CHUB_ClearForceLock() nutzen, FALLS eine
+    //     passende Instanz existiert (auch wenn deren Active=false ist,
+    //     siehe deren Zusage) — vermeidet doppelte Logik.
+    // (2) Fehlt ChargerHub komplett, selbst per rohem Modbus-TCP-Schreiben
+    //     (Funktion 6, Register 337, Wert 0) — funktioniert nur bei go-e
+    //     (BootNotification-Herstellername geprüft), bei jedem anderen
+    //     Hersteller/falscher IP schlägt der Verbindungsversuch einfach
+    //     folgenlos fehl (kurzer Timeout, alles in try/catch).
+    private function tryClearGoeForceLock(string $cpid): void
+    {
+        $vendors = json_decode($this->ReadAttributeString('ChargePointVendor'), true);
+        $vendor = is_array($vendors) ? (string)($vendors[$cpid] ?? '') : '';
+        if (strcasecmp($vendor, 'go-e') !== 0) {
+            return;
+        }
+        $chargerHubId = $this->findChargerHubInstanceForCurrentIp();
+        if ($chargerHubId !== 0 && function_exists('CHUB_ClearForceLock')) {
+            $cleared = CHUB_ClearForceLock($chargerHubId);
+            IPS_LogMessage('OCPPHub', 'ChargerHub-Kooperation [' . $cpid . ']: ClearForceLock() -> ' . ($cleared ? 'erfolgreich' : 'kein Effekt') . '.');
+            if ($cleared) {
+                return;
+            }
+        }
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($ip === '') {
+            return;
+        }
+        $ok = $this->writeModbusRegister($ip, 502, 1, 337, 0);
+        IPS_LogMessage('OCPPHub', 'go-e-Ausweichweg [' . $cpid . ']: FORCE_STATE per Modbus auf 0 setzen -> ' . ($ok ? 'erfolgreich' : 'fehlgeschlagen') . '.');
+    }
+
+    // Findet eine ChargerHub-Instanz mit derselben IP wie die aktuelle
+    // eingehende Verbindung — Wiederverwendung derselben Heuristik wie die
+    // Cross-Hub-Erkennung im Ladepunkt-Formular (dort für die Warnung, hier
+    // für die Kooperation). `$_SERVER['REMOTE_ADDR']` ist innerhalb
+    // desselben ProcessHookData()-Aufrufs verfügbar, in dem auch die
+    // Ablehnung verarbeitet wird — kein separates Zwischenspeichern nötig.
+    private function findChargerHubInstanceForCurrentIp(): int
+    {
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($ip === '') {
+            return 0;
+        }
+        foreach (@IPS_GetInstanceListByModuleID(self::CHARGERHUB_GUID) ?: [] as $id) {
+            if ((string)@IPS_GetProperty($id, 'Host') === $ip) {
+                return $id;
+            }
+        }
+        return 0;
+    }
+
+    // Bewusst minimaler, roher Modbus-TCP-Client — NUR "ein Register
+    // schreiben" (Funktion 6), kein allgemeiner Modbus-Stack. Kurzer
+    // Verbindungs-Timeout (2 s), damit ein falscher/nicht erreichbarer Host
+    // die OCPP-Nachrichtenverarbeitung nicht spürbar blockiert. Gibt
+    // `false` bei jedem Fehler zurück (Verbindung, Timeout, unerwartete
+    // Antwort) — nie eine Exception nach außen.
+    private function writeModbusRegister(string $ip, int $port, int $unitId, int $register, int $value): bool
+    {
+        $socket = @stream_socket_client('tcp://' . $ip . ':' . $port, $errno, $errstr, 2.0);
+        if ($socket === false) {
+            return false;
+        }
+        stream_set_timeout($socket, 2);
+        $pdu = chr(0x06) . pack('n', $register) . pack('n', $value);
+        $mbap = pack('n', random_int(1, 65535)) . pack('n', 0x0000) . pack('n', strlen($pdu) + 1) . chr($unitId);
+        $written = @fwrite($socket, $mbap . $pdu);
+        if ($written === false) {
+            @fclose($socket);
+            return false;
+        }
+        $response = @fread($socket, 260);
+        @fclose($socket);
+        return is_string($response) && strlen($response) >= 8 && ord($response[7]) === 0x06;
     }
 
     // $ampere: gewünschtes Stromlimit. connectorId 0 = ganze Wallbox (bei
