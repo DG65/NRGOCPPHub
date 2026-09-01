@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.9 (01.09.2026)
+
+**Root Cause endgültig recherchiert und dokumentiert**: Dietmars Bitte "schau doch mal
+im Internet, woran es liegen kann" führte zum entscheidenden Fund — go-e-Support-
+Diskussion (#183) und die offizielle Modbus-Doku bestätigen: der App-Startknopf löst
+laut go-e-Maintainer *"mehrere Dinge auf einmal"* aus — Transaktion starten UND
+`frc`/`FORCE_STATE` gleichzeitig auf `0` (neutral) setzen. OCPPs `RemoteStartTransaction`
+löst offenbar nur den Transaktions-Teil aus, NICHT `frc` — steht `FORCE_STATE` aus
+irgendeinem Grund nicht bei `0`, wird über OCPP zwar `Accepted` gemeldet, aber der
+Ladefreigabe-Kontakt bleibt zu. `frc` ist eine private go-e-Einstellung, die im
+OCPP-Standard gar nicht vorkommt — deshalb half heute Nacht auch ein kompletter
+Geräte-Neustart nicht (live getestet), nur ein expliziter Schreibzugriff.
+
+**Splitter 0.2.14**: neuer, bewusst herstellerneutraler Ausweichweg — schlägt
+`RemoteStartTransaction` fehl, schickt der Splitter jetzt automatisch einen
+OCPP-1.6-Standardbefehl `Reset` (Soft) hinterher. Kein go-e-Sonderweg (den hätten wir
+technisch gar nicht bauen können — OCPPHub spricht nur OCPP, kein Modbus/HTTP zu den
+Geräten selbst), sondern ein Pflichtbestandteil, den jeder konforme Hersteller
+unterstützen muss. Für den go-e-`frc`-Fall im Speziellen vermutlich wirkungslos (ein
+Reset ist kein Ersatz für den expliziten `frc=0`-Schreibzugriff), aber ein echter,
+protokollkorrekter Sicherheitsnetz-Mechanismus für andere Ursachen und andere
+Hersteller. Für den go-e-Fall selbst als Cross-Hub-Kooperation an ChargerHub
+vorgeschlagen (die haben bereits Modbus-Zugriff auf `frc`).
+
 ## 0.6.8 (01.09.2026)
 
 **"Es kann doch aber nicht sein, dass man solche Tricks und Unfähigkeiten leben

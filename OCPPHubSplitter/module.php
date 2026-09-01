@@ -41,14 +41,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.13';
+    private const VERSION = '0.2.14';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.11';
+    private const NEWS_VERSION = '0.2.12';
     private const NEWS_ITEMS = [
+        'Neuer, herstellerneutraler Ausweichweg bei abgelehntem Ladestart: schlägt `RemoteStartTransaction` fehl, schickt OCPPHub jetzt automatisch einen OCPP-Standard-`Reset` (Soft) hinterher — ein Pflichtbestandteil von OCPP 1.6, den jeder konforme Hersteller unterstützen muss, kein Sonderweg für eine einzelne Marke.',
         'Kritischer Fix (Live-Fund): go-e lehnte `RemoteStopTransaction` bei einer laufenden Ladung wiederholt ab, obwohl die Sitzung nachweislich lief — Ladefreigabe „aus" hatte damit keine Wirkung. Automatischer Ausweichweg: wird der reguläre Stopp abgelehnt, schickt OCPPHub jetzt selbstständig ein Stromlimit von 0 A hinterher, das go-e zuverlässig annimmt und die Ladung tatsächlich beendet.',
         'Kritischer Fix (Live-Fund, erster echter Ladeversuch): jede Ablehnung einer Karte/eines Zugangs (nicht registriert, gesperrt, abgelaufen, Zeitfenster, Verbrauchslimit, Reservierung) zeigt jetzt sofort den genauen Grund am Ladepunkt (`block_reason`) — vorher landete das nur unsichtbar im Systemlog. Der manuelle „Ladefreigabe"-Schalter versucht außerdem zuerst den echten, registrierten Zugang eines bereits erkannten Fahrzeugs (neue Funktion OHUB_ManualStart()) statt eines internen Platzhalters, der unter Betriebsart ② ohnehin nie funktionieren konnte.',
         'Neue Diagnosefunktion OHUB_GetConfigurationKeys() — fragt beliebige OCPP-Konfigurationsschlüssel einer Wallbox ab, Antwort landet jetzt IMMER dauerhaft im Systemlog (nicht nur bei Ablehnung), da eine erfolgreiche GetConfiguration-Antwort kein "status"-Feld hat und darum bisher nur flüchtig im Debug-Fenster sichtbar war.',
@@ -471,6 +472,23 @@ class OCPPHubSplitter extends IPSModule
                 if ($action === 'RemoteStopTransaction' && $isFailure) {
                     IPS_LogMessage('OCPPHub', 'RemoteStopTransaction abgelehnt [' . $cpid . '] — versuche Stromlimit 0 A als Ausweichweg.');
                     $this->SetCurrentLimit($cpid, 0.0);
+                }
+                // Herstellerneutraler Ausweichweg (01.09.2026): schlägt
+                // RemoteStartTransaction fehl, ist die Ursache oft ein
+                // interner Zustand der Wallbox, den OCPP selbst nicht
+                // benennen kann (Beispiel go-e: ein privates `frc`-Register,
+                // das OCPP gar nicht kennt — recherchiert, siehe
+                // .docs/architektur.md „Ladeablehnung erklären"). `Reset`
+                // ist dagegen echter OCPP-1.6-Kernbefehl, den JEDER konforme
+                // Hersteller unterstützen muss — kein go-e-Sonderweg,
+                // sondern der protokollkorrekte "bitte internen Zustand
+                // aufräumen"-Schritt. Bewusst nur gesendet, nicht automatisch
+                // erneut gestartet (ein Reset braucht Zeit, ein sofortiger
+                // Retry würde nur wieder scheitern) — der nächste reguläre
+                // Start (manuell oder Auto-Autorisierung) greift danach.
+                if ($action === 'RemoteStartTransaction' && $isFailure) {
+                    IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.');
+                    $this->Reset($cpid, 'Soft');
                 }
                 $this->SendDebug('OCPPHub CALLRESULT/CALLERROR [' . $cpid . ']', $raw, 0);
                 break;
@@ -1054,6 +1072,18 @@ class OCPPHubSplitter extends IPSModule
     public function RemoteStop(string $cpid, int $transactionId): void
     {
         $this->sendCall($cpid, 'RemoteStopTransaction', ['transactionId' => $transactionId]);
+    }
+
+    // OCPP-1.6-Kernbefehl (Pflichtbestandteil, jeder konforme Hersteller muss
+    // ihn unterstützen) — herstellerneutraler "internen Zustand aufräumen"-
+    // Schritt, automatisch als Ausweichweg bei abgelehntem
+    // RemoteStartTransaction genutzt (siehe handleCall() CALLRESULT/
+    // CALLERROR). $Type: 'Soft' oder 'Hard' laut Spezifikation — bewusst
+    // ohne PHP-Standardwert, jeder Aufrufer muss ihn explizit mitgeben
+    // (Lehre aus dem RemoteStart()-ArgumentCountError-Fund).
+    public function Reset(string $cpid, string $Type): void
+    {
+        $this->sendCall($cpid, 'Reset', ['type' => $Type]);
     }
 
     // $ampere: gewünschtes Stromlimit. connectorId 0 = ganze Wallbox (bei

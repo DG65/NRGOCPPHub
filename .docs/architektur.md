@@ -766,6 +766,43 @@ echten Bugs jetzt fest im Code:
    `UpdateStatus()` setzt `power` jetzt bei jedem Status außer „Charging"
    selbst auf 0.
 
+**Root Cause endgültig recherchiert (01.09.2026)**: Dietmars Bitte "schau doch mal im
+Internet, woran es liegen kann" führte zum entscheidenden Fund. go-e-Support-
+Diskussion [#183](https://github.com/goecharger/go-eCharger-API-v2/discussions/183)
+und die offizielle [Modbus-Doku](https://github.com/goecharger/go-eCharger-API-v2/blob/main/modbus-en.md)
+bestätigen: der App-Startknopf löst laut go-e-Maintainer wörtlich *"mehrere Dinge auf
+einmal"* aus — Zitat: *"der große runde button macht mehrere dinge auf einmal
+(transaktion starten, forceState setzen, randomDelays beenden, ...)"*. Empfohlener
+Weg für einen zuverlässigen Start laut Maintainer: `trx=1&frc=0` — Transaktion
+starten UND `frc` (=`FORCE_STATE`, Modbus-Register 40338/337, Werte
+Neutral=0/Off=1/On=2 laut offizieller API-Doku) GLEICHZEITIG auf `0` setzen.
+
+**Das erklärt die ganze Nacht**: OCPPs `RemoteStartTransaction` löst offenbar nur den
+Transaktions-Teil (`trx`) aus, NICHT `frc` mit. Steht `FORCE_STATE` aus irgendeinem
+Grund nicht bei `0`, meldet go-e über OCPP zwar `Accepted`, der Ladefreigabe-Kontakt
+bleibt aber trotzdem zu — exakt das beobachtete Muster (Authorize/Transaktion sauber,
+0 W). `frc` ist eine private go-e-Einstellung, die im OCPP-Standard schlicht nicht
+existiert — deshalb half auch ein kompletter Geräte-Neustart nicht (live getestet,
+zweimal BootNotification, `SuspendedEVSE` blieb bestehen): der Wert liegt in einem
+nichtflüchtigen Speicher, den nur ein expliziter Schreibzugriff (HTTP/Modbus/App)
+zurücksetzt, kein Protokoll- oder Geräte-Reset.
+
+**Fix, bewusst herstellerneutral (Splitter 0.2.14)**: neue Methode `Reset($cpid,
+$Type)` — sendet den OCPP-1.6-Kernbefehl `Reset` (Pflichtbestandteil, jeder
+konforme Hersteller muss ihn unterstützen), automatisch als Ausweichweg, sobald
+`RemoteStartTransaction` abgelehnt wird. Kein go-e-Sonderweg (den könnten wir aus
+OCPPHub heraus technisch gar nicht bauen — das Modul spricht ausschließlich OCPP,
+kein Modbus/HTTP direkt zu den Geräten), sondern der protokollkorrekte
+„internen Zustand aufräumen"-Schritt für JEDEN Hersteller. Für den go-e-`frc`-Fall im
+Speziellen vermutlich wirkungslos (ein Reset ersetzt keinen expliziten
+`frc=0`-Schreibzugriff), aber ein echtes Sicherheitsnetz für andere Ursachen und
+andere Wallbox-Marken. **Für den go-e-Fall selbst**: als Cross-Hub-Kooperation an
+ChargerHub vorgeschlagen (die haben über Modbus bereits direkten `frc`-Zugriff) —
+mit der neuen Cross-Hub-Erkennung (IP-Abgleich) ließe sich künftig automatisch
+erkennen, dass eine ChargerHub-Instanz dasselbe Gerät kennt, und sie bitten, den
+Force-Lock zu lösen, bevor ein erneuter Start versucht wird. Braucht eine neue,
+kleine Funktion auf ChargerHub-Seite — noch nicht umgesetzt, nur vorgeschlagen.
+
 ## Authentifizierung (RFID & Alternativen)
 
 **Umgesetzt Stufe 2 (30.08.2026)**: `OCPPHubAbrechnung::CheckAuthorization(string
