@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.6.14 (01.09.2026)
+
+**Vorführmodus — Anfrage der Dashboard-Sitzung**: Dietmar baut eine öffentlich
+zugängliche Demo-Instanz des Verbunds ("EMS Modulvorstellung", eigenes
+WebFront/Login). Dashboard fragte proaktiv nach, ob OCPPHubs eigene Oberflächen
+(Ladepunkt-Steuerung, Konfigurationskachel) echte Befehle auslösen können, die
+in so einer Demo gefährlich wären — ein Besucher könnte sonst Dietmars echte
+Wallbox schalten oder echte Kundendaten verändern.
+
+**Splitter 0.2.18**: neues Formularfeld „🎪 Vorführmodus" (Default AUS). Aktiv,
+lehnen `RemoteStart()`/`SetCurrentLimit()`/`Reset()` — die eigentlichen
+Absende-Punkte aller echten OCPP-Steuerbefehle — jeden Aufruf serverseitig ab,
+unabhängig davon, ob er manuell, per PV-Überschussladen oder automatischer
+Fahrzeug-Autorisierung ausgelöst wurde.
+
+**Ladepunkt 0.2.14**: „Ladefreigabe"/Stromlimit springen bei aktivem
+Vorführmodus sofort auf den tatsächlichen (unveränderten) Zustand zurück, statt
+optimistisch den angeklickten Wert zu zeigen.
+
+**Abrechnung 0.3.5**: Konfigurationskachel wird bei aktivem Vorführmodus des
+zugehörigen Splitters automatisch schreibgeschützt (Speichern/Zeile
+hinzufügen/Löschen/Karte übernehmen serverseitig UND clientseitig deaktiviert,
+sichtbarer Banner).
+
+## 0.6.13 (01.09.2026)
+
+**Zweiter Live-Fund derselben Nacht, direkt aus einem echten Wallbox-Mitschnitt
+gelesen**: Dietmar stoppte den Ladevorgang bewusst manuell über die
+„Ladefreigabe" — zwei Sekunden später sendete OCPPHub von selbst wieder ein
+`RemoteStartTransaction`. Ursache: das eigenständige PV-Überschussladen
+(`OCPPHubLadepunkt::Update()`, per Timer alle paar Sekunden) und die
+automatische Fahrzeug-Autorisierung kannten „manuell gestoppt" nicht — sie
+sahen nur `ctl_enable=false`, Fahrzeug noch angesteckt, Überschuss noch
+vorhanden, und schalteten beim nächsten Tick einfach wieder ein. Ein manueller
+Stopp hatte dadurch faktisch nie eine Chance zu wirken, solange das Auto
+angesteckt blieb.
+
+**Ladepunkt 0.2.13**: neues Attribut `ManualStopActive` — wird beim manuellen
+Stopp gesetzt und blockiert damit sowohl das Überschussladen als auch die
+automatische Fahrzeug-Autorisierung, bis entweder manuell wieder gestartet
+oder das Fahrzeug abgesteckt wird. Ein echtes Kartenauflegen an der Wallbox
+bleibt davon unberührt (läuft direkt über OCPP, nicht über diesen Schalter).
+
 ## 0.6.12 (01.09.2026)
 
 **Regression im gerade gebauten Reset-/frc-Ausweichweg gefunden und gefixt** —

@@ -42,14 +42,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.17';
+    private const VERSION = '0.2.18';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.14';
+    private const NEWS_VERSION = '0.2.18';
     private const NEWS_ITEMS = [
+        'Neu: 🎪 Vorführmodus (Formularfeld am Splitter) — für Dietmars geplante öffentliche Demo-Instanz des ganzen NRG-Stack-Verbunds. Aktiviert, lehnt OCPPHub jeden echten Ladesteuerbefehl (RemoteStartTransaction/SetChargingProfile/Reset) serverseitig ab, egal ob manuell, per PV-Überschussladen oder automatischer Fahrzeug-Autorisierung ausgelöst — ein Besucher der Demo kann Dietmars echte Wallbox damit nicht schalten. Auch die Kundenverwaltungs-Kachel wird dabei automatisch schreibgeschützt.',
         'Kritischer Fix (Live-Fund, direkt nach Einführung des Reset-/frc-Ausweichwegs entdeckt): schlug RemoteStartTransaction fehl, WEIL die Wallbox schon eine andere Sitzung fuhr (z. B. go-e nach einem Reset selbst lokal gestartet), löste unser Ausweichweg trotzdem einen Reset aus und unterbrach damit eine bereits laufende, funktionierende Ladung — sichtbar als kurze Ladeimpulse statt einer stabilen Sitzung. Der Ausweichweg prüft jetzt zuerst, ob am Ladepunkt schon tatsächlich geladen wird, und greift nur noch ein, wenn nicht.',
         'go-e-Ausweichweg für hängende Ladefreigabe: schlägt RemoteStartTransaction bei einer go-e-Wallbox fehl, versucht OCPPHub jetzt automatisch, deren privates FORCE_STATE-Register zurückzusetzen — zuerst über ChargerHub (CHUB_ClearForceLock(), falls installiert, auch wenn dessen Instanz deaktiviert ist), sonst per eigenem, bewusst minimalem Modbus-Schreibzugriff, damit das auch OHNE installiertes ChargerHub funktioniert. Bei jedem anderen Hersteller wirkungslos, kein Risiko.',
         'Neuer, herstellerneutraler Ausweichweg bei abgelehntem Ladestart: schlägt `RemoteStartTransaction` fehl, schickt OCPPHub jetzt automatisch einen OCPP-Standard-`Reset` (Soft) hinterher — ein Pflichtbestandteil von OCPP 1.6, den jeder konforme Hersteller unterstützen muss, kein Sonderweg für eine einzelne Marke.',
@@ -84,6 +85,17 @@ class OCPPHubSplitter extends IPSModule
         // (Authorize/Limits/Reservierung) frei, keine Formular-Panels.
         $this->RegisterPropertyInteger('Betriebsart', 1);
         $this->RegisterAttributeInteger('AbrechnungID', 0);
+        // Vorführmodus (01.09.2026, Anfrage Dashboard-Sitzung — Dietmar baut
+        // eine öffentliche Demo-Instanz mit eigenem WebFront/Login): lehnt
+        // echte OCPP-Steuerbefehle (RemoteStart/Stop/SetChargingProfile)
+        // serverseitig ab, nicht nur optisch verborgen — ein Besucher der
+        // Demo darf niemals Dietmars echte Wallbox schalten können. Greift
+        // zentral in OCPPHubLadepunkt::RequestAction() für ctl_enable/
+        // ctl_curr_limit UND blockiert dieselbe Prüfung in OCPPHubAbrechnung
+        // (dort: schreibender Zugriff auf echte Kundendaten). Default AUS —
+        // nur für die dedizierte Demo-Instanz gedacht, niemals versehentlich
+        // in Produktion aktiv.
+        $this->RegisterPropertyBoolean('Vorfuehrmodus', false);
         // Basic-Auth optional (leerer Nutzername = kein Schutz). Zugangsdaten-
         // Konvention (Verbund-Regel 7): Passwort nur als Formular-Eingabe
         // (Property), nach Übernahme gehasht ins Attribut, Property geleert.
@@ -205,6 +217,13 @@ class OCPPHubSplitter extends IPSModule
         return $this->ReadAttributeInteger('AbrechnungID');
     }
 
+    // Vorführmodus-Abfrage für Ladepunkt/Abrechnung (01.09.2026) — siehe
+    // RegisterPropertyBoolean('Vorfuehrmodus', ...) in Create().
+    public function IsDemoMode(): bool
+    {
+        return $this->ReadPropertyBoolean('Vorfuehrmodus');
+    }
+
     // Trägt diese Instanz als Ziel für $Hook in die "Hooks"-Property der
     // eingebauten WebHook-Control-Instanz ein (Standard-Community-Muster,
     // da es dafür keine eigene WHC_RegisterHook()-API-Funktion gibt —
@@ -261,6 +280,12 @@ class OCPPHubSplitter extends IPSModule
                     'name'    => 'Active',
                     'caption' => 'Aktiv',
                 ],
+                [
+                    'type'    => 'CheckBox',
+                    'name'    => 'Vorfuehrmodus',
+                    'caption' => '🎪 Vorführmodus — echte Ladesteuerung deaktiviert',
+                ],
+                ['type' => 'Label', 'caption' => '⚠️ NUR für eine öffentlich zugängliche Demo-/Vorführ-Instanz gedacht: lehnt „Ladefreigabe"/Stromlimit sowie Änderungen in der Kundenverwaltung serverseitig ab (nicht nur ausgeblendet) — Dietmars echte Wallbox lässt sich dann über diese Instanz nicht mehr schalten, auch nicht durch das eigenständige PV-Überschussladen. Für den normalen Betrieb AUS lassen.'],
                 [
                     'type'    => 'Label',
                     'caption' => 'WebSocket-Endpunkt für Wallboxen: ' . $this->hookPath() . '/<Charge-Point-Identity>',
@@ -1108,6 +1133,15 @@ class OCPPHubSplitter extends IPSModule
     // Stufe-3-Thema).
     public function RemoteStart(string $cpid, string $idTag): void
     {
+        // Vorführmodus-Sperre HIER am eigentlichen Absende-Punkt (nicht nur
+        // am Ladepunkt-Schalter) — greift dadurch auch für die automatische
+        // Fahrzeug-Autorisierung (AutoAuthorizeVehicle()), die diesen Weg
+        // direkt aufruft, ohne über OCPPHubLadepunkt::RequestAction() zu
+        // laufen. Siehe IsDemoMode().
+        if ($this->IsDemoMode()) {
+            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — RemoteStartTransaction [' . $cpid . '] unterdrückt, keine echte Ladesteuerung gesendet.');
+            return;
+        }
         $this->sendCall($cpid, 'RemoteStartTransaction', ['connectorId' => 1, 'idTag' => $idTag]);
     }
 
@@ -1125,6 +1159,10 @@ class OCPPHubSplitter extends IPSModule
     // (Lehre aus dem RemoteStart()-ArgumentCountError-Fund).
     public function Reset(string $cpid, string $Type): void
     {
+        if ($this->IsDemoMode()) {
+            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Reset [' . $cpid . '] unterdrückt.');
+            return;
+        }
         $this->sendCall($cpid, 'Reset', ['type' => $Type]);
     }
 
@@ -1237,6 +1275,10 @@ class OCPPHubSplitter extends IPSModule
     // ist Stufe-2-Thema.
     public function SetCurrentLimit(string $cpid, float $ampere): void
     {
+        if ($this->IsDemoMode()) {
+            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — SetChargingProfile [' . $cpid . '] unterdrückt.');
+            return;
+        }
         // TxDefaultProfile mit einer einzigen Periode — reicht für ein
         // reines Stromlimit ohne Zeitplan. chargingRateUnit 'A' vs. 'W' und
         // numberPhases sind laut .docs/architektur.md je Hersteller zu

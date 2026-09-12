@@ -92,6 +92,11 @@
     border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; line-height: 1.5;
   }
   .orphan-banner.show { display: block; }
+  .demo-banner {
+    display: none; border: 1px solid rgba(52,120,246,0.5); background: rgba(52,120,246,0.12);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px; line-height: 1.5;
+  }
+  .demo-banner.show { display: block; }
 </style>
 </head>
 <body>
@@ -109,9 +114,13 @@
     und diese hier ggf. löschen.
   </div>
 
+  <div class="demo-banner" id="demoBanner">
+    🎪 Vorführmodus aktiv — nur Anzeige. Änderungen werden hier nicht gespeichert.
+  </div>
+
   <div class="unknown-banner" id="unknownBanner">
     <span>🆕 Unbekannte Karte erkannt: <b id="unknownTag"></b> (<span id="unknownAt"></span>)</span>
-    <button class="primary" onclick="adoptUnknown()">Als neuen Zugang übernehmen</button>
+    <button class="primary" onclick="adoptUnknown()" id="adoptUnknownBtn">Als neuen Zugang übernehmen</button>
   </div>
 
   <div id="areas"></div>
@@ -166,6 +175,10 @@ const AREAS = {
   }
 };
 
+function isDemoMode() {
+  return !!(PAYLOAD && PAYLOAD.demoMode);
+}
+
 function cloneRow(row) {
   return Object.assign({}, row);
 }
@@ -189,8 +202,8 @@ function ensureShell() {
           + '<div class="panel-body">'
           + '<div id="tbl-' + area + '"></div>'
           + '<div class="toolbar">'
-          + '<button onclick="addRow(\'' + area + '\')">➕ Zeile</button>'
-          + '<button class="primary" onclick="saveArea(\'' + area + '\')">💾 Speichern</button>'
+          + '<button onclick="addRow(\'' + area + '\')"' + (isDemoMode() ? ' disabled' : '') + '>➕ Zeile</button>'
+          + '<button class="primary" onclick="saveArea(\'' + area + '\')"' + (isDemoMode() ? ' disabled' : '') + '>💾 Speichern</button>'
           + '<span class="status-msg" id="status-' + area + '"></span>'
           + '</div></div></details>';
   });
@@ -201,9 +214,10 @@ function ensureShell() {
 function fieldHtml(area, col, row, idx) {
   const value = row[col.key];
   const onchange = 'onFieldChange(\'' + area + '\',' + idx + ',\'' + col.key + '\',this)';
+  const disabled = isDemoMode() ? ' disabled' : '';
   if (col.type === 'select') {
     const options = (PAYLOAD && PAYLOAD[col.options]) || [];
-    let html = '<select onchange="' + onchange + '">';
+    let html = '<select onchange="' + onchange + '"' + disabled + '>';
     html += '<option value="0"' + (Number(value) === 0 ? ' selected' : '') + '>' + col.zero + '</option>';
     options.forEach(function (o) {
       html += '<option value="' + o.id + '"' + (Number(value) === Number(o.id) ? ' selected' : '') + '>' + escapeHtml(o.label) + '</option>';
@@ -212,13 +226,13 @@ function fieldHtml(area, col, row, idx) {
     return html;
   }
   if (col.type === 'checkbox') {
-    return '<input type="checkbox" ' + (value ? 'checked' : '') + ' onchange="' + onchange + '">';
+    return '<input type="checkbox" ' + (value ? 'checked' : '') + ' onchange="' + onchange + '"' + disabled + '>';
   }
   if (col.type === 'number') {
-    return '<input type="number" step="0.1" value="' + Number(value) + '" onchange="' + onchange + '">';
+    return '<input type="number" step="0.1" value="' + Number(value) + '" onchange="' + onchange + '"' + disabled + '>';
   }
   const placeholder = col.placeholder ? ' placeholder="' + col.placeholder + '"' : '';
-  return '<input type="text" value="' + escapeHtml(String(value ?? '')) + '"' + placeholder + ' onchange="' + onchange + '">';
+  return '<input type="text" value="' + escapeHtml(String(value ?? '')) + '"' + placeholder + ' onchange="' + onchange + '"' + disabled + '>';
 }
 
 function renderTable(area) {
@@ -236,7 +250,7 @@ function renderTable(area) {
   rows.forEach(function (row, idx) {
     html += '<tr>';
     def.columns.forEach(function (col) { html += '<td>' + fieldHtml(area, col, row, idx) + '</td>'; });
-    html += '<td class="row-actions"><button class="danger-ghost" onclick="deleteRow(\'' + area + '\',' + idx + ')">🗑</button></td>';
+    html += '<td class="row-actions"><button class="danger-ghost" onclick="deleteRow(\'' + area + '\',' + idx + ')"' + (isDemoMode() ? ' disabled' : '') + '>🗑</button></td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
@@ -322,6 +336,11 @@ function renderUnknownBanner() {
   const at = PAYLOAD.unknownIdTagAt ? new Date(PAYLOAD.unknownIdTagAt * 1000) : null;
   document.getElementById('unknownAt').textContent = at ? at.toLocaleString('de-DE') : '';
   banner.classList.add('show');
+  document.getElementById('adoptUnknownBtn').disabled = isDemoMode();
+}
+
+function renderDemoBanner() {
+  document.getElementById('demoBanner').classList.toggle('show', isDemoMode());
 }
 
 function escapeHtml(s) {
@@ -344,6 +363,7 @@ function handleMessage(payload) {
     }
   });
   renderOrphanBanner();
+  renderDemoBanner();
   renderUnknownBanner();
   Object.keys(AREAS).forEach(renderTable);
 }

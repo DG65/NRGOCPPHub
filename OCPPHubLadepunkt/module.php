@@ -28,14 +28,16 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.12';
+    private const VERSION = '0.2.14';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.9';
+    private const NEWS_VERSION = '0.2.14';
     private const NEWS_ITEMS = [
+        'Neu: 🎪 Vorführmodus — greift, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). „Ladefreigabe"/Stromlimit lehnen dann jeden echten Steuerbefehl ab, der Schalter springt sofort zurück auf den tatsächlichen Zustand.',
+        'Kritischer Fix (Live-Fund, echter Wallbox-Mitschnitt): ein manueller Stopp über die „Ladefreigabe" wurde vom eigenständigen PV-Überschussladen sofort wieder rückgängig gemacht — Fahrzeug war noch angesteckt, Überschuss noch vorhanden, der nächste Timer-Tick (Sekunden später) schaltete einfach wieder ein. Ein manueller Stopp galt bislang für den Regler als „einfach nur aus", nicht als bewusste Entscheidung. Jetzt merkt sich OCPPHub „manuell gestoppt" bis zum nächsten manuellen Start ODER bis das Fahrzeug abgesteckt wird — Überschussladen UND die automatische Fahrzeug-Autorisierung lassen die Ladung so lange in Ruhe.',
         'Fix: `power` blieb nach dem Ende einer Ladung auf dem letzten Wert stehen (z. B. dauerhaft „10760 W" trotz beendeter Sitzung), weil ohne aktives Laden keine neue Messwert-Nachricht mehr kommt, die das korrigiert hätte. Jeder Status außer „Charging" setzt `power` jetzt selbst auf 0 W.',
         'Neu: Cross-Hub-Warnung — meldet sich ChargerHub UND OCPPHub gleichzeitig an derselben Wallbox an (per IP-Abgleich erkannt), warnt das Formular jetzt deutlich. Live-Fund: das kann die Ladefreigabe komplett blockieren, ohne dass eine der beiden Seiten eine Fehlermeldung zeigt — die OCPP-Ebene meldete "Accepted", aber es floss kein Strom, sogar die Hersteller-App der Wallbox konnte nicht laden.',
         'Kritischer Fix (Live-Fund, erster echter Ladeversuch): der manuelle „Ladefreigabe"-Schalter sendete bislang immer einen internen Platzhalter statt einer echten Karte — unter Betriebsart ② wurde das zu Recht abgelehnt, der Schalter zeigte aber trotzdem „an", ohne dass sichtbar war, dass nichts startet. Der Schalter versucht jetzt zuerst den echten, registrierten Zugang des bereits erkannten Fahrzeugs zu benutzen (derselbe Weg wie die Auto-Autorisierung); bei einem Fehlschlag springt er sofort zurück auf „aus" UND zeigt den genauen Grund in `block_reason` (z. B. „Zugang ist gesperrt.", „Verbrauchslimit ist erreicht.") — jede Ablehnung einer Karte/eines Zugangs ist damit jetzt sofort sichtbar, nicht nur eine vom Charger selbst ohne Begründung abgelehnte RemoteStartTransaction.',
@@ -145,6 +147,18 @@ class OCPPHubLadepunkt extends IPSModule
         // der Zustand ohnehin hier bei uns liegt.
         $this->RegisterAttributeBoolean('DailyOverride', false);
         $this->RegisterAttributeString('DailyOverrideDate', '');
+        // Live-Fund 01.09.2026 (Dietmar stoppte manuell, 2s später startete
+        // OCPPHub von selbst wieder — im echten Wallbox-Dump sichtbar):
+        // PV-Überschussladen (Update() unten) und die Auto-Autorisierung
+        // (maybeAutoAuthorize()) kannten "manuell gestoppt" nicht, sahen nur
+        // ctl_enable=false + Fahrzeug noch angesteckt + Überschuss vorhanden
+        // und schalteten beim nächsten Timer-Tick sofort wieder ein — ein
+        // manueller Stopp hatte dadurch de facto nie eine Chance, zu wirken.
+        // Gesetzt bei manuellem Stopp (RequestAction ctl_enable=false),
+        // gelöscht bei manuellem Start ODER beim Abstecken (UpdateStatus()),
+        // damit ein neu angestecktes Fahrzeug wieder ganz normal automatisch
+        // lädt.
+        $this->RegisterAttributeBoolean('ManualStopActive', false);
         // Cross-Hub-Erkennung (Live-Fund 01.09.2026) — Quell-IP der
         // eingehenden WebSocket-Verbindung, vom Splitter durchgereicht
         // (siehe SetSourceIP()/forwardSourceIp()), für einen Heuristik-
@@ -442,6 +456,19 @@ class OCPPHubLadepunkt extends IPSModule
         $splitterId = $this->resolveSplitterId();
         $cpid = $this->ReadPropertyString('CPID');
 
+        // Vorführmodus (01.09.2026, siehe OCPPHubSplitter::IsDemoMode()):
+        // echte Ladesteuerung serverseitig ablehnen, BEVOR irgendein OCPP-
+        // Befehl gesendet wird — auch ein Klick in einer öffentlichen Demo-
+        // WebFront darf Dietmars echte Wallbox nie schalten. Zeigt den
+        // Schalter/Regler sofort wieder auf dem tatsächlichen (unveränderten)
+        // Zustand, statt optimistisch auf dem angeklickten Wert stehen zu
+        // bleiben.
+        if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && $splitterId > 0 && OHUB_IsDemoMode($splitterId)) {
+            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Steuerbefehl „' . $Ident . '" an Ladepunkt ' . $this->InstanceID . ' abgelehnt, keine echte Ladesteuerung ausgelöst.');
+            $this->SetValue($Ident, $this->GetValue($Ident));
+            return;
+        }
+
         switch ($Ident) {
             case 'ctl_enable':
                 $this->SetValue($Ident, (bool)$Value);
@@ -461,8 +488,10 @@ class OCPPHubLadepunkt extends IPSModule
                         // zurück. Bei Fehlschlag meldet der Splitter über
                         // ReportBlockedStart() den genauen Grund zurück UND
                         // setzt ctl_enable wieder auf false.
+                        $this->WriteAttributeBoolean('ManualStopActive', false);
                         OHUB_ManualStart($splitterId, $cpid);
                     } else {
+                        $this->WriteAttributeBoolean('ManualStopActive', true);
                         OHUB_RemoteStop($splitterId, $cpid, $this->ReadAttributeInteger('LastTransactionId'));
                     }
                 }
@@ -512,6 +541,10 @@ class OCPPHubLadepunkt extends IPSModule
                 $this->SetValue('vehicle_name', '');
                 $this->WriteAttributeInteger('LastVehicleTessieId', 0);
                 $this->SetValue('block_reason', '');
+                // Abstecken hebt einen manuellen Stopp auf — ein neu
+                // angestecktes Fahrzeug (auch dasselbe erneut) soll wieder
+                // ganz normal automatisch laden dürfen.
+                $this->WriteAttributeBoolean('ManualStopActive', false);
             }
             // Live-Fund 01.09.2026 (Dietmar): `power` blieb nach einem
             // Stopp einfach auf dem letzten Wert stehen (z. B. „10760 W"
@@ -558,7 +591,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     private function maybeAutoAuthorize(string $name, bool $timeCorrelated): void
     {
-        if (!$timeCorrelated || $name === '' || $this->GetValue('ctl_enable')) {
+        if (!$timeCorrelated || $name === '' || $this->GetValue('ctl_enable') || $this->ReadAttributeBoolean('ManualStopActive')) {
             return;
         }
         if (time() - $this->ReadAttributeInteger('LastAutoAuthAttempt') < self::AUTO_AUTH_COOLDOWN_SECONDS) {
@@ -1026,6 +1059,10 @@ class OCPPHubLadepunkt extends IPSModule
         }
         if (!$this->GetValue('vehicle_plugged')) {
             $this->SetValue('surplus_status', 'Kein Fahrzeug angesteckt');
+            return;
+        }
+        if ($this->ReadAttributeBoolean('ManualStopActive')) {
+            $this->SetValue('surplus_status', 'Passiv — manuell gestoppt');
             return;
         }
 
