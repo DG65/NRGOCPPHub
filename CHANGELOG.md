@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.15 (12.09.2026)
+
+**Verfügbarkeits-Fund von ChargerHub**: nach der WB1-Zwei-Regler-Klärung noch eine
+Aktualitätsprüfung bei WB2 gemacht (kein Konflikt diesmal) — dabei aufgefallen, dass
+unsere Ladepunkt-Instanz WB2 seit über zwei Tagen keine frischen Werte mehr zeigte,
+ohne dass irgendwo sichtbar war, ob das an einer toten OCPP-Verbindung liegt oder die
+Wallbox einfach nur nichts Neues zu melden hat. Live nachgeprüft: `rememberSeenChargePoint()`
+am Splitter trackt bewusst NUR noch nicht angelegte Charge-Point-Identities (für den
+Konfigurator) — für eine bereits angelegte Ladepunkt-Instanz gab es danach GAR KEINE
+Verbindungsüberwachung mehr.
+
+**Splitter 0.2.19 / Ladepunkt 0.2.15**: neue Variable `ocpp_connected` am Ladepunkt —
+zeigt, ob innerhalb der letzten 15 Minuten (3× Heartbeat-Intervall) irgendeine
+OCPP-Nachricht dieser Wallbox angekommen ist. Splitter meldet jede eingehende Nachricht
+jetzt an die zuständige Ladepunkt-Instanz weiter (`UpdateLastSeen()`), ein eigener,
+immer laufender Timer prüft alle 60s auf Alterung (`CheckConnectivity()`) —
+unabhängig vom optionalen PV-Überschussladen.
+
 ## 0.6.14 (01.09.2026)
 
 **Vorführmodus — Anfrage der Dashboard-Sitzung**: Dietmar baut eine öffentlich

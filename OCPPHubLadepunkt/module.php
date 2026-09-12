@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.14';
+    private const VERSION = '0.2.15';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.14';
+    private const NEWS_VERSION = '0.2.15';
     private const NEWS_ITEMS = [
+        'Neu: `ocpp_connected` — zeigt, ob diese Wallbox innerhalb der letzten 15 Minuten irgendeine OCPP-Nachricht geschickt hat (Fund von ChargerHub: eine bereits angelegte Ladepunkt-Instanz hatte bislang KEINE Verbindungsüberwachung mehr, weder sichtbar noch mit Alterungsprüfung — Werte konnten tagelang eingefroren sein, ohne dass es auffiel).',
         'Neu: 🎪 Vorführmodus — greift, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). „Ladefreigabe"/Stromlimit lehnen dann jeden echten Steuerbefehl ab, der Schalter springt sofort zurück auf den tatsächlichen Zustand.',
         'Kritischer Fix (Live-Fund, echter Wallbox-Mitschnitt): ein manueller Stopp über die „Ladefreigabe" wurde vom eigenständigen PV-Überschussladen sofort wieder rückgängig gemacht — Fahrzeug war noch angesteckt, Überschuss noch vorhanden, der nächste Timer-Tick (Sekunden später) schaltete einfach wieder ein. Ein manueller Stopp galt bislang für den Regler als „einfach nur aus", nicht als bewusste Entscheidung. Jetzt merkt sich OCPPHub „manuell gestoppt" bis zum nächsten manuellen Start ODER bis das Fahrzeug abgesteckt wird — Überschussladen UND die automatische Fahrzeug-Autorisierung lassen die Ladung so lange in Ruhe.',
         'Fix: `power` blieb nach dem Ende einer Ladung auf dem letzten Wert stehen (z. B. dauerhaft „10760 W" trotz beendeter Sitzung), weil ohne aktives Laden keine neue Messwert-Nachricht mehr kommt, die das korrigiert hätte. Jeder Status außer „Charging" setzt `power` jetzt selbst auf 0 W.',
@@ -164,9 +165,21 @@ class OCPPHubLadepunkt extends IPSModule
         // (siehe SetSourceIP()/forwardSourceIp()), für einen Heuristik-
         // Abgleich gegen ChargerHubs konfigurierte Modbus-IP.
         $this->RegisterAttributeString('SourceIP', '');
+        // Verfügbarkeits-Fund ChargerHub 12.09.2026 (Routine-Prüfung nach dem
+        // WB2-Vorfall): eine bereits als Instanz angelegte Wallbox hatte
+        // schlicht KEINE Verbindungsüberwachung mehr — rememberSeenChargePoint()
+        // am Splitter trackt bewusst nur noch nicht angelegte Charge-Point-
+        // Identities (für den Konfigurator), danach verliert sich jede
+        // Sichtbarkeit, ob die OCPP-Verbindung überhaupt noch lebt oder die
+        // Wallbox seit Tagen gar nicht mehr meldet. Splitter ruft jetzt bei
+        // JEDER eingehenden Nachricht UpdateLastSeen() hier auf (siehe
+        // OCPPHubSplitter::ProcessHookData()) — unabhängig vom OCPP-
+        // Nachrichteninhalt, reiner Lebenszeichen-Nachweis.
+        $this->RegisterAttributeInteger('LastSeenAt', 0);
 
         $this->RegisterTimer('SurplusTimer', 0, 'OHUBL_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('EnableActionsTimer', 0, 'OHUBL_EnableActions($_IPS[\'TARGET\']);');
+        $this->RegisterTimer('ConnectivityTimer', 0, 'OHUBL_CheckConnectivity($_IPS[\'TARGET\']);');
     }
 
     public function ApplyChanges()
@@ -180,6 +193,7 @@ class OCPPHubLadepunkt extends IPSModule
         if (!$active) {
             $this->SetTimerInterval('SurplusTimer', 0);
             $this->SetTimerInterval('EnableActionsTimer', 0);
+            $this->SetTimerInterval('ConnectivityTimer', 0);
             $this->SetStatus(104);
             return;
         }
@@ -189,6 +203,11 @@ class OCPPHubLadepunkt extends IPSModule
             $this->ReadPropertyBoolean('EnableSurplusCharging') ? $this->ReadPropertyInteger('IntervalFast') * 1000 : 0
         );
         $this->SetTimerInterval('EnableActionsTimer', 200);
+        // Läuft IMMER, unabhängig von EnableSurplusCharging — reine
+        // Verbindungsüberwachung (siehe RegisterAttributeInteger('LastSeenAt', ...)
+        // in Create()), nicht an die optionale Überschussladen-Regelung
+        // gekoppelt.
+        $this->SetTimerInterval('ConnectivityTimer', 60000);
         $this->SetStatus(102);
     }
 
@@ -215,7 +234,7 @@ class OCPPHubLadepunkt extends IPSModule
                         ['type' => 'Label', 'caption' => 'Was diese Instanz macht: eine „OCPPHub Ladepunkt"-Instanz je Wallbox/Connector — sie hält die sichtbaren Messwerte und Steuervariablen (Ladeleistung, Energiezähler, Status, Ladefreigabe, Stromlimit) und trägt optional das eigenständige PV-Überschussladen. Die eigentliche OCPP-Kommunikation läuft komplett über den zugeordneten Splitter; diese Instanz selbst hält keine WebSocket-Verbindung.'],
                         ['type' => 'Label', 'caption' => '🆔 Charge-Point-Identity: muss exakt zu dem Namen passen, den die Wallbox selbst in ihrer eigenen OCPP-Konfiguration als letztes Pfadstück der Backend-URL mitschickt (Groß-/Kleinschreibung zählt). Am einfachsten über „OCPPHub Konfigurator" anlegen — der zeigt bereits verbundene Wallboxen an und füllt dieses Feld beim Erstellen automatisch korrekt aus, inklusive der Splitter-Zuordnung unten.'],
                         ['type' => 'Label', 'caption' => '⚠️ „OCPPHub-Splitter" unten ist ein Pflichtfeld, auch wenn die Instanz automatisch über den Konfigurator angelegt wurde und dort schon vorausgefüllt sein sollte. Ohne diese Zuordnung findet der Splitter diesen Ladepunkt weder für eingehende OCPP-Nachrichten noch für Steuerbefehle (Ladefreigabe, Stromlimit) noch für den Dashboard-Vertrag — Symcons Position dieser Instanz im Objektbaum (welcher Kategorie/welchem Ordner sie in der Konsole zugeordnet ist) reicht dafür ausdrücklich NICHT, weil sich Instanzen dort frei verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`ocpp_connected`, `power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
                         ['type' => 'Label', 'caption' => '🩺 Ladeablehnung erklären (`block_reason`): lehnt die Wallbox einen Ladestart/eine Stromlimit-Änderung eindeutig ab, wird — falls das Fahrzeug per Tessie verknüpft ist (siehe „OCPPHub Abrechnung"-Instanz) — automatisch nachgefragt, ob eine eigene Ladeplanung im Fahrzeug aktiv ist, das Ladelimit schon erreicht ist, oder das Fahrzeug gerade schläft (dann wird automatisch ein Aufwecken angestoßen). Zusätzlich, aber ausdrücklich nur als unsicherer Hinweis: ein Namensabgleich gegen aktive Tibber-Grid-Rewards-Steuerungen. Ohne Tessie-Verknüpfung oder ohne eindeutige Ablehnung bleibt `block_reason` leer.'],
                         ['type' => 'Label', 'caption' => '🔓 Automatische Ladefreigabe für erkannte Fahrzeuge: erkennt Dashboard per eigener Zeitkorrelation (nicht wir selbst — bewusst EIN Korrelationsmechanismus im Verbund) ein Fahrzeug an diesem Ladepunkt, das einem aktiven Zugang in der Abrechnung-Instanz zugeordnet ist, wird bei Betriebsart ② automatisch dessen Karte „aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch) — praktisch das Ergebnis von „Autocharge", ohne dass die Wallbox das selbst können muss. Kein Zwang zum sofortigen Losladen, nur zur Freigabe; wirkt erst, sobald das Ladepunkt-Modul der Dashboard-Sitzung diese Zuordnung meldet.'],
                         ['type' => 'Label', 'caption' => '🎫 RFID-Autorisierung/Verbrauchslimits: wird zentral in der „OCPPHub Abrechnung"-Instanz gepflegt, gilt aber nur, wenn am Splitter „② Mehrere Nutzer" ausgewählt ist — bei „① Einzelnutzer" wird jede Karte angenommen, unabhängig davon, was dort hinterlegt ist.'],
@@ -408,6 +427,11 @@ class OCPPHubLadepunkt extends IPSModule
 
     private function RegisterVariables(): void
     {
+        // Verfügbarkeits-Fund ChargerHub 12.09.2026 — siehe UpdateLastSeen()/
+        // CheckConnectivity(). Position 5 (vor allen Messwerten): ohne aktive
+        // OCPP-Verbindung sind power/state/vehicle_plugged etc. ohnehin nur
+        // eingefrorene Altwerte, das gehört als Erstes ins Auge.
+        $this->MaintainVariable('ocpp_connected', 'Wallbox verbunden (OCPP)', VARIABLETYPE_BOOLEAN, 'OHUB.Connected', 5, true);
         $this->MaintainVariable('power', 'Ladeleistung', VARIABLETYPE_FLOAT, 'NRG.Watt', 0, true);
         $this->MaintainVariable('energy_total', 'Energie gesamt', VARIABLETYPE_FLOAT, 'NRG.kWh', 10, true);
         $this->MaintainVariable('energy_session', 'Energie dieser Ladung', VARIABLETYPE_FLOAT, 'OHUB.kWhSession', 20, true);
@@ -668,6 +692,39 @@ class OCPPHubLadepunkt extends IPSModule
     {
         if ($IP !== '' && $IP !== $this->ReadAttributeString('SourceIP')) {
             $this->WriteAttributeString('SourceIP', $IP);
+        }
+    }
+
+    // Verfügbarkeits-Fund ChargerHub 12.09.2026: eine bereits angelegte
+    // Ladepunkt-Instanz hatte keinerlei Verbindungsüberwachung mehr — weder
+    // eine sichtbare Variable noch eine Alterungsprüfung. Vom Splitter bei
+    // JEDER eingehenden Nachricht dieser Wallbox aufgerufen (unabhängig vom
+    // Inhalt, reiner Lebenszeichen-Nachweis), analog SetSourceIP() oben.
+    public function UpdateLastSeen(): void
+    {
+        $this->WriteAttributeInteger('LastSeenAt', time());
+        $this->SetValue('ocpp_connected', true);
+    }
+
+    // Heartbeat-Intervall ist bei uns fest auf 300s eingestellt (siehe
+    // OCPPHubSplitter::onBootNotification()) — reichlich Marge (3x) gegen
+    // normale Jitter/einen einzelnen verpassten Heartbeat, bevor „nicht
+    // verbunden" angezeigt wird.
+    private const MAX_LAST_SEEN_AGE_SECONDS = 900;
+
+    // Per ConnectivityTimer alle 60s aufgerufen (siehe ApplyChanges()) — läuft
+    // IMMER, unabhängig von EnableSurplusCharging, weil Verbindungsstatus
+    // unabhängig vom Überschussladen relevant ist. Erkennt das Gegenteil von
+    // UpdateLastSeen(): dass seit Längerem GAR NICHTS mehr ankam.
+    public function CheckConnectivity(): void
+    {
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            return;
+        }
+        $lastSeen = $this->ReadAttributeInteger('LastSeenAt');
+        $connected = $lastSeen > 0 && (time() - $lastSeen) < self::MAX_LAST_SEEN_AGE_SECONDS;
+        if ($this->GetValue('ocpp_connected') !== $connected) {
+            $this->SetValue('ocpp_connected', $connected);
         }
     }
 

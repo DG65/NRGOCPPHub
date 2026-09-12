@@ -42,7 +42,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.18';
+    private const VERSION = '0.2.19';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -429,6 +429,7 @@ class OCPPHubSplitter extends IPSModule
         $this->SendDebug('OCPPHub Receive [' . $cpid . ']', $raw, 0);
         $this->rememberSeenChargePoint($cpid);
         $this->forwardSourceIp($cpid);
+        $this->markLadepunktSeen($cpid);
 
         // FIX 30.08.2026 (Live-Fund WB2, Fatal Error bei jedem MeterValues):
         // json_decode() OHNE den Assoziativ-Parameter lässt verschachtelte
@@ -655,6 +656,22 @@ class OCPPHubSplitter extends IPSModule
         $ladepunktId = $this->findLadepunkt($cpid);
         if ($ladepunktId !== 0) {
             OHUBL_SetSourceIP($ladepunktId, $ip);
+        }
+    }
+
+    // Verfügbarkeits-Fund ChargerHub 12.09.2026 (Routine-Prüfung nach dem
+    // WB2-Vorfall): rememberSeenChargePoint() oben trackt bewusst NUR noch
+    // nicht angelegte Charge-Point-Identities (für den Konfigurator) — für
+    // eine bereits als Instanz angelegte Wallbox gab es danach GAR KEINE
+    // Verbindungsüberwachung mehr, weder sichtbar noch mit Alterungsprüfung.
+    // Bei jeder eingehenden Nachricht (unabhängig vom Inhalt) an die
+    // zuständige Ladepunkt-Instanz durchgereicht — siehe dortiges
+    // UpdateLastSeen()/CheckConnectivity().
+    private function markLadepunktSeen(string $cpid): void
+    {
+        $ladepunktId = $this->findLadepunkt($cpid);
+        if ($ladepunktId !== 0) {
+            OHUBL_UpdateLastSeen($ladepunktId);
         }
     }
 
