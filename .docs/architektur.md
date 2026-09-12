@@ -1232,6 +1232,16 @@ jetzt `instanceID` = die eigene Ladepunkt-Instanz-ID (`OCPPHubLadepunkt::
 GetContractEntry()`). Dashboard liest dieses Feld bevorzugt statt der generischen
 Splitter-ID aus ihrer Discovery-Hilfsfunktion.
 
+**1.3 (ChargerHub-Abstimmung 12.09.2026, Verfügbarkeits-Fund bei WB2): `lastSeenAt`
+additiv ergänzt.** Unix-Timestamp der letzten erfolgreich verarbeiteten OCPP-Nachricht
+dieser Wallbox (StatusNotification/MeterValues/Heartbeat/beliebig — reiner
+Lebenszeichen-Nachweis, siehe `OCPPHubLadepunkt::UpdateLastSeen()`/
+`CheckConnectivity()`). Bewusst derselbe Feldname wie bei ChargerHubs
+`CHUB_GetFunctions` (dort: „letzter erfolgreicher Lesezyklus"), damit EMS/Dashboard
+dieselbe Alterungs-Schwellenwertlogik (bei ChargerHub: >10 min alt → Leistung gilt als
+unbekannt) transportunabhängig anwenden können, ohne Modbus/OCPP zu unterscheiden —
+genau der Sinn des feldgleichen Vertrags.
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils

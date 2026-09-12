@@ -28,7 +28,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.15';
+    private const VERSION = '0.2.16';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -1055,7 +1055,7 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
         return [
-            'contractVersion'   => '1.2',
+            'contractVersion'   => '1.3',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
@@ -1063,6 +1063,11 @@ class OCPPHubLadepunkt extends IPSModule
             // braucht seine EIGENE (Ladepunkt-)Instanz-ID für Steuerungs-
             // aufrufe wie OHUBL_ManualStart(). Additiv, kein Bruch.
             // 1.2 (Diagnose-Feature 31.08.2026): blockReasonID additiv.
+            // 1.3 (ChargerHub-Abstimmung 12.09.2026, Verfügbarkeits-Fund bei
+            // WB2): lastSeenAt additiv, feldgleich zu CHUB_GetFunctions —
+            // derselbe Feldname wie bei ChargerHub, damit ein Konsument (EMS/
+            // Dashboard) dieselbe Alterungs-Schwellenwertlogik transport-
+            // unabhängig anwenden kann, ohne Modbus/OCPP zu unterscheiden.
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -1080,6 +1085,7 @@ class OCPPHubLadepunkt extends IPSModule
             'transport'         => 'ocpp',
             'ocppVersion'       => '1.6',
             'blockReasonID'     => $this->GetIDForIdent('block_reason'),
+            'lastSeenAt'        => $this->ReadAttributeInteger('LastSeenAt'),
         ];
     }
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.16 (12.09.2026)
+
+**ChargerHub-Abstimmung**: nach dem `ocpp_connected`-Fund fragte ChargerHub an, ob wir
+das auch im `OHUB_GetFunctions`-Vertrag additiv ergänzen — mit demselben Feldnamen wie
+bei `CHUB_GetFunctions` (`lastSeenAt`), damit EMS/Dashboard dieselbe Alterungs-
+Schwellenwertlogik transportunabhängig anwenden können, ohne Modbus/OCPP zu
+unterscheiden.
+
+**Ladepunkt 0.2.16**: `OHUB_GetFunctions`/`OHUBL_GetContractEntry` liefern jetzt
+zusätzlich `lastSeenAt` (contractVersion 1.2→1.3, additiv). ChargerHub informiert EMS/
+Dashboard.
+
 ## 0.6.15 (12.09.2026)
 
 **Verfügbarkeits-Fund von ChargerHub**: nach der WB1-Zwei-Regler-Klärung noch eine
