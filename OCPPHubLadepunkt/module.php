@@ -28,7 +28,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.22';
+    private const VERSION = '0.2.23';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -131,8 +131,8 @@ class OCPPHubLadepunkt extends IPSModule
         // (trägt jetzt `duplicateOf`), Konsumenten (EMS/MeterHub/Dashboard)
         // überspringen ihn selbst bei der Zählung. Sicherheitsnetz gegen den
         // „vergessen, ManagedBy auch umzustellen"-Fall: siehe
-        // refreshDuplicateConflictStatus()/hasDuplicateWriteConflict()
-        // unten (SUITE.md Regel 9f).
+        // refreshInstanceStatus()/hasDuplicateWriteConflict() unten
+        // (SUITE.md Regel 9f).
         $this->RegisterPropertyString('DuplicateOfSource', '');
         $this->RegisterPropertyInteger('DuplicateOfInstanceID', 0);
         // Generischer Ein/Aus-Schalter (13.09.2026, MeterHubVirtual-Anfrage
@@ -256,12 +256,16 @@ class OCPPHubLadepunkt extends IPSModule
         // in Create()), nicht an die optionale Überschussladen-Regelung
         // gekoppelt.
         $this->SetTimerInterval('ConnectivityTimer', 60000);
-        $this->SetStatus(102);
+        // Vorläufig — Deaktiviert-Property ist ein reiner lokaler Wert, sicher
+        // auch früh im Boot lesbar. Feinere Prüfung (Duplikat-Konflikt, siehe
+        // refreshInstanceStatus()) braucht ggf. andere Instanzen, deshalb erst
+        // NACH dem Kernel-Ready-Check unten.
+        $this->SetStatus($this->IsDeactivated() ? 104 : 102);
         // Sofortiges Feedback nach dem Speichern (nicht erst nach bis zu 60s
         // Timer-Wartezeit) — nur im laufenden Kernel-Betrieb, siehe
         // CheckConnectivity()/Update() für dasselbe Boot-Timing-Muster.
         if (IPS_GetKernelRunlevel() === KR_READY) {
-            $this->refreshDuplicateConflictStatus();
+            $this->refreshInstanceStatus();
         }
     }
 
@@ -316,7 +320,7 @@ class OCPPHubLadepunkt extends IPSModule
                     'name'    => 'Deaktiviert',
                     'caption' => '🔌 Diesen Ladepunkt deaktivieren',
                 ],
-                ['type' => 'Label', 'caption' => 'Live-Fund 13.09.2026: nur DIESEN Ladepunkt abschalten wollen, ohne den ganzen Splitter zu deaktivieren (das würde auch alle anderen Ladepunkte mit lahmlegen). Aktiviert: OCPP-Protokoll wird weiter normal beantwortet, aber Authorize/RemoteStart/Stromlimit/Reset werden verweigert. Eine gerade laufende Ladung wird NICHT unterbrochen, erst ab dann keine neue Autorisierung/Steuerung mehr. Entspricht genau `OHUBL_SetActive(false)` — derselbe Wert, egal ob hier oder von außen (z. B. MeterHubVirtual) gesetzt.'],
+                ['type' => 'Label', 'caption' => 'Live-Fund 13.09.2026: nur DIESEN Ladepunkt abschalten wollen, ohne den ganzen Splitter zu deaktivieren (das würde auch alle anderen Ladepunkte mit lahmlegen). Aktiviert: OCPP-Protokoll wird weiter normal beantwortet, aber Authorize/RemoteStart/Stromlimit/Reset werden verweigert. Eine gerade laufende Ladung wird NICHT unterbrochen, erst ab dann keine neue Autorisierung/Steuerung mehr. Instanz-Status zeigt dann „Inaktiv" (bewusst, kein Fehler) und der Eintrag im Verbund-Vertrag trägt `active: false`. Entspricht genau `OHUBL_SetActive(false)` — derselbe Wert, egal ob hier oder von außen (z. B. MeterHubVirtual) gesetzt.'],
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => '⚡ Stromgrenzen & Steuerungshoheit',
@@ -828,7 +832,7 @@ class OCPPHubLadepunkt extends IPSModule
         if ($this->GetValue('ocpp_connected') !== $connected) {
             $this->SetValue('ocpp_connected', $connected);
         }
-        $this->refreshDuplicateConflictStatus();
+        $this->refreshInstanceStatus();
     }
 
     // Sicherheitsnetz gegen den „markiert, aber vergessen umzustellen"-Fall
@@ -845,10 +849,20 @@ class OCPPHubLadepunkt extends IPSModule
     // ebenfalls als 206; bei EMS ist 205 anderweitig belegt).
     private const STATUS_DUPLICATE_CONFLICT = 206;
 
-    private function refreshDuplicateConflictStatus(): void
+    // FIX 13.09.2026 (EMS-Anfrage): berücksichtigt jetzt auch IsDeactivated()
+    // — ein deaktivierter Ladepunkt zeigt IS_INACTIVE (104, SUITE.md Regel
+    // 9d: bewusst inaktiv, kein Fehlercode >200), nicht den normalen
+    // Betriebsstatus. Deaktiviert gewinnt gegen einen etwaigen Duplikat-
+    // Konflikt — schreibt ohnehin nicht, also kein Konfliktrisiko von dieser
+    // Seite.
+    private function refreshInstanceStatus(): void
     {
         if ($this->ReadPropertyString('CPID') === '') {
-            return; // Instanz ohnehin auf 104 (inaktiv), nichts zu prüfen
+            return; // Instanz ohnehin auf 104 (nicht konfiguriert), nichts zu prüfen
+        }
+        if ($this->IsDeactivated()) {
+            $this->SetStatus(104);
+            return;
         }
         $this->SetStatus($this->hasDuplicateWriteConflict() ? self::STATUS_DUPLICATE_CONFLICT : 102);
     }

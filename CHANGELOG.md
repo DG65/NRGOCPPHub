@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.23 (13.09.2026)
+
+**Nachtrag zu „einzelnen Ladepunkt deaktivieren" (EMS-Wunsch)**: der Instanzstatus soll bei
+Deaktivierung sichtbar „Inaktiv" (104, IS_INACTIVE) zeigen, nicht den normalen 102 —
+SUITE.md Regel 9d: bewusst inaktiv ist kein Fehlerzustand. Ladepunkt 0.2.23:
+`refreshInstanceStatus()` (vormals `refreshDuplicateConflictStatus()`) setzt jetzt bei
+`Deaktiviert=true` konsequent Status 104, sonst wie gehabt 102 oder den
+Duplikat-Konflikt-Warnstatus. Ein deaktivierter Eintrag bleibt in `OHUB_GetFunctions()`
+sichtbar mit `active: false` (nicht entfernt) — konsistent mit der `duplicateOf`-
+Entscheidung, Zustände zu flaggen statt Einträge verschwinden zu lassen.
+
 ## 0.6.22 (13.09.2026)
 
 **Zwei Live-Funde von EMS, direkt nachdem Dietmar den Splitter komplett abgeschaltet
