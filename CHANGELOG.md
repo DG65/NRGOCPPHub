@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.22 (13.09.2026)
+
+**Zwei Live-Funde von EMS, direkt nachdem Dietmar den Splitter komplett abgeschaltet
+hatte, weil er eigentlich nur WB1 deaktivieren wollte:**
+
+**Ladepunkt 0.2.22**: neuer Formular-Schalter „🔌 Diesen Ladepunkt deaktivieren" — es gab
+bisher KEINEN sichtbaren Weg, einen einzelnen Ladepunkt abzuschalten, nur den ganzen
+Splitter (der gleich alle anderen Ladepunkte mit lahmlegt). Persistiert über dieselbe
+Property wie `OHUBL_SetActive(bool)` — ein gemeinsamer Zustand für Konsole und externe
+Aufrufe (z. B. MeterHubVirtual), keine zwei getrennten Datenstände mehr.
+
+**Splitter 0.2.23**: `OHUB_GetFunctions()` lieferte bei deaktiviertem Splitter
+(`Active=false`, `ProcessHookData()` verarbeitet dann gar nichts mehr) weiterhin alle
+Ladepunkt-Einträge mit ihrem letzten (ggf. noch frischen) `lastSeenAt`/Status —
+Konsumenten hätten OCPPHub für aktiv gehalten, bis die Werte irgendwann veraltet wären.
+Liefert jetzt bei `Active=false` sofort eine leere Liste.
+
 ## 0.6.21 (13.09.2026)
 
 **Kleinigkeit auf EMS' Bitte**: der neue Warnstatus „Zwei Regler an einer Wallbox" lief bei

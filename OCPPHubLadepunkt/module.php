@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.21';
+    private const VERSION = '0.2.22';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.20';
+    private const NEWS_VERSION = '0.2.22';
     private const NEWS_ITEMS = [
+        'Kritischer Fix (Live-Fund, Dietmar wollte nur WB1 abschalten): es gab keinen sichtbaren Schalter, um EINEN einzelnen Ladepunkt zu deaktivieren — nur der ganze Splitter ließ sich abschalten, was gleich alle anderen Ladepunkte mit lahmlegte. Neuer Schalter „🔌 Diesen Ladepunkt deaktivieren" oben im Formular, identisch zu `OHUBL_SetActive(false)` (ein gemeinsamer Zustand für Konsole UND externe Aufrufe wie MeterHubVirtual).',
         'Korrektur zu „Doppelte Anbindung" (endgültige, von Dietmar direkt bestätigte Entscheidung): `duplicateOf` betrifft NUR die Verbrauchszählung, NICHT mehr das Schreiben — ein als Duplikat markierter Eintrag kann trotzdem der Regler sein (z. B. misst OCPP bei WB1, geregelt wird aber über ChargerHub). Ob dieser Ladepunkt an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" (`ManagedBy`) bzw. `OHUBL_SetActive()`. Neues Sicherheitsnetz: stehen sowohl hier „Wer regelt?" auf „Niemand" als auch bei der als zählend gewählten Instanz kein externes Lastmanagement, zeigt die Instanz einen Warnstatus „Zwei Regler an einer Wallbox", bis das aufgelöst ist — verhindert den „Duplikat markiert, aber Steuerhoheit zu stellen vergessen"-Fall.',
         'Neu: `OHUBL_SetActive(bool)` — Backend-Funktion für MeterHubVirtuals Dual-Writer-Erkennung, ergänzt „Doppelte Anbindung" um einen generischen Ein/Aus-Schalter (ohne Gegenstück-Instanz benennen zu müssen). Deaktiviert: Ladepunkt schreibt nicht mehr an die Wallbox (Authorize/RemoteStart/Stromlimit/Reset), eine bereits laufende Ladung wird NICHT unterbrochen (Dietmars Entscheidung). Zusätzlich `deviceSerial`/`deviceIP`/`active` additiv im Vertrag (aus BootNotification/Quell-IP, vorher nur intern) — zuverlässigere Dual-Writer-Erkennung als der bloße Zählerstand-Vergleich.',
         'Neu: 🔀 „Doppelte Anbindung" — Dietmars Entscheidung (über die EMS-Sitzung): hängt dieselbe Wallbox zusätzlich an einem anderen Verbund-Modul (z. B. gleichzeitig als ChargerHub-Instanz), kann hier eingetragen werden, welcher der beiden Einträge zählt. Der als Duplikat markierte Ladepunkt schreibt ab dann nicht mehr an die Wallbox (Ladefreigabe/Stromlimit/Reset), bleibt aber lesbar — Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn selbst bei der Verbrauchszählung (neues Vertragsfeld `duplicateOf`, contractVersion 1.3→1.4).',
@@ -142,7 +143,15 @@ class OCPPHubLadepunkt extends IPSModule
         // Gegenstück-Instanz. Sperrt zusammen mit externer Steuerhoheit
         // (`ManagedBy` != none/ems) über OCPPHubSplitter::isWriteBlocked() —
         // NICHT mehr zusammen mit IsDuplicate() (siehe Korrektur oben).
-        $this->RegisterAttributeBoolean('ManuallyDeactivated', false);
+        // FIX 13.09.2026 (Live-Fund EMS/Dietmar): bewusst eine PROPERTY, nicht
+        // nur ein internes Attribut — Dietmar wollte WB1 einzeln abschalten,
+        // fand dafür in der Konsole nichts (SetActive() war nur per Backend-
+        // Aufruf erreichbar) und hat stattdessen den ganzen Splitter
+        // deaktiviert, was WB2 gleich mit lahmlegte. Jetzt zusätzlich als
+        // sichtbarer Formular-Schalter (siehe GetConfigurationForm() unten) —
+        // SetActive() persistiert denselben Wert, EIN Datenstand für Konsole
+        // UND externe Aufrufe.
+        $this->RegisterPropertyBoolean('Deaktiviert', false);
         // Gerätemerkmale aus BootNotification (13.09.2026, MeterHub-Anfrage
         // für Dual-Writer-Erkennung) — vorher nur SendDebug(), nirgends
         // gespeichert. IP steckt schon in SourceIP (siehe forwardSourceIp()).
@@ -302,6 +311,12 @@ class OCPPHubLadepunkt extends IPSModule
                     'name'    => 'Label',
                     'caption' => 'Anzeigename (leer = Instanzname)',
                 ],
+                [
+                    'type'    => 'CheckBox',
+                    'name'    => 'Deaktiviert',
+                    'caption' => '🔌 Diesen Ladepunkt deaktivieren',
+                ],
+                ['type' => 'Label', 'caption' => 'Live-Fund 13.09.2026: nur DIESEN Ladepunkt abschalten wollen, ohne den ganzen Splitter zu deaktivieren (das würde auch alle anderen Ladepunkte mit lahmlegen). Aktiviert: OCPP-Protokoll wird weiter normal beantwortet, aber Authorize/RemoteStart/Stromlimit/Reset werden verweigert. Eine gerade laufende Ladung wird NICHT unterbrochen, erst ab dann keine neue Autorisierung/Steuerung mehr. Entspricht genau `OHUBL_SetActive(false)` — derselbe Wert, egal ob hier oder von außen (z. B. MeterHubVirtual) gesetzt.'],
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => '⚡ Stromgrenzen & Steuerungshoheit',
@@ -1111,12 +1126,20 @@ class OCPPHubLadepunkt extends IPSModule
     // nur keine neue Autorisierung/Steuerung mehr.
     public function IsDeactivated(): bool
     {
-        return $this->ReadAttributeBoolean('ManuallyDeactivated');
+        return $this->ReadPropertyBoolean('Deaktiviert');
     }
 
+    // FIX 13.09.2026: persistiert jetzt über dieselbe Property wie der
+    // Formular-Schalter „🔌 Ladepunkt deaktivieren" (siehe
+    // GetConfigurationForm()) — ein Aufruf von außen (MeterHubVirtual o.ä.)
+    // wirkt sich dadurch auch sofort sichtbar im Formular aus, und Dietmar
+    // kann denselben Zustand genauso gut manuell in der Konsole setzen,
+    // ohne den ganzen Splitter abschalten zu müssen (Live-Fund: genau das
+    // hatte er mangels sichtbarem Schalter getan, WB2 dabei mit lahmgelegt).
     public function SetActive(bool $Active): string
     {
-        $this->WriteAttributeBoolean('ManuallyDeactivated', !$Active);
+        IPS_SetProperty($this->InstanceID, 'Deaktiviert', !$Active);
+        IPS_ApplyChanges($this->InstanceID);
         if (!$Active) {
             // MeterHub-Hinweis 13.09.2026 (Vergleich mit ChargerHubs eigenem
             // Verhalten beim Abschalten): ein von UNS gesetztes go-e-

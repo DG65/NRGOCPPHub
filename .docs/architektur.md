@@ -1322,6 +1322,19 @@ beide „Dietmar hat entschieden" behaupten, NIE selbst per Heuristik auflösen 
 Zwischenstopp bei der eigentlichen Entscheidungsperson kostet eine Runde, verhindert aber
 zuverlässig, dass ein Modul die falsche Version baut.
 
+**Zwei Live-Funde von EMS (13.09.2026), unmittelbar nachdem Dietmar den ganzen Splitter
+abgeschaltet hatte, weil er eigentlich nur WB1 deaktivieren wollte.** Erster Fund: es gab
+keinen sichtbaren Weg dafür — `OHUBL_SetActive(bool)` existierte nur als Backend-Aufruf,
+kein Formular-Schalter. Fix (Ladepunkt 0.2.22): neue Property `Deaktiviert` (statt reinem
+Attribut) mit Formular-Checkbox „🔌 Diesen Ladepunkt deaktivieren" — `SetActive()`
+persistiert jetzt über dieselbe Property, ein gemeinsamer Zustand für Konsole und externe
+Aufrufe, keine zwei parallelen Datenstände mehr. Zweiter Fund: `OHUB_GetFunctions()` (am
+Splitter) lieferte bei `Active=false` weiterhin alle Ladepunkt-Einträge mit ihrem letzten
+Stand (`lastSeenAt`, Status) — `ProcessHookData()` verarbeitet dann zwar nichts mehr, aber
+der aggregierende Vertrag wusste davon nichts, Konsumenten hätten OCPPHub für aktiv
+gehalten, bis die Werte irgendwann veraltet wären. Fix (Splitter 0.2.23): `GetFunctions()`
+liefert bei `Active=false` sofort eine leere Liste.
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils

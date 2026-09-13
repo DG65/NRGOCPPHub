@@ -42,7 +42,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.22';
+    private const VERSION = '0.2.23';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -1488,6 +1488,17 @@ class OCPPHubSplitter extends IPSModule
 
     public function GetFunctions(): array
     {
+        // FIX 13.09.2026 (EMS-Fund): ein deaktivierter Splitter (Active=false,
+        // ProcessHookData() ignoriert dann jede eingehende Nachricht komplett)
+        // lieferte hier trotzdem weiter alle Ladepunkt-Einträge mit ihrem
+        // letzten (potenziell noch frischen) lastSeenAt/Status — Konsumenten
+        // hätten OCPPHub für aktiv gehalten, bis die Werte irgendwann
+        // veralteten. Bei Active=false gibt es OFFENSICHTLICH keine
+        // funktionierende Anbindung mehr, also leere Liste statt veralteter
+        // Daten.
+        if (!$this->ReadPropertyBoolean('Active')) {
+            return [];
+        }
         $entries = [];
         foreach ($this->ownLadepunkte() as $childId) {
             $entry = OHUBL_GetContractEntry($childId);
