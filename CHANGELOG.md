@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.18 (13.09.2026)
+
+**Dual-Writer-Zählung — Dietmars Entscheidung über die EMS-Sitzung**: bei ihm hängt
+dieselbe Wallbox doppelt (OCPPHub-Ladepunkt UND eigene ChargerHub-Instanz), dieselbe kWh
+würde in Verbund-Summen (EMS/MeterHub/Dashboard) sonst doppelt landen. Anschluss an die
+vorher mit MeterHub besprochene Design-Skizze, jetzt konkret entschieden und gebaut.
+
+**Splitter 0.2.20 / Ladepunkt 0.2.18**: neues Formularpanel „🔀 Doppelte Anbindung" am
+Ladepunkt — trägt man ein, dass dieser Eintrag Duplikat einer ChargerHub- oder anderen
+OCPPHub-Instanz ist, bleibt er zwar in `OHUB_GetFunctions()` sichtbar (neues additives
+Feld `duplicateOf`, contractVersion 1.3→1.4), Verbund-Konsumenten überspringen ihn aber
+selbst bei der Zählung — zusätzlich verweigert unsere eigene Steuerung
+(RemoteStart/SetCurrentLimit/Reset, direkt an der Absendestelle wie beim Vorführmodus)
+ab dann jeden Schreibzugriff auf die Wallbox. Bewusst rein nutzergesetzt, keine
+automatische Erkennung. ChargerHub bekommt dieselbe Erweiterung parallel.
+
+Noch NICHT auf Dietmars Live-System nachgezogen.
+
 ## 0.6.17 (13.09.2026)
 
 **Neue Verbund-Regel 9b (SUITE.md-Store-Checkliste, per EMS verteilt)**: nutzersichtbare

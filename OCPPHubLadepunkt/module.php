@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.17';
+    private const VERSION = '0.2.18';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.15';
+    private const NEWS_VERSION = '0.2.18';
     private const NEWS_ITEMS = [
+        'Neu: 🔀 „Doppelte Anbindung" — Dietmars Entscheidung (über die EMS-Sitzung): hängt dieselbe Wallbox zusätzlich an einem anderen Verbund-Modul (z. B. gleichzeitig als ChargerHub-Instanz), kann hier eingetragen werden, welcher der beiden Einträge zählt. Der als Duplikat markierte Ladepunkt schreibt ab dann nicht mehr an die Wallbox (Ladefreigabe/Stromlimit/Reset), bleibt aber lesbar — Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn selbst bei der Verbrauchszählung (neues Vertragsfeld `duplicateOf`, contractVersion 1.3→1.4).',
         'Neu: `ocpp_connected` — zeigt, ob diese Wallbox innerhalb der letzten 15 Minuten irgendeine OCPP-Nachricht geschickt hat (Fund von ChargerHub: eine bereits angelegte Ladepunkt-Instanz hatte bislang KEINE Verbindungsüberwachung mehr, weder sichtbar noch mit Alterungsprüfung — Werte konnten tagelang eingefroren sein, ohne dass es auffiel).',
         'Neu: 🎪 Vorführmodus — greift, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). „Ladefreigabe"/Stromlimit lehnen dann jeden echten Steuerbefehl ab, der Schalter springt sofort zurück auf den tatsächlichen Zustand.',
         'Kritischer Fix (Live-Fund, echter Wallbox-Mitschnitt): ein manueller Stopp über die „Ladefreigabe" wurde vom eigenständigen PV-Überschussladen sofort wieder rückgängig gemacht — Fahrzeug war noch angesteckt, Überschuss noch vorhanden, der nächste Timer-Tick (Sekunden später) schaltete einfach wieder ein. Ein manueller Stopp galt bislang für den Regler als „einfach nur aus", nicht als bewusste Entscheidung. Jetzt merkt sich OCPPHub „manuell gestoppt" bis zum nächsten manuellen Start ODER bis das Fahrzeug abgesteckt wird — Überschussladen UND die automatische Fahrzeug-Autorisierung lassen die Ladung so lange in Ruhe.',
@@ -109,6 +110,25 @@ class OCPPHubLadepunkt extends IPSModule
         $this->RegisterPropertyInteger('MinCurrent', self::MIN_CURRENT_HARD);
         $this->RegisterPropertyInteger('MaxCurrent', 16);
         $this->RegisterPropertyString('ManagedBy', 'none');
+
+        // Dual-Writer-Zählung (13.09.2026, Dietmars Entscheidung über EMS,
+        // Anlass: dieselbe Wallbox hängt bei ihm doppelt — hier als
+        // OCPPHub-Ladepunkt UND als eigene ChargerHub-Instanz). Anders als
+        // `ManagedBy` (wer STEUERT den Ladestrom) geht es hier NUR um
+        // Verbrauchs-ZÄHLUNG: welcher der beiden Verbund-Einträge für
+        // EMS/MeterHub/Dashboard als maßgeblich gilt, damit dieselbe
+        // physische kWh nicht doppelt in eine Summe einfließt. Rein
+        // Nutzer-gesetzt, NIE automatisch (siehe SetDuplicateOf() unten
+        // — es gibt bewusst KEINEN automatischen Erkennungsmechanismus,
+        // das wäre Verbund-Regel-1-Verletzung/Rollenduplikat, siehe
+        // MeterHubVirtual). Gesetzt bedeutet: der Eintrag bleibt zwar in
+        // `OHUB_GetFunctions()` sichtbar (trägt jetzt `duplicateOf`),
+        // Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst
+        // bei der Zählung. Zusätzlich schreibt unsere eigene Steuerung
+        // (RemoteStart/SetCurrentLimit/Reset) ab dann nicht mehr an diese
+        // Wallbox — siehe OCPPHubSplitter::isDuplicateLadepunkt().
+        $this->RegisterPropertyString('DuplicateOfSource', '');
+        $this->RegisterPropertyInteger('DuplicateOfInstanceID', 0);
 
         // Eigenständiges Überschussladen als Fallback ohne EMS (Dietmars
         // Vorgabe, wie in ChargerHub) — Default aus, sicherer Opt-in.
@@ -275,6 +295,25 @@ class OCPPHubLadepunkt extends IPSModule
                             ),
                         ],
                         ['type' => 'Label', 'caption' => '⚠️ Zwei-Regler-Warnung: Regelt bereits etwas anderes diese Wallbox — go-e Controller, Lastmanagement, Tibber Grid Rewards oder eine §14a-Steuerung —, darf OCPPHub nicht parallel Ladefreigabe/Stromlimit schreiben (beide Regler überschreiben sich sonst). Hier eintragen, wer die Hoheit hat: bei allem außer „Niemand" bleibt das eigenständige Überschussladen unten automatisch passiv.'],
+                    ],
+                ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => '🔀 Doppelte Anbindung (Dual-Writer-Zählung)',
+                    'items'   => [
+                        ['type' => 'Label', 'caption' => 'Nur ausfüllen, wenn DIESELBE Wallbox zusätzlich noch über ein anderes Verbund-Modul angebunden ist (z. B. dieselbe Box sowohl hier als OCPPHub-Ladepunkt als auch als eigene ChargerHub-Instanz). Legt fest, welcher der beiden Einträge für EMS/MeterHub/Dashboard als maßgeblich für die Verbrauchszählung gilt — bewusst NIE automatisch erkannt, IMMER eine Nutzerentscheidung.'],
+                        [
+                            'type'    => 'Select',
+                            'name'    => 'DuplicateOfSource',
+                            'caption' => 'Diese Instanz ist ein Duplikat von …',
+                            'options' => [
+                                ['value' => '', 'caption' => '— nein, dieser Eintrag zählt normal —'],
+                                ['value' => 'chargerhub', 'caption' => 'einer ChargerHub-Instanz (unten auswählen)'],
+                                ['value' => 'ocpphub', 'caption' => 'einer anderen OCPPHub-Ladepunkt-Instanz (unten auswählen)'],
+                            ],
+                        ],
+                        ['type' => 'SelectInstance', 'name' => 'DuplicateOfInstanceID', 'caption' => 'Zählende Instanz (bei „ChargerHub"/„OCPPHub" oben, sonst ignoriert)'],
+                        ['type' => 'Label', 'caption' => '⚠️ Wirkung, sobald hier etwas ausgewählt ist: der Eintrag bleibt zwar in `OHUB_GetFunctions()` sichtbar (trägt jetzt das Feld `duplicateOf`), Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst bei der Verbrauchszählung. Zusätzlich schreibt unsere eigene Steuerung (Ladefreigabe/Stromlimit/Reset, egal ob manuell oder automatisch) ab dann nicht mehr an diese Wallbox — nur noch Lesen. Die oben gewählte „zählende Instanz" bleibt die einzig aktive.'],
                     ],
                 ],
                 [
@@ -489,6 +528,17 @@ class OCPPHubLadepunkt extends IPSModule
         // bleiben.
         if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && $splitterId > 0 && OHUB_IsDemoMode($splitterId)) {
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Steuerbefehl „' . $Ident . '" an Ladepunkt ' . $this->InstanceID . ' abgelehnt, keine echte Ladesteuerung ausgelöst.');
+            $this->SetValue($Ident, $this->GetValue($Ident));
+            return;
+        }
+
+        // Dual-Writer-Zählung (13.09.2026): als Duplikat markierte Ladepunkte
+        // dürfen selbst nicht mehr schreiben, gleiches Sofort-Feedback-Muster
+        // wie oben beim Vorführmodus. Der Splitter prüft dasselbe nochmal
+        // direkt an der Absendestelle (siehe isDuplicateLadepunkt()) — hier
+        // nur für die schnelle Anzeige-Rückmeldung im Schalter selbst.
+        if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && $this->IsDuplicate()) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' als Duplikat markiert — Steuerbefehl „' . $Ident . '" abgelehnt.');
             $this->SetValue($Ident, $this->GetValue($Ident));
             return;
         }
@@ -943,6 +993,29 @@ class OCPPHubLadepunkt extends IPSModule
         return (int)$this->GetValue('state');
     }
 
+    // Dual-Writer-Zählung (13.09.2026, siehe RegisterPropertyString('DuplicateOfSource', ...)
+    // in Create()) — vom Splitter vor jedem RemoteStart()/SetCurrentLimit()/Reset() geprüft
+    // (siehe OCPPHubSplitter::isDuplicateLadepunkt()), damit ein als Duplikat markierter
+    // Ladepunkt nicht mehr an die Wallbox schreibt.
+    public function IsDuplicate(): bool
+    {
+        return $this->ReadPropertyString('DuplicateOfSource') !== '' && $this->ReadPropertyInteger('DuplicateOfInstanceID') > 0;
+    }
+
+    // Additiv im OHUB_GetFunctions-Vertrag (siehe GetContractEntry()): null/fehlend = zählt
+    // normal, sonst {source, instanceID} — zeigt auf den Eintrag, der für Verbund-Konsumenten
+    // stattdessen zählt. Feldname/-form mit MeterHub/ChargerHub abgestimmt (13.09.2026).
+    private function getDuplicateOfForContract(): ?array
+    {
+        if (!$this->IsDuplicate()) {
+            return null;
+        }
+        return [
+            'source'     => $this->ReadPropertyString('DuplicateOfSource'),
+            'instanceID' => $this->ReadPropertyInteger('DuplicateOfInstanceID'),
+        ];
+    }
+
     // ---------------------------------------------------------------------
     // Backend-Funktionen für Dashboard (Scope-Korrektur 30.08.2026: OCPPHub
     // baut KEINE eigene WebFront-Kachel — Dashboard konsumiert diese
@@ -1058,7 +1131,7 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
         return [
-            'contractVersion'   => '1.3',
+            'contractVersion'   => '1.4',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
@@ -1071,6 +1144,11 @@ class OCPPHubLadepunkt extends IPSModule
             // derselbe Feldname wie bei ChargerHub, damit ein Konsument (EMS/
             // Dashboard) dieselbe Alterungs-Schwellenwertlogik transport-
             // unabhängig anwenden kann, ohne Modbus/OCPP zu unterscheiden.
+            // 1.4 (Dietmars Entscheidung über EMS 13.09.2026, Dual-Writer-
+            // Zählung): duplicateOf additiv, feldgleich zu CHUB_GetFunctions
+            // — null/fehlend = zählt normal, sonst {source, instanceID} zeigt
+            // auf den stattdessen zählenden Eintrag. Rein nutzergesetzt (siehe
+            // IsDuplicate()), Konsumenten überspringen solche Einträge selbst.
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -1089,6 +1167,7 @@ class OCPPHubLadepunkt extends IPSModule
             'ocppVersion'       => '1.6',
             'blockReasonID'     => $this->GetIDForIdent('block_reason'),
             'lastSeenAt'        => $this->ReadAttributeInteger('LastSeenAt'),
+            'duplicateOf'       => $this->getDuplicateOfForContract(),
         ];
     }
 

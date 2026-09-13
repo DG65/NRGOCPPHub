@@ -42,7 +42,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.19';
+    private const VERSION = '0.2.20';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -1072,6 +1072,18 @@ class OCPPHubSplitter extends IPSModule
         return 0;
     }
 
+    // Dual-Writer-Zählung (13.09.2026, Dietmars Entscheidung über EMS) — vor
+    // JEDEM echten Steuerbefehl geprüft (RemoteStart()/SetCurrentLimit()/
+    // Reset() unten), analog zur Vorführmodus-Sperre: ein als Duplikat
+    // markierter Ladepunkt (OCPPHubLadepunkt::IsDuplicate()) darf nicht mehr
+    // an die Wallbox schreiben, eine andere Instanz (ChargerHub oder ein
+    // anderer OCPPHub-Ladepunkt) ist dafür die zählende/steuernde.
+    private function isDuplicateLadepunkt(string $cpid): bool
+    {
+        $ladepunktId = $this->findLadepunkt($cpid);
+        return $ladepunktId !== 0 && OHUBL_IsDuplicate($ladepunktId);
+    }
+
     // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
     // direkt an Dietmars Instanz): `IPS_GetChildrenIDs($this->InstanceID)`
     // spiegelt NICHT zuverlässig die Splitter-Zuordnung — Instanzen lassen
@@ -1159,6 +1171,10 @@ class OCPPHubSplitter extends IPSModule
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — RemoteStartTransaction [' . $cpid . '] unterdrückt, keine echte Ladesteuerung gesendet.');
             return;
         }
+        if ($this->isDuplicateLadepunkt($cpid)) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] als Duplikat markiert — RemoteStartTransaction unterdrückt, eine andere Instanz zählt/steuert.');
+            return;
+        }
         $this->sendCall($cpid, 'RemoteStartTransaction', ['connectorId' => 1, 'idTag' => $idTag]);
     }
 
@@ -1178,6 +1194,10 @@ class OCPPHubSplitter extends IPSModule
     {
         if ($this->IsDemoMode()) {
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Reset [' . $cpid . '] unterdrückt.');
+            return;
+        }
+        if ($this->isDuplicateLadepunkt($cpid)) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] als Duplikat markiert — Reset unterdrückt.');
             return;
         }
         $this->sendCall($cpid, 'Reset', ['type' => $Type]);
@@ -1294,6 +1314,10 @@ class OCPPHubSplitter extends IPSModule
     {
         if ($this->IsDemoMode()) {
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — SetChargingProfile [' . $cpid . '] unterdrückt.');
+            return;
+        }
+        if ($this->isDuplicateLadepunkt($cpid)) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] als Duplikat markiert — SetChargingProfile unterdrückt.');
             return;
         }
         // TxDefaultProfile mit einer einzigen Periode — reicht für ein

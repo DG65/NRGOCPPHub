@@ -1242,6 +1242,22 @@ dieselbe Alterungs-Schwellenwertlogik (bei ChargerHub: >10 min alt → Leistung 
 unbekannt) transportunabhängig anwenden können, ohne Modbus/OCPP zu unterscheiden —
 genau der Sinn des feldgleichen Vertrags.
 
+**1.4 (Dietmars Entscheidung über die EMS-Sitzung 13.09.2026, Dual-Writer-Zählung):
+`duplicateOf` additiv ergänzt.** Anlass: bei Dietmar hängt dieselbe physische Wallbox
+sowohl als OCPPHub-Ladepunkt als auch als eigene ChargerHub-Instanz — beide zählen
+bislang unabhängig, dieselbe kWh würde in einer Summe doppelt landen. `duplicateOf`:
+null/fehlend = Eintrag zählt normal, sonst `{source: 'chargerhub'|'ocpphub',
+instanceID: <int>}` und zeigt auf den Eintrag, der stattdessen zählt. Rein nutzergesetzt
+über das neue Formularpanel „Doppelte Anbindung" (`DuplicateOfSource`/
+`DuplicateOfInstanceID`, siehe `OCPPHubLadepunkt::IsDuplicate()`) — bewusst KEINE
+automatische Erkennung (Verbund-Regel 1/Rollenduplikat, dieselbe Abwägung wie bei der
+schon vermerkten „Cross-Hub-Konkurrenzprüfung"). Der Eintrag bleibt in
+`OHUB_GetFunctions()` sichtbar (Konsumenten überspringen ihn selbst bei der Zählung),
+zusätzlich verweigert unsere eigene Steuerung (`RemoteStart()`/`SetCurrentLimit()`/
+`Reset()` — direkt an der Absendestelle, analog Vorführmodus) ab dann jeden Schreibzugriff
+auf diese Wallbox. Feldname/-form mit MeterHub/ChargerHub abgestimmt, ChargerHub bekommt
+dieselbe Erweiterung parallel.
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils
