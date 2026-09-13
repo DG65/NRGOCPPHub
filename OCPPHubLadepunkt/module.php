@@ -28,7 +28,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.23';
+    private const VERSION = '0.2.24';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -320,7 +320,7 @@ class OCPPHubLadepunkt extends IPSModule
                     'name'    => 'Deaktiviert',
                     'caption' => '🔌 Diesen Ladepunkt deaktivieren',
                 ],
-                ['type' => 'Label', 'caption' => 'Live-Fund 13.09.2026: nur DIESEN Ladepunkt abschalten wollen, ohne den ganzen Splitter zu deaktivieren (das würde auch alle anderen Ladepunkte mit lahmlegen). Aktiviert: OCPP-Protokoll wird weiter normal beantwortet, aber Authorize/RemoteStart/Stromlimit/Reset werden verweigert. Eine gerade laufende Ladung wird NICHT unterbrochen, erst ab dann keine neue Autorisierung/Steuerung mehr. Instanz-Status zeigt dann „Inaktiv" (bewusst, kein Fehler) und der Eintrag im Verbund-Vertrag trägt `active: false`. Entspricht genau `OHUBL_SetActive(false)` — derselbe Wert, egal ob hier oder von außen (z. B. MeterHubVirtual) gesetzt.'],
+                ['type' => 'Label', 'caption' => 'Live-Fund 13.09.2026: nur DIESEN Ladepunkt abschalten wollen, ohne den ganzen Splitter zu deaktivieren (das würde auch alle anderen Ladepunkte mit lahmlegen). Aktiviert: OCPP-Protokoll wird weiter normal beantwortet, aber Authorize/RemoteStart/Stromlimit/Reset werden verweigert. Eine gerade laufende Ladung wird NICHT unterbrochen, erst ab dann keine neue Autorisierung/Steuerung mehr. Instanz-Status zeigt dann „Inaktiv" (bewusst, kein Fehler) und der Eintrag im Verbund-Vertrag trägt `deactivated: true`. Entspricht genau `OHUBL_SetActive(false)` — derselbe Wert, egal ob hier oder von außen (z. B. MeterHubVirtual) gesetzt. Unterscheidet sich von „Wer regelt?" weiter unten: dort geht es NUR ums Schreibrecht, ein extern geregelter Ladepunkt bleibt trotzdem „in Betrieb" (Status 102) — nur dieser Schalter hier bedeutet „wirklich abgeschaltet".'],
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => '⚡ Stromgrenzen & Steuerungshoheit',
@@ -1300,7 +1300,7 @@ class OCPPHubLadepunkt extends IPSModule
         $managedBy = $this->ReadPropertyString('ManagedBy');
         $externallyManaged = !in_array($managedBy, ['none', 'ems'], true);
         return [
-            'contractVersion'   => '1.5',
+            'contractVersion'   => '1.6',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
@@ -1326,6 +1326,18 @@ class OCPPHubLadepunkt extends IPSModule
             // Erkennung als der bloße Zählerstand-Vergleich. active = false
             // bei externer Steuerhoheit (managedBy != none/ems) ODER
             // OHUBL_SetActive(false) — NICHT bei IsDuplicate().
+            // 1.6 (EMS-Klarstellung 13.09.2026, Live-Verwechslung bei
+            // Dietmar): `active` bedeutet AUSSCHLIESSLICH „darf gerade
+            // steuern" (EMS/wir selbst) — NICHT „Ladepunkt in Betrieb/
+            // verbunden" (dafür `ocpp_connected`/`lastSeenAt`). Ein extern
+            // geregelter, aber weiterhin verbundener Ladepunkt (managedBy=
+            // 'other') hat `active=false`, ist aber real in Betrieb — genau
+            // dieser Unterschied hatte EMS live kurz verwechselt. Verbindlich
+            // (EMS 0.42.4): „abgeschaltet" heißt für Konsumenten AUSSCHLIESSLICH
+            // Instanzstatus 104, nicht `active`/`externallyManaged`. Additiv
+            // `deactivated` ergänzt — eindeutiger Name, deckungsgleich mit
+            // Status 104, ohne dass ein Konsument extra den Instanzstatus
+            // abfragen muss.
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -1347,11 +1359,16 @@ class OCPPHubLadepunkt extends IPSModule
             'duplicateOf'       => $this->getDuplicateOfForContract(),
             'deviceSerial'      => $this->ReadAttributeString('DeviceSerial'),
             'deviceIP'          => $this->ReadAttributeString('SourceIP'),
-            // KORRIGIERT 13.09.2026: `active` = schreibt dieser Eintrag
-            // gerade an die Wallbox — hängt NICHT mehr an IsDuplicate()
-            // (Zählen/Schreiben sind orthogonal), sondern an genau denselben
-            // zwei Gründen wie die Schreibsperre selbst.
+            // KORRIGIERT 13.09.2026: `active` = darf dieser Eintrag gerade
+            // steuern — hängt NICHT mehr an IsDuplicate() (Zählen/Schreiben
+            // sind orthogonal), sondern an genau denselben zwei Gründen wie
+            // die Schreibsperre selbst. Sagt NICHTS über Betrieb/Verbindung
+            // aus, siehe Feldkommentar 1.6 oben.
             'active'            => !$externallyManaged && !$this->IsDeactivated(),
+            // 1.6: eindeutiger, unmissverständlicher Name für „per Formular-
+            // Schalter/OHUBL_SetActive(false) abgeschaltet" — deckungsgleich
+            // mit Instanzstatus 104.
+            'deactivated'       => $this->IsDeactivated(),
         ];
     }
 

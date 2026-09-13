@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.24 (13.09.2026)
+
+**EMS-Klarstellung nach einer Live-Verwechslung**: EMS hatte `active: false` bei WB1 live
+als „abgeschaltet" gelesen — kam tatsächlich von `managedBy='other'` (externe
+Steuerhoheit, schon länger gesetzt), nicht vom neuen „Deaktiviert"-Schalter. Verbindlich
+geklärt: `active` heißt NUR „darf gerade steuern", nicht „in Betrieb" — ein extern
+geregelter, aber verbundener Ladepunkt hat `active=false` und ist trotzdem real aktiv.
+
+**Ladepunkt 0.2.24**: neues additives Feld `deactivated` (contractVersion 1.5→1.6) —
+eindeutig benannt, deckungsgleich mit Instanzstatus 104, erspart Konsumenten eine
+separate Statusabfrage. Kommentare/Formular-Label geschärft, um dieselbe Verwechslung
+künftig zu vermeiden.
+
 ## 0.6.23 (13.09.2026)
 
 **Nachtrag zu „einzelnen Ladepunkt deaktivieren" (EMS-Wunsch)**: der Instanzstatus soll bei

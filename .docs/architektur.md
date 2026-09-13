@@ -1335,6 +1335,18 @@ der aggregierende Vertrag wusste davon nichts, Konsumenten hätten OCPPHub für 
 gehalten, bis die Werte irgendwann veraltet wären. Fix (Splitter 0.2.23): `GetFunctions()`
 liefert bei `Active=false` sofort eine leere Liste.
 
+**1.6 (EMS-Klarstellung 13.09.2026, Live-Verwechslung bei Dietmar): `deactivated`
+additiv, `active`-Semantik geschärft.** EMS hatte `active: false` bei WB1 live als
+„Ladepunkt abgeschaltet" gelesen — tatsächlich kam das von `managedBy='other'`
+(externe Steuerhoheit, schon seit Tagen so gesetzt), der neue „Deaktiviert"-Schalter war
+gar nicht benutzt. Klargestellt und verbindlich (EMS 0.42.4 wertet `active` deshalb nicht
+mehr aus): `active` bedeutet AUSSCHLIESSLICH „darf gerade steuern" — NICHT „in Betrieb"
+oder „verbunden" (dafür `ocpp_connected`/`lastSeenAt`). Ein extern geregelter, aber
+weiterhin verbundener Ladepunkt hat `active=false` UND ist trotzdem real in Betrieb.
+„Abgeschaltet" heißt für Konsumenten ab jetzt ausschließlich Instanzstatus 104 bzw. das
+neue, eindeutig benannte Feld `deactivated` (deckungsgleich mit 104, erspart Konsumenten
+eine separate Statusabfrage).
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils
