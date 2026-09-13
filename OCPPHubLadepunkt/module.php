@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.18';
+    private const VERSION = '0.2.19';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.18';
+    private const NEWS_VERSION = '0.2.19';
     private const NEWS_ITEMS = [
+        'Neu: `OHUBL_SetActive(bool)` — Backend-Funktion für MeterHubVirtuals Dual-Writer-Erkennung, ergänzt „Doppelte Anbindung" um einen generischen Ein/Aus-Schalter (ohne Gegenstück-Instanz benennen zu müssen). Deaktiviert: Ladepunkt schreibt nicht mehr an die Wallbox (Authorize/RemoteStart/Stromlimit/Reset), eine bereits laufende Ladung wird NICHT unterbrochen (Dietmars Entscheidung). Zusätzlich `deviceSerial`/`deviceIP`/`active` additiv im Vertrag (aus BootNotification/Quell-IP, vorher nur intern) — zuverlässigere Dual-Writer-Erkennung als der bloße Zählerstand-Vergleich.',
         'Neu: 🔀 „Doppelte Anbindung" — Dietmars Entscheidung (über die EMS-Sitzung): hängt dieselbe Wallbox zusätzlich an einem anderen Verbund-Modul (z. B. gleichzeitig als ChargerHub-Instanz), kann hier eingetragen werden, welcher der beiden Einträge zählt. Der als Duplikat markierte Ladepunkt schreibt ab dann nicht mehr an die Wallbox (Ladefreigabe/Stromlimit/Reset), bleibt aber lesbar — Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn selbst bei der Verbrauchszählung (neues Vertragsfeld `duplicateOf`, contractVersion 1.3→1.4).',
         'Neu: `ocpp_connected` — zeigt, ob diese Wallbox innerhalb der letzten 15 Minuten irgendeine OCPP-Nachricht geschickt hat (Fund von ChargerHub: eine bereits angelegte Ladepunkt-Instanz hatte bislang KEINE Verbindungsüberwachung mehr, weder sichtbar noch mit Alterungsprüfung — Werte konnten tagelang eingefroren sein, ohne dass es auffiel).',
         'Neu: 🎪 Vorführmodus — greift, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). „Ladefreigabe"/Stromlimit lehnen dann jeden echten Steuerbefehl ab, der Schalter springt sofort zurück auf den tatsächlichen Zustand.',
@@ -129,6 +130,17 @@ class OCPPHubLadepunkt extends IPSModule
         // Wallbox — siehe OCPPHubSplitter::isDuplicateLadepunkt().
         $this->RegisterPropertyString('DuplicateOfSource', '');
         $this->RegisterPropertyInteger('DuplicateOfInstanceID', 0);
+        // Generischer Ein/Aus-Schalter (13.09.2026, MeterHubVirtual-Anfrage
+        // — `OHUBL_SetActive(bool)`, deren eigene Dedup-Erkennung ruft das
+        // direkt auf, ohne unseren `duplicateOf`-Vertrag kennen zu müssen).
+        // Unabhängig von IsDuplicate() oben — beide sperren gemeinsam über
+        // OCPPHubSplitter::isWriteBlocked().
+        $this->RegisterAttributeBoolean('ManuallyDeactivated', false);
+        // Gerätemerkmale aus BootNotification (13.09.2026, MeterHub-Anfrage
+        // für Dual-Writer-Erkennung) — vorher nur SendDebug(), nirgends
+        // gespeichert. IP steckt schon in SourceIP (siehe forwardSourceIp()).
+        $this->RegisterAttributeString('DeviceSerial', '');
+        $this->RegisterAttributeString('DeviceModel', '');
 
         // Eigenständiges Überschussladen als Fallback ohne EMS (Dietmars
         // Vorgabe, wie in ChargerHub) — Default aus, sicherer Opt-in.
@@ -532,13 +544,14 @@ class OCPPHubLadepunkt extends IPSModule
             return;
         }
 
-        // Dual-Writer-Zählung (13.09.2026): als Duplikat markierte Ladepunkte
-        // dürfen selbst nicht mehr schreiben, gleiches Sofort-Feedback-Muster
-        // wie oben beim Vorführmodus. Der Splitter prüft dasselbe nochmal
-        // direkt an der Absendestelle (siehe isDuplicateLadepunkt()) — hier
-        // nur für die schnelle Anzeige-Rückmeldung im Schalter selbst.
-        if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && $this->IsDuplicate()) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' als Duplikat markiert — Steuerbefehl „' . $Ident . '" abgelehnt.');
+        // Dual-Writer-Zählung (13.09.2026): als Duplikat markierte ODER
+        // manuell deaktivierte Ladepunkte dürfen selbst nicht mehr schreiben,
+        // gleiches Sofort-Feedback-Muster wie oben beim Vorführmodus. Der
+        // Splitter prüft dasselbe nochmal direkt an der Absendestelle (siehe
+        // isWriteBlocked()) — hier nur für die schnelle Anzeige-Rückmeldung
+        // im Schalter selbst.
+        if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && ($this->IsDuplicate() || $this->IsDeactivated())) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' ist gesperrt (Duplikat oder deaktiviert) — Steuerbefehl „' . $Ident . '" abgelehnt.');
             $this->SetValue($Ident, $this->GetValue($Ident));
             return;
         }
@@ -590,9 +603,18 @@ class OCPPHubLadepunkt extends IPSModule
 
     public function UpdateBootInfo(string $vendor, string $model, string $serial): void
     {
-        // Stufe 1: nur geloggt, keine eigenen Variablen dafür — Vendor/
-        // Model/Serial sind Diagnoseinfo, kein Regel-relevanter Wert.
         $this->SendDebug('OCPPHub Boot', "$vendor / $model / $serial", 0);
+        // Fund MeterHub 13.09.2026: Seriennummer/Modell landeten bisher NUR
+        // im flüchtigen Debug-Fenster — MeterHubVirtual braucht sie aber
+        // dauerhaft für die Dual-Writer-Erkennung (sonst nur unzuverlässiger
+        // Zählerstand-Vergleich). Vendor bleibt zentral beim Splitter
+        // (ChargePointVendor-Attribut, für den go-e-frc-Ausweichweg).
+        if ($serial !== '') {
+            $this->WriteAttributeString('DeviceSerial', $serial);
+        }
+        if ($model !== '') {
+            $this->WriteAttributeString('DeviceModel', $model);
+        }
     }
 
     public function UpdateStatus(string $ocppStatus, string $errorCode): void
@@ -1002,6 +1024,39 @@ class OCPPHubLadepunkt extends IPSModule
         return $this->ReadPropertyString('DuplicateOfSource') !== '' && $this->ReadPropertyInteger('DuplicateOfInstanceID') > 0;
     }
 
+    // Generischer Ein/Aus-Schalter (13.09.2026, MeterHubVirtual-Anfrage,
+    // `OHUBL_SetActive(bool)` — Symcon hängt $InstanceID automatisch vor
+    // diesen Parameter, siehe SUITE.md-Stolperstein „keine PHP-Standardwerte").
+    // Sperrt gemeinsam mit IsDuplicate() über OCPPHubSplitter::isWriteBlocked():
+    // ACKt das OCPP-Protokoll weiter normal, aber Authorize/StartTransaction
+    // wird `Blocked`, kein RemoteStart/SetCurrentLimit/Reset mehr von uns.
+    // Eine beim Abschalten bereits laufende Transaktion wird NICHT gestoppt
+    // (Dietmars Entscheidung über MeterHub, „zu Ende laden lassen") — ab dann
+    // nur keine neue Autorisierung/Steuerung mehr.
+    public function IsDeactivated(): bool
+    {
+        return $this->ReadAttributeBoolean('ManuallyDeactivated');
+    }
+
+    public function SetActive(bool $Active): string
+    {
+        $this->WriteAttributeBoolean('ManuallyDeactivated', !$Active);
+        if (!$Active) {
+            // MeterHub-Hinweis 13.09.2026 (Vergleich mit ChargerHubs eigenem
+            // Verhalten beim Abschalten): ein von UNS gesetztes go-e-
+            // FORCE_STATE-Lock darf den übernehmenden Kanal nicht blockieren
+            // — derselbe Ausweichweg wie beim Reset-Fallback, siehe
+            // OCPPHubSplitter::ClearGoeForceLock()/tryClearGoeForceLock().
+            $splitterId = $this->resolveSplitterId();
+            $cpid = $this->ReadPropertyString('CPID');
+            if ($splitterId > 0 && $cpid !== '') {
+                OHUB_ClearGoeForceLock($splitterId, $cpid);
+            }
+            return 'Deaktiviert — Ladepunkt schreibt nicht mehr an die Wallbox, eine bereits laufende Ladung wird nicht unterbrochen.';
+        }
+        return 'Aktiviert — Ladepunkt steuert/zählt wieder normal.';
+    }
+
     // Additiv im OHUB_GetFunctions-Vertrag (siehe GetContractEntry()): null/fehlend = zählt
     // normal, sonst {source, instanceID} — zeigt auf den Eintrag, der für Verbund-Konsumenten
     // stattdessen zählt. Feldname/-form mit MeterHub/ChargerHub abgestimmt (13.09.2026).
@@ -1131,7 +1186,7 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
         return [
-            'contractVersion'   => '1.4',
+            'contractVersion'   => '1.5',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
@@ -1149,6 +1204,11 @@ class OCPPHubLadepunkt extends IPSModule
             // — null/fehlend = zählt normal, sonst {source, instanceID} zeigt
             // auf den stattdessen zählenden Eintrag. Rein nutzergesetzt (siehe
             // IsDuplicate()), Konsumenten überspringen solche Einträge selbst.
+            // 1.5 (MeterHub-Abstimmung 13.09.2026, dieselbe Dual-Writer-
+            // Erkennung): deviceSerial/deviceIP additiv (aus BootNotification/
+            // Quell-IP, vorher nur intern) sowie active — verlässlichere
+            // Erkennung als der bloße Zählerstand-Vergleich. active = false
+            // sowohl bei IsDuplicate() als auch bei neuem OHUBL_SetActive(false).
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -1168,6 +1228,9 @@ class OCPPHubLadepunkt extends IPSModule
             'blockReasonID'     => $this->GetIDForIdent('block_reason'),
             'lastSeenAt'        => $this->ReadAttributeInteger('LastSeenAt'),
             'duplicateOf'       => $this->getDuplicateOfForContract(),
+            'deviceSerial'      => $this->ReadAttributeString('DeviceSerial'),
+            'deviceIP'          => $this->ReadAttributeString('SourceIP'),
+            'active'            => !$this->IsDuplicate() && !$this->IsDeactivated(),
         ];
     }
 

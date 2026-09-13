@@ -42,7 +42,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.20';
+    private const VERSION = '0.2.21';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -794,6 +794,15 @@ class OCPPHubSplitter extends IPSModule
     {
         $ladepunktId = $this->findLadepunkt($cpid);
 
+        // Schreibsperre (Duplikat/deaktiviert, siehe isWriteBlocked()) geht
+        // JEDER anderen Prüfung vor — ein gesperrter Ladepunkt darf auch
+        // keine neue Ladung autorisieren, unabhängig von Betriebsart/
+        // Reservierung/Kundenverwaltung.
+        if ($ladepunktId !== 0 && $this->isWriteBlocked($cpid)) {
+            OHUBL_ReportBlockedStart($ladepunktId, 'Dieser Ladepunkt ist deaktiviert oder als Duplikat markiert — eine andere Instanz ist zuständig.');
+            return 'Blocked';
+        }
+
         // Reservierung: außerhalb des berechtigten idTags -> Blocked (siehe
         // .docs/architektur.md „Reservierung"). Geht der Prüfung unten vor,
         // auch bei Betriebsart ①, weil eine Reservierung nur sinnvoll ist,
@@ -1072,16 +1081,21 @@ class OCPPHubSplitter extends IPSModule
         return 0;
     }
 
-    // Dual-Writer-Zählung (13.09.2026, Dietmars Entscheidung über EMS) — vor
-    // JEDEM echten Steuerbefehl geprüft (RemoteStart()/SetCurrentLimit()/
-    // Reset() unten), analog zur Vorführmodus-Sperre: ein als Duplikat
-    // markierter Ladepunkt (OCPPHubLadepunkt::IsDuplicate()) darf nicht mehr
-    // an die Wallbox schreiben, eine andere Instanz (ChargerHub oder ein
-    // anderer OCPPHub-Ladepunkt) ist dafür die zählende/steuernde.
-    private function isDuplicateLadepunkt(string $cpid): bool
+    // Schreibsperre für einen Ladepunkt — vor JEDEM echten Steuerbefehl UND
+    // vor jeder Authorize/StartTransaction-Prüfung geprüft, analog zur
+    // Vorführmodus-Sperre. Zwei unabhängige Auslöser, beide vom Nutzer
+    // gesetzt, nie automatisch:
+    // - OCPPHubLadepunkt::IsDuplicate() (13.09.2026, Dietmars Entscheidung
+    //   über EMS, Formularpanel „Doppelte Anbindung"): eine ANDERE, konkret
+    //   benannte Instanz zählt/steuert stattdessen.
+    // - OCPPHubLadepunkt::IsDeactivated() (13.09.2026, MeterHubVirtual-
+    //   Anfrage, `OHUBL_SetActive(false)`): generisches Abschalten ohne
+    //   Gegenstück-Zeiger, z. B. während Wartung oder Dedup-Auflösung ohne
+    //   dass MeterHubVirtual unseren `duplicateOf`-Vertrag kennen muss.
+    private function isWriteBlocked(string $cpid): bool
     {
         $ladepunktId = $this->findLadepunkt($cpid);
-        return $ladepunktId !== 0 && OHUBL_IsDuplicate($ladepunktId);
+        return $ladepunktId !== 0 && (OHUBL_IsDuplicate($ladepunktId) || OHUBL_IsDeactivated($ladepunktId));
     }
 
     // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
@@ -1171,8 +1185,8 @@ class OCPPHubSplitter extends IPSModule
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — RemoteStartTransaction [' . $cpid . '] unterdrückt, keine echte Ladesteuerung gesendet.');
             return;
         }
-        if ($this->isDuplicateLadepunkt($cpid)) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] als Duplikat markiert — RemoteStartTransaction unterdrückt, eine andere Instanz zählt/steuert.');
+        if ($this->isWriteBlocked($cpid)) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — RemoteStartTransaction unterdrückt.');
             return;
         }
         $this->sendCall($cpid, 'RemoteStartTransaction', ['connectorId' => 1, 'idTag' => $idTag]);
@@ -1196,8 +1210,8 @@ class OCPPHubSplitter extends IPSModule
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Reset [' . $cpid . '] unterdrückt.');
             return;
         }
-        if ($this->isDuplicateLadepunkt($cpid)) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] als Duplikat markiert — Reset unterdrückt.');
+        if ($this->isWriteBlocked($cpid)) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — Reset unterdrückt.');
             return;
         }
         $this->sendCall($cpid, 'Reset', ['type' => $Type]);
@@ -1230,6 +1244,18 @@ class OCPPHubSplitter extends IPSModule
     // (Float64-Register wie das Energie-Limit) — betrifft FORCE_STATE als
     // reines U16 vermutlich nicht, nur relevant, falls dieser Code je auf
     // weitere Register erweitert wird.
+    // Öffentlicher Zugriff für OCPPHubLadepunkt::SetActive() (13.09.2026,
+    // MeterHub-Hinweis nach Dietmars Entscheidung „zu Ende laden lassen"):
+    // beim Abschalten zugunsten eines anderen Kanals (typischerweise
+    // ChargerHub) denselben go-e-frc-Ausweichweg auslösen wie beim
+    // Reset-Ausweichweg — sonst könnte ein von UNS gesetztes FORCE_STATE-
+    // Lock den übernehmenden Kanal blockieren, exakt der Fehler aus der
+    // Nacht 01./02.09.2026 (siehe architektur.md „Root Cause").
+    public function ClearGoeForceLock(string $cpid): void
+    {
+        $this->tryClearGoeForceLock($cpid);
+    }
+
     private function tryClearGoeForceLock(string $cpid): void
     {
         $vendors = json_decode($this->ReadAttributeString('ChargePointVendor'), true);
@@ -1316,8 +1342,8 @@ class OCPPHubSplitter extends IPSModule
             IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — SetChargingProfile [' . $cpid . '] unterdrückt.');
             return;
         }
-        if ($this->isDuplicateLadepunkt($cpid)) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] als Duplikat markiert — SetChargingProfile unterdrückt.');
+        if ($this->isWriteBlocked($cpid)) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — SetChargingProfile unterdrückt.');
             return;
         }
         // TxDefaultProfile mit einer einzigen Periode — reicht für ein

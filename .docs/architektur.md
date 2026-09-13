@@ -1258,6 +1258,34 @@ zusätzlich verweigert unsere eigene Steuerung (`RemoteStart()`/`SetCurrentLimit
 auf diese Wallbox. Feldname/-form mit MeterHub/ChargerHub abgestimmt, ChargerHub bekommt
 dieselbe Erweiterung parallel.
 
+**1.5 (MeterHub-Abstimmung 13.09.2026, MeterHubVirtual 0.28.0-beta.1 gebaut, jetzt
+gegenseitig verzahnt).** `deviceSerial`/`deviceIP` additiv — Seriennummer aus
+`BootNotification` (vorher nur `SendDebug()`, jetzt `DeviceSerial`-Attribut) und die
+schon vorhandene Quell-IP (`SourceIP`), für MeterHubVirtuals Dual-Writer-Erkennung
+zuverlässiger als der reine Zählerstand-Vergleich. `active` additiv (`bool`,
+`!IsDuplicate() && !IsDeactivated()`) — Bequemlichkeitsfeld für Konsumenten, die nur
+"zählt/steuert das gerade" wissen wollen, ohne `duplicateOf` selbst auszuwerten. Dazu
+neue Backend-Funktion `OHUBL_SetActive(bool): string` (Symcon hängt `$InstanceID`
+automatisch voran) — generischer Ein/Aus-Schalter ohne Gegenstück-Instanz zu benennen,
+MeterHubVirtual ruft das direkt nach Nutzerwahl auf. Sperrt gemeinsam mit `IsDuplicate()`
+über `OCPPHubSplitter::isWriteBlocked()`: OCPP-Protokoll wird weiter normal ACKt,
+Authorize/StartTransaction wird `Blocked` (`checkIdTagInternal()`, geht JEDER anderen
+Prüfung inkl. Reservierung/Betriebsart vor), kein RemoteStart/SetCurrentLimit/Reset mehr.
+**Laufende Ladung beim Abschalten**: NICHT stoppen (Dietmars Entscheidung über MeterHub,
+„zu Ende laden lassen, die kurzen zwei offenen Kanäle nimmt er in Kauf") — ab dann nur
+keine neue Autorisierung/Steuerung mehr, konsistent mit der schon etablierten Regel
+„abgelehnt/abgeschaltet darf eine laufende Ladung nicht abwürgen". Zusätzlich (MeterHub-
+Vergleich mit ChargerHubs eigenem Abschalt-Verhalten): `SetActive(false)` löst denselben
+go-e-frc-Ausweichweg aus wie der Reset-Fallback (`OCPPHubSplitter::ClearGoeForceLock()`,
+öffentlicher Wrapper um `tryClearGoeForceLock()`) — ein von uns gesetztes FORCE_STATE-
+Lock darf den übernehmenden Kanal (z. B. ChargerHub) nicht blockieren.
+**Korrektur einer eigenen Fehlkommunikation**: in einer früheren Cross-Session-Antwort an
+MeterHub hatte ich „Ladepunkt fällt komplett aus `OHUB_GetFunctions()` raus" als
+Abschalt-Verhalten skizziert — das war meine eigene, noch unabgestimmte Vermutung, BEVOR
+Dietmars tatsächliche `duplicateOf`-Entscheidung (1.4 oben) feststand. Die Entscheidung
+war leichtgewichtiger (Eintrag bleibt sichtbar, nur geflaggt) — MeterHub wurde das
+richtiggestellt, bevor deren 0.28.1 das falsch übernimmt.
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils

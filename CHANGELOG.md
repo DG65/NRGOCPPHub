@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.19 (13.09.2026)
+
+**MeterHub-Abstimmung, Anschluss an Dual-Writer-Zählung**: MeterHubVirtual (0.28.0-beta.1)
+ist gebaut und will andocken. Zwei konkrete Ergänzungen:
+
+**Splitter 0.2.21 / Ladepunkt 0.2.19**: neue Backend-Funktion `OHUBL_SetActive(bool):
+string` — generischer Ein/Aus-Schalter für MeterHubVirtuals Dedup-Erkennung, ohne dass
+diese unseren `duplicateOf`-Vertrag kennen muss. Sperrt (gemeinsam mit `IsDuplicate()`)
+Authorize/StartTransaction (`Blocked`, geht jeder anderen Prüfung vor) und
+RemoteStart/SetCurrentLimit/Reset. Eine beim Abschalten bereits laufende Ladung wird
+NICHT gestoppt (Dietmars Entscheidung: „zu Ende laden lassen"). Löst außerdem denselben
+go-e-frc-Ausweichweg wie der Reset-Fallback aus, damit ein eigenes FORCE_STATE-Lock den
+übernehmenden Kanal nicht blockiert. Zusätzlich additiv im Vertrag (contractVersion
+1.4→1.5): `deviceSerial`/`deviceIP` (aus BootNotification/Quell-IP, vorher nur intern)
+und `active` — zuverlässigere Dual-Writer-Erkennung als der bloße Zählerstand-Vergleich.
+
+**Korrektur einer eigenen Fehlkommunikation**: hatte MeterHub in einer früheren, noch
+unabgestimmten Antwort „Ladepunkt fällt komplett aus `OHUB_GetFunctions()` raus"
+skizziert — Dietmars tatsächliche Entscheidung (0.6.18, `duplicateOf`) ist
+leichtgewichtiger, der Eintrag bleibt sichtbar. Richtiggestellt, bevor MeterHubs 0.28.1
+das falsch übernimmt.
+
+Noch NICHT auf Dietmars Live-System nachgezogen.
+
 ## 0.6.18 (13.09.2026)
 
 **Dual-Writer-Zählung — Dietmars Entscheidung über die EMS-Sitzung**: bei ihm hängt
