@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.17 (13.09.2026)
+
+**Neue Verbund-Regel 9b (SUITE.md-Store-Checkliste, per EMS verteilt)**: nutzersichtbare
+Datumsangaben im Format TT.MM.JJJJ, nie ISO (JJJJ-MM-TT). Quick-Check gegen die eigenen
+Module: `reserved_until` (Ladepunkt, sichtbar in Konsole/Objektbaum) zeigte bisher
+`Y-m-d H:i`.
+
+**Ladepunkt 0.2.17**: `reserved_until` zeigt jetzt `d.m.Y H:i`. Reiner Anzeigewert (die
+tatsächliche Reservierungszeit steckt im internen `ReservedUntilTs`-Attribut, wird
+nirgends zurückgeparst) — risikolose Änderung. Der `validUntil`-Eingabeplatzhalter in der
+Abrechnung-Kachel („JJJJ-MM-TT") bleibt vorerst unverändert (TODO, kein Eilbedarf laut
+EMS) — dort steckt das Feld in echter Vergleichslogik (Ablaufdatum-Prüfung), eine
+Umstellung braucht abwärtskompatibles Einlesen bestehender Werte, kein Ein-Zeilen-Fix.
+
 ## 0.6.16 (12.09.2026)
 
 **ChargerHub-Abstimmung**: nach dem `ocpp_connected`-Fund fragte ChargerHub an, ob wir

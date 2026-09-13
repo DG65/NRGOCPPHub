@@ -28,7 +28,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.16';
+    private const VERSION = '0.2.17';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -1006,7 +1006,10 @@ class OCPPHubLadepunkt extends IPSModule
         $this->WriteAttributeInteger('ReservedUntilTs', $untilTs);
         $this->WriteAttributeInteger('ReservationId', $reservationId);
         $this->SetValue('reserved_by', $IdTag);
-        $this->SetValue('reserved_until', date('Y-m-d H:i', $untilTs));
+        // Verbund-Regel 9b (13.09.2026): nutzersichtbare Datumsanzeigen TT.MM.JJJJ,
+        // nicht ISO — reiner Anzeigewert, die eigentliche Zeit steckt in
+        // ReservedUntilTs (Unix-Timestamp), wird hier nirgends zurückgeparst.
+        $this->SetValue('reserved_until', date('d.m.Y H:i', $untilTs));
         return true;
     }
 
