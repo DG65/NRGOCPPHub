@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.20 (13.09.2026)
+
+**Korrektur: `duplicateOf` betrifft nur das Zählen, nicht das Schreiben.** Zwei Sitzungen
+schickten kurz nacheinander widersprüchliche „Dietmar hat entschieden"-Aussagen (EMS:
+Zählen/Schreiben orthogonal; MeterHub: Duplikat = auch keine Steuerung mehr) — beide
+ehrlich relayed, reine zeitliche Drift zwischen zwei parallelen Gesprächen. Zweimal direkt
+bei Dietmar nachgefragt statt selbst zu entscheiden. Endgültig: EMS hatte recht.
+
+**Splitter 0.2.22 / Ladepunkt 0.2.20**: `isWriteBlocked()` hängt jetzt nur noch an
+externer Steuerhoheit (`managedBy` != `none`/`ems`) und `OHUBL_SetActive(false)` —
+`IsDuplicate()` löst keine Schreibsperre mehr aus. Ein als Duplikat markierter Eintrag
+kann trotzdem der Regler sein (Dietmars WB1: OCPP zählt, ChargerHub regelt). Neues
+Sicherheitsnetz (SUITE.md Regel 9f): hat ein Ladepunkt `duplicateOf` gesetzt und sowohl
+er selbst als auch die als zählend gewählte Zielinstanz stehen noch auf „Niemand regelt",
+zeigt die Instanz einen Warnstatus „Zwei Regler an einer Wallbox" (205), bis der Nutzer
+„Wer regelt?" irgendwo umstellt — fängt den „markiert, aber vergessen umzustellen"-Fall
+ab. Formular/NEWS-Texte korrigiert, `duplicateOf`/`active`-Feldkommentare richtiggestellt.
+
+Noch NICHT auf Dietmars Live-System nachgezogen.
+
 ## 0.6.19 (13.09.2026)
 
 **MeterHub-Abstimmung, Anschluss an Dual-Writer-Zählung**: MeterHubVirtual (0.28.0-beta.1)

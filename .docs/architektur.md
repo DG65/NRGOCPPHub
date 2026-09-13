@@ -1286,6 +1286,40 @@ Dietmars tatsächliche `duplicateOf`-Entscheidung (1.4 oben) feststand. Die Ents
 war leichtgewichtiger (Eintrag bleibt sichtbar, nur geflaggt) — MeterHub wurde das
 richtiggestellt, bevor deren 0.28.1 das falsch übernimmt.
 
+**Endgültige Korrektur zu 1.4/1.5 (13.09.2026, mehrere Cross-Session-Runden, am Ende
+zweimal direkt bei Dietmar nachgefragt): `duplicateOf` betrifft NUR das Zählen, NICHT das
+Schreiben.** Kurzer, für den Verbund lehrreicher Vorfall: erst korrigierte sich EMS selbst
+(„duplicateOf ist rein Zählung, Schreibsperre gehört zu managedBy") — praktisch zeitgleich
+schickte MeterHub das Gegenteil, ebenfalls unter Berufung auf eine frische
+Dietmar-Entscheidung. Beide Cross-Session-Nachrichten waren ehrlich relayed, reine
+zeitliche Drift zwischen zwei parallel laufenden Gesprächen. NICHT selbst per Heuristik
+entschieden (z. B. "neuere Nachricht gewinnt"), sondern zweimal direkt bei Dietmar
+nachgefragt — die erste Nachfrage ergab „Duplikat markiert = auch keine Steuerung mehr",
+die zweite (nachdem EMS eine finale, von Dietmar angeblich freigegebene Entscheidung
+nachreichte) ergab das GEGENTEIL: **„Ja, das stimmt so"** zu EMS' Vorschlag. Endgültig:
+- `duplicateOf` gesetzt ⇒ Eintrag bleibt in `OHUB_GetFunctions()` sichtbar, Konsumenten
+  überspringen ihn bei der Zählung — KEINE Wirkung mehr auf `isWriteBlocked()`.
+- Wer schreiben darf, entscheidet ausschließlich `ManagedBy` (`externallyManaged`-Ableitung:
+  alles außer `'none'`/`'ems'` blockiert) plus `IsDeactivated()`
+  (`OHUBL_SetActive(false)`). Bei Dietmars WB1 z. B.: OCPP zählt (`duplicateOf` NICHT
+  gesetzt auf unserer Seite), ChargerHub regelt (`managedBy='other'` auf unserer Seite) —
+  zwei unabhängige, orthogonale Tatsachen, beide gleichzeitig wahr.
+- **Neues Sicherheitsnetz (SUITE.md Regel 9f)**: hat ein Ladepunkt `duplicateOf` gesetzt
+  UND sein eigenes `ManagedBy` steht weiterhin auf `none`/`ems` UND die als zählend
+  gewählte Zielinstanz hat ebenfalls `managedBy` auf `none`/`ems` (per `OHUBL_GetContractEntry()`
+  bzw. — mit `function_exists`-Wächter — `CHUB_GetFunctions()` geprüft) — dann könnten
+  BEIDE Seiten gleichzeitig schreiben, der klassische „markiert, aber vergessen
+  umzustellen"-Fall. Echter Warnstatus (>200, `OCPPHubLadepunkt::STATUS_DUPLICATE_CONFLICT`
+  = 205, „Zwei Regler an einer Wallbox"), NICHT der 9d-Park-Status 104 — das ist ein
+  Konfigurationsmangel, kein passiver Ruhezustand. Neu berechnet bei jedem
+  `ApplyChanges()` UND alle 60s über `ConnectivityTimer`/`CheckConnectivity()`
+  (`refreshDuplicateConflictStatus()`), da sich die Zielinstanz unabhängig ändern kann.
+  Zielinstanz nicht erreichbar/unbekannt ⇒ kein Fehlalarm (fail-quiet).
+**Lehre für den ganzen Verbund**: bei zwei widersprüchlichen Cross-Session-Nachrichten, die
+beide „Dietmar hat entschieden" behaupten, NIE selbst per Heuristik auflösen — der
+Zwischenstopp bei der eigentlichen Entscheidungsperson kostet eine Runde, verhindert aber
+zuverlässig, dass ein Modul die falsche Version baut.
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils

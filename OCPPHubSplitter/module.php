@@ -42,7 +42,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.21';
+    private const VERSION = '0.2.22';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -1083,19 +1083,27 @@ class OCPPHubSplitter extends IPSModule
 
     // Schreibsperre für einen Ladepunkt — vor JEDEM echten Steuerbefehl UND
     // vor jeder Authorize/StartTransaction-Prüfung geprüft, analog zur
-    // Vorführmodus-Sperre. Zwei unabhängige Auslöser, beide vom Nutzer
-    // gesetzt, nie automatisch:
-    // - OCPPHubLadepunkt::IsDuplicate() (13.09.2026, Dietmars Entscheidung
-    //   über EMS, Formularpanel „Doppelte Anbindung"): eine ANDERE, konkret
-    //   benannte Instanz zählt/steuert stattdessen.
-    // - OCPPHubLadepunkt::IsDeactivated() (13.09.2026, MeterHubVirtual-
-    //   Anfrage, `OHUBL_SetActive(false)`): generisches Abschalten ohne
-    //   Gegenstück-Zeiger, z. B. während Wartung oder Dedup-Auflösung ohne
-    //   dass MeterHubVirtual unseren `duplicateOf`-Vertrag kennen muss.
+    // Vorführmodus-Sperre.
+    // KORRIGIERT 13.09.2026 (EMS' endgültige Entscheidung, von Dietmar direkt
+    // bestätigt, NACHDEM `duplicateOf` kurzzeitig hier mit reingezählt hatte):
+    // Zählen (`duplicateOf`) und Schreiben sind orthogonale Fragen. Wer
+    // schreibt, entscheidet AUSSCHLIESSLICH `managedBy` (über die schon
+    // vorhandene `externallyManaged`-Ableitung: alles außer 'none'/'ems')
+    // plus unsere eigene Deaktivierung. Bei Dietmars WB1 z. B. misst OCPP
+    // (duplicateOf NICHT gesetzt auf unserer Seite), geregelt wird aber über
+    // ChargerHub (managedBy='other' auf unserer Seite) — zwei unabhängige
+    // Tatsachen.
     private function isWriteBlocked(string $cpid): bool
     {
         $ladepunktId = $this->findLadepunkt($cpid);
-        return $ladepunktId !== 0 && (OHUBL_IsDuplicate($ladepunktId) || OHUBL_IsDeactivated($ladepunktId));
+        if ($ladepunktId === 0) {
+            return false;
+        }
+        if (OHUBL_IsDeactivated($ladepunktId)) {
+            return true;
+        }
+        $entry = OHUBL_GetContractEntry($ladepunktId);
+        return (bool)($entry['externallyManaged'] ?? false);
     }
 
     // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung

@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.19';
+    private const VERSION = '0.2.20';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.19';
+    private const NEWS_VERSION = '0.2.20';
     private const NEWS_ITEMS = [
+        'Korrektur zu „Doppelte Anbindung" (endgültige, von Dietmar direkt bestätigte Entscheidung): `duplicateOf` betrifft NUR die Verbrauchszählung, NICHT mehr das Schreiben — ein als Duplikat markierter Eintrag kann trotzdem der Regler sein (z. B. misst OCPP bei WB1, geregelt wird aber über ChargerHub). Ob dieser Ladepunkt an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" (`ManagedBy`) bzw. `OHUBL_SetActive()`. Neues Sicherheitsnetz: stehen sowohl hier „Wer regelt?" auf „Niemand" als auch bei der als zählend gewählten Instanz kein externes Lastmanagement, zeigt die Instanz einen Warnstatus „Zwei Regler an einer Wallbox", bis das aufgelöst ist — verhindert den „Duplikat markiert, aber Steuerhoheit zu stellen vergessen"-Fall.',
         'Neu: `OHUBL_SetActive(bool)` — Backend-Funktion für MeterHubVirtuals Dual-Writer-Erkennung, ergänzt „Doppelte Anbindung" um einen generischen Ein/Aus-Schalter (ohne Gegenstück-Instanz benennen zu müssen). Deaktiviert: Ladepunkt schreibt nicht mehr an die Wallbox (Authorize/RemoteStart/Stromlimit/Reset), eine bereits laufende Ladung wird NICHT unterbrochen (Dietmars Entscheidung). Zusätzlich `deviceSerial`/`deviceIP`/`active` additiv im Vertrag (aus BootNotification/Quell-IP, vorher nur intern) — zuverlässigere Dual-Writer-Erkennung als der bloße Zählerstand-Vergleich.',
         'Neu: 🔀 „Doppelte Anbindung" — Dietmars Entscheidung (über die EMS-Sitzung): hängt dieselbe Wallbox zusätzlich an einem anderen Verbund-Modul (z. B. gleichzeitig als ChargerHub-Instanz), kann hier eingetragen werden, welcher der beiden Einträge zählt. Der als Duplikat markierte Ladepunkt schreibt ab dann nicht mehr an die Wallbox (Ladefreigabe/Stromlimit/Reset), bleibt aber lesbar — Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn selbst bei der Verbrauchszählung (neues Vertragsfeld `duplicateOf`, contractVersion 1.3→1.4).',
         'Neu: `ocpp_connected` — zeigt, ob diese Wallbox innerhalb der letzten 15 Minuten irgendeine OCPP-Nachricht geschickt hat (Fund von ChargerHub: eine bereits angelegte Ladepunkt-Instanz hatte bislang KEINE Verbindungsüberwachung mehr, weder sichtbar noch mit Alterungsprüfung — Werte konnten tagelang eingefroren sein, ohne dass es auffiel).',
@@ -114,27 +115,33 @@ class OCPPHubLadepunkt extends IPSModule
 
         // Dual-Writer-Zählung (13.09.2026, Dietmars Entscheidung über EMS,
         // Anlass: dieselbe Wallbox hängt bei ihm doppelt — hier als
-        // OCPPHub-Ladepunkt UND als eigene ChargerHub-Instanz). Anders als
-        // `ManagedBy` (wer STEUERT den Ladestrom) geht es hier NUR um
-        // Verbrauchs-ZÄHLUNG: welcher der beiden Verbund-Einträge für
-        // EMS/MeterHub/Dashboard als maßgeblich gilt, damit dieselbe
-        // physische kWh nicht doppelt in eine Summe einfließt. Rein
-        // Nutzer-gesetzt, NIE automatisch (siehe SetDuplicateOf() unten
-        // — es gibt bewusst KEINEN automatischen Erkennungsmechanismus,
-        // das wäre Verbund-Regel-1-Verletzung/Rollenduplikat, siehe
-        // MeterHubVirtual). Gesetzt bedeutet: der Eintrag bleibt zwar in
-        // `OHUB_GetFunctions()` sichtbar (trägt jetzt `duplicateOf`),
-        // Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst
-        // bei der Zählung. Zusätzlich schreibt unsere eigene Steuerung
-        // (RemoteStart/SetCurrentLimit/Reset) ab dann nicht mehr an diese
-        // Wallbox — siehe OCPPHubSplitter::isDuplicateLadepunkt().
+        // OCPPHub-Ladepunkt UND als eigene ChargerHub-Instanz).
+        // KORRIGIERT 13.09.2026 (EMS' endgültige Entscheidung, von Dietmar
+        // direkt bestätigt): betrifft NUR die Verbrauchs-ZÄHLUNG, nicht die
+        // Steuerung — Zählen und Schreiben sind orthogonale Fragen. Wer
+        // tatsächlich an die Wallbox schreiben darf, entscheidet
+        // ausschließlich `ManagedBy` (siehe isWriteBlocked() am Splitter)
+        // plus `ManuallyDeactivated` unten. Ein als Duplikat markierter
+        // Eintrag kann also trotzdem der Regler sein (z. B. Dietmars WB1:
+        // OCPP zählt, ChargerHub regelt). Rein Nutzer-gesetzt über das
+        // Formularpanel, NIE automatisch erkannt (Verbund-Regel-1-
+        // Verletzung/Rollenduplikat sonst, siehe MeterHubVirtual). Gesetzt
+        // bedeutet: der Eintrag bleibt in `OHUB_GetFunctions()` sichtbar
+        // (trägt jetzt `duplicateOf`), Konsumenten (EMS/MeterHub/Dashboard)
+        // überspringen ihn selbst bei der Zählung. Sicherheitsnetz gegen den
+        // „vergessen, ManagedBy auch umzustellen"-Fall: siehe
+        // refreshDuplicateConflictStatus()/hasDuplicateWriteConflict()
+        // unten (SUITE.md Regel 9f).
         $this->RegisterPropertyString('DuplicateOfSource', '');
         $this->RegisterPropertyInteger('DuplicateOfInstanceID', 0);
         // Generischer Ein/Aus-Schalter (13.09.2026, MeterHubVirtual-Anfrage
-        // — `OHUBL_SetActive(bool)`, deren eigene Dedup-Erkennung ruft das
-        // direkt auf, ohne unseren `duplicateOf`-Vertrag kennen zu müssen).
-        // Unabhängig von IsDuplicate() oben — beide sperren gemeinsam über
-        // OCPPHubSplitter::isWriteBlocked().
+        // — `OHUBL_SetActive(bool)`). MeterHubVirtual selbst ruft das laut
+        // eigener Aussage NICHT auf (nutzt nur `duplicateOf`, „damit die
+        // Entscheidung nur einen Ort hat") — bleibt trotzdem als generische
+        // Backend-Funktion bestehen, z. B. für Wartungsfälle ohne
+        // Gegenstück-Instanz. Sperrt zusammen mit externer Steuerhoheit
+        // (`ManagedBy` != none/ems) über OCPPHubSplitter::isWriteBlocked() —
+        // NICHT mehr zusammen mit IsDuplicate() (siehe Korrektur oben).
         $this->RegisterAttributeBoolean('ManuallyDeactivated', false);
         // Gerätemerkmale aus BootNotification (13.09.2026, MeterHub-Anfrage
         // für Dual-Writer-Erkennung) — vorher nur SendDebug(), nirgends
@@ -241,6 +248,12 @@ class OCPPHubLadepunkt extends IPSModule
         // gekoppelt.
         $this->SetTimerInterval('ConnectivityTimer', 60000);
         $this->SetStatus(102);
+        // Sofortiges Feedback nach dem Speichern (nicht erst nach bis zu 60s
+        // Timer-Wartezeit) — nur im laufenden Kernel-Betrieb, siehe
+        // CheckConnectivity()/Update() für dasselbe Boot-Timing-Muster.
+        if (IPS_GetKernelRunlevel() === KR_READY) {
+            $this->refreshDuplicateConflictStatus();
+        }
     }
 
     // 200ms nach ApplyChanges (Muster wie ChargerHub/InverterHub, siehe
@@ -325,7 +338,8 @@ class OCPPHubLadepunkt extends IPSModule
                             ],
                         ],
                         ['type' => 'SelectInstance', 'name' => 'DuplicateOfInstanceID', 'caption' => 'Zählende Instanz (bei „ChargerHub"/„OCPPHub" oben, sonst ignoriert)'],
-                        ['type' => 'Label', 'caption' => '⚠️ Wirkung, sobald hier etwas ausgewählt ist: der Eintrag bleibt zwar in `OHUB_GetFunctions()` sichtbar (trägt jetzt das Feld `duplicateOf`), Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst bei der Verbrauchszählung. Zusätzlich schreibt unsere eigene Steuerung (Ladefreigabe/Stromlimit/Reset, egal ob manuell oder automatisch) ab dann nicht mehr an diese Wallbox — nur noch Lesen. Die oben gewählte „zählende Instanz" bleibt die einzig aktive.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Wirkung, sobald hier etwas ausgewählt ist: der Eintrag bleibt in `OHUB_GetFunctions()` sichtbar (trägt jetzt das Feld `duplicateOf`), Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst bei der Verbrauchszählung. Betrifft NUR das Zählen — ob dieser Ladepunkt weiterhin an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" oben (bzw. `OHUBL_SetActive()`).'],
+                        ['type' => 'Label', 'caption' => '⚠️ Deshalb wichtig: steht „Wer regelt?" oben weiterhin auf „Niemand" UND die als zählend gewählte Instanz regelt ebenfalls selbst (kein externes Lastmanagement dort eingetragen), könnten beide Seiten gleichzeitig schreiben. Für genau diesen vergessenen Fall zeigt die Instanz dann einen Warnstatus („Zwei Regler an einer Wallbox"), bis „Wer regelt?" hier oder dort auf einen externen Wert gestellt wird.'],
                     ],
                 ],
                 [
@@ -544,14 +558,15 @@ class OCPPHubLadepunkt extends IPSModule
             return;
         }
 
-        // Dual-Writer-Zählung (13.09.2026): als Duplikat markierte ODER
-        // manuell deaktivierte Ladepunkte dürfen selbst nicht mehr schreiben,
-        // gleiches Sofort-Feedback-Muster wie oben beim Vorführmodus. Der
-        // Splitter prüft dasselbe nochmal direkt an der Absendestelle (siehe
-        // isWriteBlocked()) — hier nur für die schnelle Anzeige-Rückmeldung
-        // im Schalter selbst.
-        if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && ($this->IsDuplicate() || $this->IsDeactivated())) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' ist gesperrt (Duplikat oder deaktiviert) — Steuerbefehl „' . $Ident . '" abgelehnt.');
+        // Schreibsperre (13.09.2026, EMS' endgültige Entscheidung): externe
+        // Steuerhoheit (managedBy != none/ems) ODER manuell deaktiviert.
+        // NICHT mehr IsDuplicate() — Zählen und Schreiben sind orthogonal,
+        // siehe OCPPHubSplitter::isWriteBlocked(). Gleiches Sofort-Feedback-
+        // Muster wie oben beim Vorführmodus; der Splitter prüft dasselbe
+        // nochmal direkt an der Absendestelle.
+        $externallyManaged = !in_array($this->ReadPropertyString('ManagedBy'), ['none', 'ems'], true);
+        if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && ($externallyManaged || $this->IsDeactivated())) {
+            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' ist gesperrt (externe Steuerhoheit oder deaktiviert) — Steuerbefehl „' . $Ident . '" abgelehnt.');
             $this->SetValue($Ident, $this->GetValue($Ident));
             return;
         }
@@ -798,6 +813,63 @@ class OCPPHubLadepunkt extends IPSModule
         if ($this->GetValue('ocpp_connected') !== $connected) {
             $this->SetValue('ocpp_connected', $connected);
         }
+        $this->refreshDuplicateConflictStatus();
+    }
+
+    // Sicherheitsnetz gegen den „markiert, aber vergessen umzustellen"-Fall
+    // (13.09.2026, SUITE.md Regel 9f, EMS' endgültige Entscheidung): seit
+    // `duplicateOf` NICHT mehr selbst die Schreibsperre auslöst (siehe
+    // OCPPHubSplitter::isWriteBlocked()), muss der Nutzer bei einer als
+    // Duplikat markierten Instanz SELBST auch „Wer regelt?" umstellen —
+    // sonst könnten beide Seiten (dieser Ladepunkt UND das Ziel) gleichzeitig
+    // schreiben. Zeigt einen echten Warnstatus (>200, siehe SUITE.md 9f,
+    // NICHT 9d — das hier ist ein Konfigurationsmangel, kein geparkter
+    // Zustand), solange der Widerspruch besteht.
+    private const STATUS_DUPLICATE_CONFLICT = 205;
+
+    private function refreshDuplicateConflictStatus(): void
+    {
+        if ($this->ReadPropertyString('CPID') === '') {
+            return; // Instanz ohnehin auf 104 (inaktiv), nichts zu prüfen
+        }
+        $this->SetStatus($this->hasDuplicateWriteConflict() ? self::STATUS_DUPLICATE_CONFLICT : 102);
+    }
+
+    // Liest den Zieleintrag des eigenen `duplicateOf` (ChargerHub oder eine
+    // andere OCPPHub-Instanz) und prüft dessen `managedBy`. Sind BEIDE Seiten
+    // (wir UND das Ziel) auf 'none'/'ems' — also beide der Meinung, selbst
+    // schreiben zu dürfen — ist das der gefährliche Doppel-Schreiber-Fall.
+    // Zielinstanz nicht erreichbar/unbekannt -> kein Fehlalarm (fail-quiet,
+    // wie die übrigen Diagnose-Features in diesem Modul).
+    private function hasDuplicateWriteConflict(): bool
+    {
+        if (!$this->IsDuplicate()) {
+            return false;
+        }
+        $ownManagedBy = $this->ReadPropertyString('ManagedBy');
+        if (in_array($ownManagedBy, ['none', 'ems'], true) === false) {
+            return false; // wir selbst sind schon delegiert, kein Risiko
+        }
+        $source = $this->ReadPropertyString('DuplicateOfSource');
+        $targetId = $this->ReadPropertyInteger('DuplicateOfInstanceID');
+        if ($targetId <= 0 || !@IPS_InstanceExists($targetId)) {
+            return false;
+        }
+        $targetManagedBy = null;
+        if ($source === 'ocpphub') {
+            $targetManagedBy = OHUBL_GetContractEntry($targetId)['managedBy'] ?? null;
+        } elseif ($source === 'chargerhub' && function_exists('CHUB_GetFunctions')) {
+            try {
+                $entries = CHUB_GetFunctions($targetId);
+                $targetManagedBy = (is_array($entries) && isset($entries[0])) ? ($entries[0]['managedBy'] ?? null) : null;
+            } catch (\Throwable $e) {
+                $targetManagedBy = null;
+            }
+        }
+        if ($targetManagedBy === null) {
+            return false;
+        }
+        return in_array($targetManagedBy, ['none', 'ems'], true);
     }
 
     // Cross-Hub-Erkennung (Live-Fund 01.09.2026, siehe .docs/architektur.md
@@ -1015,10 +1087,10 @@ class OCPPHubLadepunkt extends IPSModule
         return (int)$this->GetValue('state');
     }
 
-    // Dual-Writer-Zählung (13.09.2026, siehe RegisterPropertyString('DuplicateOfSource', ...)
-    // in Create()) — vom Splitter vor jedem RemoteStart()/SetCurrentLimit()/Reset() geprüft
-    // (siehe OCPPHubSplitter::isDuplicateLadepunkt()), damit ein als Duplikat markierter
-    // Ladepunkt nicht mehr an die Wallbox schreibt.
+    // Dual-Writer-ZÄHLUNG (13.09.2026, siehe RegisterPropertyString('DuplicateOfSource', ...)
+    // in Create()) — betrifft NUR, ob dieser Eintrag von Verbund-Konsumenten mitgezählt wird
+    // (siehe getDuplicateOfForContract()). KEINE Wirkung auf das Schreiben — dafür ist
+    // ausschließlich `ManagedBy` zuständig, siehe OCPPHubSplitter::isWriteBlocked().
     public function IsDuplicate(): bool
     {
         return $this->ReadPropertyString('DuplicateOfSource') !== '' && $this->ReadPropertyInteger('DuplicateOfInstanceID') > 0;
@@ -1027,8 +1099,9 @@ class OCPPHubLadepunkt extends IPSModule
     // Generischer Ein/Aus-Schalter (13.09.2026, MeterHubVirtual-Anfrage,
     // `OHUBL_SetActive(bool)` — Symcon hängt $InstanceID automatisch vor
     // diesen Parameter, siehe SUITE.md-Stolperstein „keine PHP-Standardwerte").
-    // Sperrt gemeinsam mit IsDuplicate() über OCPPHubSplitter::isWriteBlocked():
-    // ACKt das OCPP-Protokoll weiter normal, aber Authorize/StartTransaction
+    // Sperrt zusammen mit externer Steuerhoheit (ManagedBy != none/ems) über
+    // OCPPHubSplitter::isWriteBlocked(): ACKt das OCPP-Protokoll weiter
+    // normal, aber Authorize/StartTransaction
     // wird `Blocked`, kein RemoteStart/SetCurrentLimit/Reset mehr von uns.
     // Eine beim Abschalten bereits laufende Transaktion wird NICHT gestoppt
     // (Dietmars Entscheidung über MeterHub, „zu Ende laden lassen") — ab dann
@@ -1185,6 +1258,7 @@ class OCPPHubLadepunkt extends IPSModule
     public function GetContractEntry(): array
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
+        $externallyManaged = !in_array($managedBy, ['none', 'ems'], true);
         return [
             'contractVersion'   => '1.5',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
@@ -1203,12 +1277,15 @@ class OCPPHubLadepunkt extends IPSModule
             // Zählung): duplicateOf additiv, feldgleich zu CHUB_GetFunctions
             // — null/fehlend = zählt normal, sonst {source, instanceID} zeigt
             // auf den stattdessen zählenden Eintrag. Rein nutzergesetzt (siehe
-            // IsDuplicate()), Konsumenten überspringen solche Einträge selbst.
+            // IsDuplicate()), betrifft NUR das Zählen (EMS' endgültige
+            // Korrektur, von Dietmar bestätigt) — NICHT das Schreiben, siehe
+            // `active`/`externallyManaged` unten für die Schreibfrage.
             // 1.5 (MeterHub-Abstimmung 13.09.2026, dieselbe Dual-Writer-
             // Erkennung): deviceSerial/deviceIP additiv (aus BootNotification/
             // Quell-IP, vorher nur intern) sowie active — verlässlichere
             // Erkennung als der bloße Zählerstand-Vergleich. active = false
-            // sowohl bei IsDuplicate() als auch bei neuem OHUBL_SetActive(false).
+            // bei externer Steuerhoheit (managedBy != none/ems) ODER
+            // OHUBL_SetActive(false) — NICHT bei IsDuplicate().
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -1221,7 +1298,7 @@ class OCPPHubLadepunkt extends IPSModule
             'minCurrent'        => $this->ReadPropertyInteger('MinCurrent'),
             'maxCurrent'        => $this->ReadPropertyInteger('MaxCurrent'),
             'managedBy'         => $managedBy,
-            'externallyManaged' => !in_array($managedBy, ['none', 'ems'], true),
+            'externallyManaged' => $externallyManaged,
             'vehicleNameID'     => $this->GetIDForIdent('vehicle_name'),
             'transport'         => 'ocpp',
             'ocppVersion'       => '1.6',
@@ -1230,7 +1307,11 @@ class OCPPHubLadepunkt extends IPSModule
             'duplicateOf'       => $this->getDuplicateOfForContract(),
             'deviceSerial'      => $this->ReadAttributeString('DeviceSerial'),
             'deviceIP'          => $this->ReadAttributeString('SourceIP'),
-            'active'            => !$this->IsDuplicate() && !$this->IsDeactivated(),
+            // KORRIGIERT 13.09.2026: `active` = schreibt dieser Eintrag
+            // gerade an die Wallbox — hängt NICHT mehr an IsDuplicate()
+            // (Zählen/Schreiben sind orthogonal), sondern an genau denselben
+            // zwei Gründen wie die Schreibsperre selbst.
+            'active'            => !$externallyManaged && !$this->IsDeactivated(),
         ];
     }
 
