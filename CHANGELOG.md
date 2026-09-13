@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.21 (13.09.2026)
+
+**Kleinigkeit auf EMS' Bitte**: der neue Warnstatus „Zwei Regler an einer Wallbox" lief bei
+uns als 205 — EMS/ChargerHub zeigen denselben Status als 206 (bei EMS ist 205 anderweitig
+belegt, „Wallbox-Quelle prüfen"). Ladepunkt 0.2.21: `STATUS_DUPLICATE_CONFLICT` auf 206
+umgestellt, für Verbund-weite Wiedererkennbarkeit. Keine Verhaltensänderung.
+
 ## 0.6.20 (13.09.2026)
 
 **Korrektur: `duplicateOf` betrifft nur das Zählen, nicht das Schreiben.** Zwei Sitzungen

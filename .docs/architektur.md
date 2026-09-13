@@ -1310,7 +1310,9 @@ nachreichte) ergab das GEGENTEIL: **„Ja, das stimmt so"** zu EMS' Vorschlag. E
   bzw. — mit `function_exists`-Wächter — `CHUB_GetFunctions()` geprüft) — dann könnten
   BEIDE Seiten gleichzeitig schreiben, der klassische „markiert, aber vergessen
   umzustellen"-Fall. Echter Warnstatus (>200, `OCPPHubLadepunkt::STATUS_DUPLICATE_CONFLICT`
-  = 205, „Zwei Regler an einer Wallbox"), NICHT der 9d-Park-Status 104 — das ist ein
+  = 206 — auf EMS' Bitte an 206 angeglichen, EMS/ChargerHub zeigen denselben Warnstatus
+  ebenfalls als 206, bei EMS ist 205 anderweitig belegt —, „Zwei Regler an einer
+  Wallbox"), NICHT der 9d-Park-Status 104 — das ist ein
   Konfigurationsmangel, kein passiver Ruhezustand. Neu berechnet bei jedem
   `ApplyChanges()` UND alle 60s über `ConnectivityTimer`/`CheckConnectivity()`
   (`refreshDuplicateConflictStatus()`), da sich die Zielinstanz unabhängig ändern kann.

@@ -28,7 +28,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.20';
+    private const VERSION = '0.2.21';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -825,7 +825,10 @@ class OCPPHubLadepunkt extends IPSModule
     // schreiben. Zeigt einen echten Warnstatus (>200, siehe SUITE.md 9f,
     // NICHT 9d — das hier ist ein Konfigurationsmangel, kein geparkter
     // Zustand), solange der Widerspruch besteht.
-    private const STATUS_DUPLICATE_CONFLICT = 205;
+    // 206, nicht 205 (EMS-Abstimmung 13.09.2026 — Verbund-Konsistenz: EMS/
+    // ChargerHub zeigen denselben "Zwei Regler an einer Wallbox"-Warnstatus
+    // ebenfalls als 206; bei EMS ist 205 anderweitig belegt).
+    private const STATUS_DUPLICATE_CONFLICT = 206;
 
     private function refreshDuplicateConflictStatus(): void
     {
