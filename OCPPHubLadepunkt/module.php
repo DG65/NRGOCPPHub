@@ -28,14 +28,15 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.24';
+    private const VERSION = '0.2.25';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.22';
+    private const NEWS_VERSION = '0.2.25';
     private const NEWS_ITEMS = [
+        'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Kritischer Fix (Live-Fund, Dietmar wollte nur WB1 abschalten): es gab keinen sichtbaren Schalter, um EINEN einzelnen Ladepunkt zu deaktivieren — nur der ganze Splitter ließ sich abschalten, was gleich alle anderen Ladepunkte mit lahmlegte. Neuer Schalter „🔌 Diesen Ladepunkt deaktivieren" oben im Formular, identisch zu `OHUBL_SetActive(false)` (ein gemeinsamer Zustand für Konsole UND externe Aufrufe wie MeterHubVirtual).',
         'Korrektur zu „Doppelte Anbindung" (endgültige, von Dietmar direkt bestätigte Entscheidung): `duplicateOf` betrifft NUR die Verbrauchszählung, NICHT mehr das Schreiben — ein als Duplikat markierter Eintrag kann trotzdem der Regler sein (z. B. misst OCPP bei WB1, geregelt wird aber über ChargerHub). Ob dieser Ladepunkt an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" (`ManagedBy`) bzw. `OHUBL_SetActive()`. Neues Sicherheitsnetz: stehen sowohl hier „Wer regelt?" auf „Niemand" als auch bei der als zählend gewählten Instanz kein externes Lastmanagement, zeigt die Instanz einen Warnstatus „Zwei Regler an einer Wallbox", bis das aufgelöst ist — verhindert den „Duplikat markiert, aber Steuerhoheit zu stellen vergessen"-Fall.',
         'Neu: `OHUBL_SetActive(bool)` — Backend-Funktion für MeterHubVirtuals Dual-Writer-Erkennung, ergänzt „Doppelte Anbindung" um einen generischen Ein/Aus-Schalter (ohne Gegenstück-Instanz benennen zu müssen). Deaktiviert: Ladepunkt schreibt nicht mehr an die Wallbox (Authorize/RemoteStart/Stromlimit/Reset), eine bereits laufende Ladung wird NICHT unterbrochen (Dietmars Entscheidung). Zusätzlich `deviceSerial`/`deviceIP`/`active` additiv im Vertrag (aus BootNotification/Quell-IP, vorher nur intern) — zuverlässigere Dual-Writer-Erkennung als der bloße Zählerstand-Vergleich.',
@@ -91,6 +92,11 @@ class OCPPHubLadepunkt extends IPSModule
         parent::Create();
 
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
+        // „Wozu dieses Modul?" (14.09.2026, EMS-Fund über Dietmar — Store-
+        // Konventions-Prüfung, Formular-Konvention Punkt 0, Referenz
+        // MeterHub): ganz oben VOR dem News-Panel, aufgeklappt, einmalig
+        // dismissible.
+        $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
 
         // Charge-Point-Identity — der URL-Pfad-Teil, mit dem sich diese
@@ -402,6 +408,14 @@ class OCPPHubLadepunkt extends IPSModule
             array_unshift($form['elements'], $banner);
         }
 
+        // „Wozu dieses Modul?" VOR dem News-Banner (Formular-Konvention
+        // Punkt 0) — die Cross-Hub-Konfliktwarnung unten bleibt bewusst noch
+        // davor, da sie ein akutes Live-Problem meldet, kein Einstiegstext.
+        $intro = $this->purposeIntroPanel();
+        if ($intro !== null) {
+            array_unshift($form['elements'], $intro);
+        }
+
         $conflictId = $this->findConflictingChargerHubInstance();
         if ($conflictId !== 0) {
             array_unshift($form['elements'], [
@@ -413,6 +427,29 @@ class OCPPHubLadepunkt extends IPSModule
         }
 
         return json_encode($form);
+    }
+
+    private function purposeIntroPanel(): ?array
+    {
+        if ($this->ReadAttributeBoolean('PurposeIntroGone')) {
+            return null;
+        }
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
+            'caption' => '👋 Wozu dieses Modul?',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Diese „OCPPHub Ladepunkt"-Instanz steht für genau eine Wallbox (bzw. einen Connector) — sie hält die sichtbaren Messwerte (Ladeleistung, Energiezähler, Fahrzeug angesteckt) und die Steuervariablen (Ladefreigabe, Stromlimit) als normale Symcon-Variablen. Die eigentliche OCPP-Kommunikation läuft über die zugeordnete „OCPPHub Splitter"-Instanz, hier wird nur konfiguriert und angezeigt.'],
+                ['type' => 'Label', 'caption' => 'Der Nutzen: Ladefreigabe/Stromlimit aus Symcon heraus setzen, reale Ladeleistung/-energie für Dashboards oder ein Energiemanagement-System (EMS), optional eigenständiges PV-Überschussladen auch ohne EMS installiert.'],
+                ['type' => 'Label', 'caption' => 'Fehlt dir noch die richtige Wallbox, oder willst du mehrere auf einmal anlegen? „OCPPHub Konfigurator" zeigt bereits verbundene, aber noch nicht angelegte Wallboxen zum Ein-Klick-Anlegen.'],
+                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUBL_AckPurposeIntro($id);'],
+            ],
+        ];
+    }
+
+    public function AckPurposeIntro(): void
+    {
+        $this->WriteAttributeBoolean('PurposeIntroGone', true);
+        $this->UpdateFormField('PurposeIntroPanel', 'visible', false);
     }
 
     private function newsBanner(): ?array

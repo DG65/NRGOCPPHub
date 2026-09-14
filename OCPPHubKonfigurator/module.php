@@ -20,15 +20,16 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.10';
+    private const VERSION = '0.1.11';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.10';
+    private const NEWS_VERSION = '0.1.11';
     private const NEWS_ITEMS = [
+        'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Splitter-Zuordnung jetzt auch manuell wählbar (Auswahlfeld oben), falls die automatische Erkennung über die Instanz-Verschachtelung nicht greift.',
         'Neu angelegte Ladepunkt-Instanzen bekommen ihre Splitter-Zuordnung jetzt direkt beim Erstellen korrekt mit — vorher musste sie am Ladepunkt selbst nachträglich gesetzt werden.',
     ];
@@ -39,6 +40,11 @@ class OCPPHubKonfigurator extends IPSModule
         $this->RegisterPropertyInteger('SplitterID', 0);
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
         $this->RegisterAttributeString('SeenNews', '');
+        // „Wozu dieses Modul?" (14.09.2026, EMS-Fund über Dietmar — Store-
+        // Konventions-Prüfung, Formular-Konvention Punkt 0, Referenz
+        // MeterHub): ganz oben VOR dem News-Panel, aufgeklappt, einmalig
+        // dismissible.
+        $this->RegisterAttributeBoolean('PurposeIntroGone', false);
     }
 
     public function ApplyChanges()
@@ -157,7 +163,36 @@ class OCPPHubKonfigurator extends IPSModule
             array_unshift($form['elements'], $banner);
         }
 
+        // „Wozu dieses Modul?" ganz vorn, VOR dem News-Banner (Formular-
+        // Konvention Punkt 0).
+        $intro = $this->purposeIntroPanel();
+        if ($intro !== null) {
+            array_unshift($form['elements'], $intro);
+        }
+
         return json_encode($form);
+    }
+
+    private function purposeIntroPanel(): ?array
+    {
+        if ($this->ReadAttributeBoolean('PurposeIntroGone')) {
+            return null;
+        }
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
+            'caption' => '👋 Wozu dieses Modul?',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Der Konfigurator ist eine reine Einrichtungshilfe: er zeigt Wallboxen, die sich bereits per OCPP bei einer „OCPPHub Splitter"-Instanz gemeldet haben, aber noch keine eigene „OCPPHub Ladepunkt"-Instanz haben — Ein-Klick-Anlegen statt Charge-Point-Identity und Splitter-Zuordnung von Hand einzutippen.'],
+                ['type' => 'Label', 'caption' => 'Der Nutzen: besonders beim Ersteinrichten mehrerer Wallboxen spart das wiederholtes manuelles Anlegen. Für den laufenden Betrieb wird der Konfigurator nicht mehr gebraucht — die eigentliche Steuerung/Anzeige läuft komplett über die Ladepunkt-Instanzen selbst.'],
+                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUBK_AckPurposeIntro($id);'],
+            ],
+        ];
+    }
+
+    public function AckPurposeIntro(): void
+    {
+        $this->WriteAttributeBoolean('PurposeIntroGone', true);
+        $this->UpdateFormField('PurposeIntroPanel', 'visible', false);
     }
 
     public function DismissReviewHint(): void

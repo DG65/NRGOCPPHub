@@ -42,14 +42,15 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.23';
+    private const VERSION = '0.2.24';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.18';
+    private const NEWS_VERSION = '0.2.24';
     private const NEWS_ITEMS = [
+        'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Neu: 🎪 Vorführmodus (Formularfeld am Splitter) — für Dietmars geplante öffentliche Demo-Instanz des ganzen NRG-Stack-Verbunds. Aktiviert, lehnt OCPPHub jeden echten Ladesteuerbefehl (RemoteStartTransaction/SetChargingProfile/Reset) serverseitig ab, egal ob manuell, per PV-Überschussladen oder automatischer Fahrzeug-Autorisierung ausgelöst — ein Besucher der Demo kann Dietmars echte Wallbox damit nicht schalten. Auch die Kundenverwaltungs-Kachel wird dabei automatisch schreibgeschützt.',
         'Kritischer Fix (Live-Fund, direkt nach Einführung des Reset-/frc-Ausweichwegs entdeckt): schlug RemoteStartTransaction fehl, WEIL die Wallbox schon eine andere Sitzung fuhr (z. B. go-e nach einem Reset selbst lokal gestartet), löste unser Ausweichweg trotzdem einen Reset aus und unterbrach damit eine bereits laufende, funktionierende Ladung — sichtbar als kurze Ladeimpulse statt einer stabilen Sitzung. Der Ausweichweg prüft jetzt zuerst, ob am Ladepunkt schon tatsächlich geladen wird, und greift nur noch ein, wenn nicht.',
         'go-e-Ausweichweg für hängende Ladefreigabe: schlägt RemoteStartTransaction bei einer go-e-Wallbox fehl, versucht OCPPHub jetzt automatisch, deren privates FORCE_STATE-Register zurückzusetzen — zuerst über ChargerHub (CHUB_ClearForceLock(), falls installiert, auch wenn dessen Instanz deaktiviert ist), sonst per eigenem, bewusst minimalem Modbus-Schreibzugriff, damit das auch OHNE installiertes ChargerHub funktioniert. Bei jedem anderen Hersteller wirkungslos, kein Risiko.',
@@ -74,6 +75,11 @@ class OCPPHubSplitter extends IPSModule
         parent::Create();
 
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
+        // „Wozu dieses Modul?" (14.09.2026, EMS-Fund über Dietmar — Store-
+        // Konventions-Prüfung, Formular-Konvention Punkt 0, Referenz
+        // MeterHub): ganz oben VOR dem News-Panel, aufgeklappt, einmalig
+        // dismissible.
+        $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterPropertyBoolean('Active', true);
         // Betriebsart (Stufe 2, siehe .docs/architektur.md „Formular-Struktur"):
@@ -350,7 +356,37 @@ class OCPPHubSplitter extends IPSModule
             array_unshift($form['elements'], $banner);
         }
 
+        // „Wozu dieses Modul?" ganz vorn, VOR dem News-Banner (Formular-
+        // Konvention Punkt 0).
+        $intro = $this->purposeIntroPanel();
+        if ($intro !== null) {
+            array_unshift($form['elements'], $intro);
+        }
+
         return json_encode($form);
+    }
+
+    private function purposeIntroPanel(): ?array
+    {
+        if ($this->ReadAttributeBoolean('PurposeIntroGone')) {
+            return null;
+        }
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
+            'caption' => '👋 Wozu dieses Modul?',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'OCPPHub bindet Wallboxen über das Herstellerstandard-Protokoll OCPP 1.6J an — die Wallbox verbindet sich per WebSocket zu Symcon, nicht umgekehrt. Diese Splitter-Instanz ist die Gegenstelle („Central System"): sie nimmt beliebig viele Wallbox-Verbindungen entgegen und verteilt eingehende Nachrichten an die passende „OCPPHub Ladepunkt"-Instanz.'],
+                ['type' => 'Label', 'caption' => 'Der Nutzen: Ladefreigabe/Stromlimit setzen, Ladeleistung/Energie als normale Symcon-Variablen, eigenständiges PV-Überschussladen auch ohne EMS, sowie optional zentrale RFID-Autorisierung mit Kundenverwaltung/Verbrauchslimits — als Grundlage für Dashboards, ein Energiemanagement-System (EMS) oder einfach, um eine Wallbox aus Symcon heraus zu steuern.'],
+                ['type' => 'Label', 'caption' => 'Praktischer Einstieg: „OCPPHub Konfigurator" zeigt bereits verbundene, aber noch nicht angelegte Wallboxen zum Ein-Klick-Anlegen. Kann eine Wallbox kein OCPP (z. B. Heidelberg Energy Control), ist ChargerHub (Modbus TCP) das passende Geschwistermodul.'],
+                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUB_AckPurposeIntro($id);'],
+            ],
+        ];
+    }
+
+    public function AckPurposeIntro(): void
+    {
+        $this->WriteAttributeBoolean('PurposeIntroGone', true);
+        $this->UpdateFormField('PurposeIntroPanel', 'visible', false);
     }
 
     public function DismissReviewHint(): void

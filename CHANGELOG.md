@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.26 (14.09.2026)
+
+**Store-Konventions-Prüfung (EMS, im Auftrag von Dietmar, verbindlich):** „👋 Wozu dieses
+Modul?" fehlte — das Panel, das laut Formular-Konvention ganz oben, VOR dem „Was ist Neu"-
+Panel stehen muss, aufgeklappt und einmalig dismissible. Splitter 0.2.24 / Ladepunkt 0.2.25 /
+Konfigurator 0.1.11: Panel ergänzt (Referenz MeterHub), je Modul mit eigenem Erklärtext.
+
+Den zusätzlich angefragten Forum-Hinweis gibt es bei uns bereits — als GitHub-Rückmeldungs-
+hinweis (`ReviewHint`, da noch kein Symcon-Forum-Thread existiert), funktional gleichwertig.
+
 ## 0.6.25 (14.09.2026)
 
 **Letzter offener Store-Checklisten-Fund (9b) geschlossen**: „Gültig bis" bei Zugängen
