@@ -17,12 +17,13 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.5';
+    private const VERSION = '0.3.6';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.3.5';
+    private const NEWS_VERSION = '0.3.6';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        'Store-Checkliste 9b: „Gültig bis" bei Zugängen zeigt jetzt TT.MM.JJJJ statt JJJJ-MM-TT (Konsole und Kachel). Bereits gespeicherte alte Einträge bleiben gültig — kein Migrationsschritt nötig, PHP erkennt beide Formate zuverlässig.',
         'Neu: 🎪 Vorführmodus — greift automatisch, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). Die Konfigurationskachel wird dann schreibgeschützt (Speichern/Zeile hinzufügen/Löschen/Karte übernehmen deaktiviert, gut sichtbarer Hinweis oben) — ein Besucher der Demo kann keine echten Kundendaten anlegen oder verändern.',
         'Die Instanz kann jetzt frei im Objektbaum verschoben werden (z. B. für eine aufgeräumtere WebFront-Einordnung) ohne die Verbindung zu ihrem Splitter zu verlieren — der Warnhinweis „nicht verbunden" prüft jetzt die tatsächliche Zuordnung statt der Baumposition.',
         'Konfigurationskachel warnt jetzt, wenn sie an einer Instanz hängt, die kein Splitter als seine Abrechnung führt — vorher blieben Fahrzeuge/Gruppen/Kunden/Zugänge in diesem Fall kommentarlos leer, obwohl an anderer Stelle bereits Daten gepflegt waren.',
@@ -465,7 +466,7 @@ class OCPPHubAbrechnung extends IPSModule
                             ['caption' => 'Kunde', 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
                             ['caption' => 'Fahrzeug', 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
                             ['caption' => 'Aktiv', 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                            ['caption' => 'Gültig bis (JJJJ-MM-TT, leer=unbegrenzt)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Gültig bis (TT.MM.JJJJ, leer=unbegrenzt)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                             ['caption' => 'Erlaubt ab (HH:MM, leer=immer)', 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                             ['caption' => 'Erlaubt bis (HH:MM, leer=immer)', 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ],
@@ -812,6 +813,13 @@ class OCPPHubAbrechnung extends IPSModule
         if (!($zugang['active'] ?? true)) {
             return ['status' => 'Blocked', 'reason' => 'zugang-gesperrt'];
         }
+        // Store-Checkliste 9b (14.09.2026): Formular/Kachel zeigen/erwarten jetzt
+        // TT.MM.JJJJ statt JJJJ-MM-TT. Kein Migrationscode nötig — PHPs
+        // strtotime() erkennt punktgetrennte Daten zuverlässig als d.m.Y (deutsche
+        // Reihenfolge) UND bindestrichgetrennte weiterhin als Y-m-d, beide Formate
+        // laufen hier unverändert nebeneinander (lokal verifiziert: "31.12.2026"
+        // UND "2026-12-31" liefern exakt denselben Zeitstempel). Bereits
+        // gespeicherte alte JJJJ-MM-TT-Einträge bleiben dadurch gültig.
         $validUntil = (string)($zugang['validUntil'] ?? '');
         if ($validUntil !== '' && strtotime($validUntil . ' 23:59:59') !== false && strtotime($validUntil . ' 23:59:59') < time()) {
             return ['status' => 'Expired'];

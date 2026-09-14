@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.25 (14.09.2026)
+
+**Letzter offener Store-Checklisten-Fund (9b) geschlossen**: „Gültig bis" bei Zugängen
+zeigte noch JJJJ-MM-TT als Eingabeformat-Hinweis. Abrechnung 0.3.6: Konsole und Kachel
+zeigen jetzt TT.MM.JJJJ. Kein Migrationscode nötig — die Ablaufprüfung nutzt PHPs
+`strtotime()`, das punktgetrennte Daten zuverlässig als TT.MM.JJJJ und weiterhin
+bindestrichgetrennte als JJJJ-MM-TT erkennt (lokal verifiziert: beide Formate liefern für
+dasselbe Datum exakt denselben Zeitstempel). Bereits gespeicherte alte Einträge bleiben
+dadurch ohne jede Änderung gültig.
+
+Vollständiger Store-Checklisten-Durchlauf (Punkte 1–13) sonst ohne weitere Funde.
+
 ## 0.6.24 (13.09.2026)
 
 **EMS-Klarstellung nach einer Live-Verwechslung**: EMS hatte `active: false` bei WB1 live
