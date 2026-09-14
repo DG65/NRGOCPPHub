@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.27 (14.09.2026)
+
+**Doku-Durchgang vor dem Store-Launch (EMS-Bitte, im Auftrag von Dietmar)**: die
+Datei-Kopfkommentare aller vier Module (Splitter/Ladepunkt/Abrechnung/Konfigurator)
+waren seit der allerersten Stufe-1-Fassung als „STUFE 1/UNGETESTET" stehen geblieben —
+obwohl Kernprotokoll, Reservierung, RFID-Autorisierung/Kundenverwaltung UND PV-
+Überschussladen inzwischen alle live an echter go-e-Hardware verifiziert sind (mehrere
+echte Ladevorgänge inkl. Stopp/Neustart, Kartenauflegen, Kundenverwaltung). Auf den
+aktuellen, wahrheitsgemäßen Stand gebracht — reine Doku-Korrektur, keine
+Verhaltensänderung. `.docs/pflichtenheft.md` „Ausbaustufen" ebenfalls korrigiert (Stufe 2
+stand dort fälschlich weiterhin als „noch NICHT live verifiziert").
+
+Formular-Texte selbst (Doku- & Feldhilfe-Panels) wurden gegengeprüft — keine weiteren
+Funde, sie waren bereits aktuell.
+
 ## 0.6.26 (14.09.2026)
 
 **Store-Konventions-Prüfung (EMS, im Auftrag von Dietmar, verbindlich):** „👋 Wozu dieses

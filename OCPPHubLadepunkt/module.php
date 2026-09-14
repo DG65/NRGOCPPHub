@@ -7,12 +7,13 @@
 // das eigenständige PV-Überschussladen (Fallback ohne EMS, Logik aus
 // ChargerHub SurplusChargeControl() 0.9.53 portiert).
 //
-// STUFE 1 (siehe .docs/pflichtenheft.md): kein RFID, keine Reservierung,
-// keine Phasenumschaltung (ctl_phase_mode noch nicht implementiert — pro
-// Hersteller zu verifizieren, siehe architektur.md), keine
-// Splitter-interne Lastverteilung bei mehreren eigenen Ladepunkten
-// gleichzeitig (TODO Stufe 2, siehe architektur.md „Splitter-interne
-// Lastverteilung"). UNGETESTET, siehe Splitter-Header.
+// Aktueller Stand (14.09.2026): RFID-Autorisierung, Reservierung und das
+// eigenständige PV-Überschussladen sind gebaut UND live verifiziert, siehe
+// Splitter-Header. Noch offen: Phasenumschaltung (`ctl_phase_mode` noch
+// nicht implementiert — pro Hersteller zu verifizieren, siehe
+// architektur.md), Splitter-interne Lastverteilung bei mehreren eigenen
+// gleichzeitig aktiven Ladepunkten (Stufe 3, siehe architektur.md
+// „Splitter-interne Lastverteilung").
 // ===========================================================================
 
 class OCPPHubLadepunkt extends IPSModule
@@ -28,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.25';
+    private const VERSION = '0.2.26';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz

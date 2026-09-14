@@ -11,13 +11,14 @@
 // element), IDs werden intern vergeben (Formularfeld selbst zeigt keine
 // ID-Eingabe). KEIN Tarif/keine Kosten — das ist Stufe 3.
 //
-// STUFE 2 / UNGETESTET (wie der gesamte bisherige Live-Test-Zyklus in
-// diesem Repo — erst nach Verifikation an WB1 als stabil betrachten).
+// Aktueller Stand (14.09.2026): live verifiziert an Dietmars echter
+// Kundenverwaltung (Kunde/Zugang/Fahrzeug/Gruppe anlegen, Karte anlernen
+// per Kachel und Konsole, Verbrauchslimits). Tarife/Kosten bleiben Stufe 3.
 // ===========================================================================
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.6';
+    private const VERSION = '0.3.7';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     private const NEWS_VERSION = '0.3.6';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';

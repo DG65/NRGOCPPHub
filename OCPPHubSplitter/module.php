@@ -16,11 +16,14 @@
 // Mechanismus (RegisterHook/ProcessHookData/WC_PushMessage) ist Symcon-
 // Standard-SDK-API und wurde daraus als Vorgehen übernommen.
 //
-// STUFE 1 (siehe .docs/pflichtenheft.md „Ausbaustufen"): Kernprotokoll +
-// PV-Überschussladen, KEIN RFID-Zwang (Authorize.conf immer Accepted),
-// KEINE Kundenverwaltung/Tarife/Reservierung — kommt mit Betriebsart ②/③.
-// UNGETESTET gegen echte Symcon-Instanz/Emulator (siehe .docs/architektur.md
-// „Test-Strategie") — vor Live-Betrieb mit apostoldevel/ocpp-cs prüfen.
+// Aktueller Stand (14.09.2026): Kernprotokoll, PV-Überschussladen,
+// Reservierung, RFID-Autorisierung mit Kundenverwaltung/Verbrauchslimits
+// (Betriebsart ②) sind gebaut UND an echter go-e-Hardware live verifiziert
+// (mehrere echte Ladevorgänge inkl. Stopp/Neustart, Kartenauflegen,
+// Kundenverwaltung). Andere OCPP-1.6J-Wallboxen sind ungetestet, siehe
+// Formular-Hinweis dort. NOCH NICHT enthalten (Stufe 3): Tarife/
+// Kostenberechnung, Berichte/CSV-Export, Lastverteilung über mehrere eigene
+// Ladepunkte hinweg — siehe .docs/pflichtenheft.md „Ausbaustufen".
 // ===========================================================================
 
 class OCPPHubSplitter extends IPSModule
@@ -42,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.24';
+    private const VERSION = '0.2.25';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz

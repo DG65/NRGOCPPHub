@@ -248,10 +248,11 @@ Kernentitäten (Details: Architektur „Abrechnung (Datenmodell-Entwurf)" und
 
 1. **Stufe 1 (entspricht Betriebsart ①)** — ✅ geliefert, live an WB1 verifiziert
    (30.08.2026): Basis + Steuerung — Kernprotokoll, PV-Überschussladen, kein RFID-Zwang.
-2. **Stufe 2 (Betriebsart ②)** — ✅ geliefert (30.08.2026), noch NICHT live verifiziert:
-   zentrale Autorisierung + Kundenverwaltung + Verbrauchslimits (neue Instanz „OCPPHub
-   Abrechnung") sowie Reservierung ohne Gebühr (am Ladepunkt, unabhängig von der
-   Betriebsart nutzbar).
+2. **Stufe 2 (Betriebsart ②)** — ✅ geliefert (30.08.2026), live verifiziert (14.09.2026:
+   Kunde/Zugang/Fahrzeug/Gruppe anlegen, Karte anlernen per Kachel und Konsole,
+   Verbrauchslimits): zentrale Autorisierung + Kundenverwaltung + Verbrauchslimits (neue
+   Instanz „OCPPHub Abrechnung") sowie Reservierung ohne Gebühr (am Ladepunkt, unabhängig
+   von der Betriebsart nutzbar).
 3. **Stufe 3 (Betriebsart ③)**: Grundtarife, Reservierungsgebühr, Berichte/CSV-Export.
 4. **Später, additiv**: OCPP 2.0.1 (K6), Formel-Fluchtweg (K1) falls nicht schon in
    Stufe 3, rollenbasierte Konsolen-Integration (K5, abhängig von externer Entscheidung).

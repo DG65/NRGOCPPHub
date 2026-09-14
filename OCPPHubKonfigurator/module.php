@@ -11,7 +11,8 @@
 // war von Anfang an als UNGETESTETE Annahme markiert und hat sich als
 // nicht zuverlässig herausgestellt). Jetzt zusätzlich explizites
 // Auswahlfeld „SplitterID", das Vorrang vor IPS_GetParent() hat.
-// STUFE 1 / TEILWEISE GETESTET, siehe OCPPHubSplitter-Header.
+// Aktueller Stand (14.09.2026): live verifiziert, mehrfach zum Anlegen
+// echter Ladepunkt-Instanzen (WB1/WB2) genutzt, siehe OCPPHubSplitter-Header.
 // ===========================================================================
 
 class OCPPHubKonfigurator extends IPSModule
@@ -20,7 +21,7 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.11';
+    private const VERSION = '0.1.12';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
 
