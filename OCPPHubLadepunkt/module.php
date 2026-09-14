@@ -29,14 +29,19 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.26';
+    private const VERSION = '0.2.27';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+    // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
+    // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/ems-integration/LICENSE';
+    private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.25';
+    private const NEWS_VERSION = '0.2.27';
     private const NEWS_ITEMS = [
+        'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
         'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Kritischer Fix (Live-Fund, Dietmar wollte nur WB1 abschalten): es gab keinen sichtbaren Schalter, um EINEN einzelnen Ladepunkt zu deaktivieren — nur der ganze Splitter ließ sich abschalten, was gleich alle anderen Ladepunkte mit lahmlegte. Neuer Schalter „🔌 Diesen Ladepunkt deaktivieren" oben im Formular, identisch zu `OHUBL_SetActive(false)` (ein gemeinsamer Zustand für Konsole UND externe Aufrufe wie MeterHubVirtual).',
         'Korrektur zu „Doppelte Anbindung" (endgültige, von Dietmar direkt bestätigte Entscheidung): `duplicateOf` betrifft NUR die Verbrauchszählung, NICHT mehr das Schreiben — ein als Duplikat markierter Eintrag kann trotzdem der Regler sein (z. B. misst OCPP bei WB1, geregelt wird aber über ChargerHub). Ob dieser Ladepunkt an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" (`ManagedBy`) bzw. `OHUBL_SetActive()`. Neues Sicherheitsnetz: stehen sowohl hier „Wer regelt?" auf „Niemand" als auch bei der als zählend gewählten Instanz kein externes Lastmanagement, zeigt die Instanz einen Warnstatus „Zwei Regler an einer Wallbox", bis das aufgelöst ist — verhindert den „Duplikat markiert, aber Steuerhoheit zu stellen vergessen"-Fall.',
@@ -395,14 +400,16 @@ class OCPPHubLadepunkt extends IPSModule
 
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
-                'type'  => 'RowLayout',
-                'name'  => 'ReviewHint',
+                'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
+                'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub.'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub (noch kein Symcon-Forum-Thread).'],
                     ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUBL_DismissReviewHint($id);'],
                 ],
             ];
         }
+
+        $form['elements'][] = $this->licenseHint();
 
         $banner = $this->newsBanner();
         if ($banner !== null) {
@@ -428,6 +435,24 @@ class OCPPHubLadepunkt extends IPSModule
         }
 
         return json_encode($form);
+    }
+
+    // „Über dieses Modul" (SUITE.md Formular-Konvention Punkt 5) — bewusst
+    // NICHT dismissible, Wortlaut verbundweit identisch ("Variante A").
+    private function licenseHint(): array
+    {
+        return [
+            'type' => 'ExpansionPanel', 'expanded' => false,
+            'caption' => '🧡  Über dieses Modul',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Entstanden aus echter Begeisterung für die eigene Anlage — und ein paar durchgetippten Abenden. Trotzdem: Software-Hobby hin oder her, das hier ist geistiges Eigentum und echte Arbeit steckt drin.'],
+                ['type' => 'Label', 'caption' => 'Lizenz: PolyForm Noncommercial 1.0.0 — privat und nicht-kommerziell frei nutzbar, für den gewerblichen Einsatz braucht es eine gesonderte Lizenz vom Rechteinhaber.'],
+                ['type' => 'Button', 'caption' => 'Lizenztext ansehen', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Gewerbliche Nutzung oder Fragen zur Lizenz? Einfach melden: dietmar@gureth.eu'],
+                ['type' => 'Label', 'caption' => 'Gefällt dir das Modul und du möchtest trotzdem etwas dalassen? Über eine kleine Spende freue ich mich — völlig freiwillig, keine Gegenleistung nötig.'],
+                ['type' => 'Button', 'caption' => '☕  Spenden via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+            ],
+        ];
     }
 
     private function purposeIntroPanel(): ?array

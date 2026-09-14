@@ -45,14 +45,22 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.25';
+    private const VERSION = '0.2.26';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
+    // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
+    // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
+    // (geprüft: `git show main:LICENSE` -> fatal, existiert dort nicht) —
+    // beim Merge nach main hierher zurückkommen und umstellen (Dietmars
+    // Fund bei MeterHub: blind auf main verlinkt zeigte die alte Lizenz).
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/ems-integration/LICENSE';
+    private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.24';
+    private const NEWS_VERSION = '0.2.26';
     private const NEWS_ITEMS = [
+        'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
         'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Neu: 🎪 Vorführmodus (Formularfeld am Splitter) — für Dietmars geplante öffentliche Demo-Instanz des ganzen NRG-Stack-Verbunds. Aktiviert, lehnt OCPPHub jeden echten Ladesteuerbefehl (RemoteStartTransaction/SetChargingProfile/Reset) serverseitig ab, egal ob manuell, per PV-Überschussladen oder automatischer Fahrzeug-Autorisierung ausgelöst — ein Besucher der Demo kann Dietmars echte Wallbox damit nicht schalten. Auch die Kundenverwaltungs-Kachel wird dabei automatisch schreibgeschützt.',
         'Kritischer Fix (Live-Fund, direkt nach Einführung des Reset-/frc-Ausweichwegs entdeckt): schlug RemoteStartTransaction fehl, WEIL die Wallbox schon eine andere Sitzung fuhr (z. B. go-e nach einem Reset selbst lokal gestartet), löste unser Ausweichweg trotzdem einen Reset aus und unterbrach damit eine bereits laufende, funktionierende Ladung — sichtbar als kurze Ladeimpulse statt einer stabilen Sitzung. Der Ausweichweg prüft jetzt zuerst, ob am Ladepunkt schon tatsächlich geladen wird, und greift nur noch ein, wenn nicht.',
@@ -340,18 +348,27 @@ class OCPPHubSplitter extends IPSModule
             ],
         ];
 
-        // GitHub-Rückmeldungshinweis (Verbund-Konvention, noch kein
-        // Forum-Beitrag online), einmalig ausblendbar.
+        // Forum-/Rückmeldungshinweis (Formular-Konvention Punkt 4) — noch
+        // kein Symcon-Forum-Thread, deshalb GitHub als Ziel; auf ein
+        // eigenes dismissibles ExpansionPanel umgestellt (14.09.2026,
+        // EMS-Fund über Dietmar — war bisher ein RowLayout, Referenz
+        // MeterHub::ForumHint()). Umstellen auf den echten Forum-Link,
+        // sobald der Thread steht.
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
-                'type'  => 'RowLayout',
-                'name'  => 'ReviewHint',
+                'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
+                'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub.'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub (noch kein Symcon-Forum-Thread).'],
                     ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUB_DismissReviewHint($id);'],
                 ],
             ];
         }
+
+        // „🧡 Über dieses Modul" (Formular-Konvention Punkt 5, 14.09.2026,
+        // EMS-Fund über Dietmar) — ganz unten, NACH dem Forum-Hinweis,
+        // bewusst NICHT dismissible. Wortlaut verbundweit identisch.
+        $form['elements'][] = $this->licenseHint();
 
         // „Was ist neu"-Banner ganz oben, vor dem Doku-Panel.
         $banner = $this->newsBanner();
@@ -367,6 +384,25 @@ class OCPPHubSplitter extends IPSModule
         }
 
         return json_encode($form);
+    }
+
+    // „Über dieses Modul" (SUITE.md Formular-Konvention Punkt 5) — bewusst
+    // NICHT dismissible (kein name/Attribut), Wortlaut verbundweit
+    // identisch ("Variante A").
+    private function licenseHint(): array
+    {
+        return [
+            'type' => 'ExpansionPanel', 'expanded' => false,
+            'caption' => '🧡  Über dieses Modul',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Entstanden aus echter Begeisterung für die eigene Anlage — und ein paar durchgetippten Abenden. Trotzdem: Software-Hobby hin oder her, das hier ist geistiges Eigentum und echte Arbeit steckt drin.'],
+                ['type' => 'Label', 'caption' => 'Lizenz: PolyForm Noncommercial 1.0.0 — privat und nicht-kommerziell frei nutzbar, für den gewerblichen Einsatz braucht es eine gesonderte Lizenz vom Rechteinhaber.'],
+                ['type' => 'Button', 'caption' => 'Lizenztext ansehen', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Gewerbliche Nutzung oder Fragen zur Lizenz? Einfach melden: dietmar@gureth.eu'],
+                ['type' => 'Label', 'caption' => 'Gefällt dir das Modul und du möchtest trotzdem etwas dalassen? Über eine kleine Spende freue ich mich — völlig freiwillig, keine Gegenleistung nötig.'],
+                ['type' => 'Button', 'caption' => '☕  Spenden via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+            ],
+        ];
     }
 
     private function purposeIntroPanel(): ?array

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.28 (14.09.2026)
+
+**Zwei weitere EMS-Funde im Auftrag von Dietmar, Store-Konventions-Prüfung:**
+
+**„🧡 Über dieses Modul"** (Splitter 0.2.26 / Ladepunkt 0.2.27 / Konfigurator 0.1.13) —
+fehlte komplett: neues, bewusst NICHT ausblendbares Panel ganz unten im Formular mit
+Lizenz (PolyForm Noncommercial 1.0.0), Link zum Lizenztext, Kontakt für gewerbliche
+Anfragen und einem PayPal-Spendenlink. Wortlaut verbundweit identisch ("Variante A"),
+Referenz SUITE.md. `LICENSE_URL` zeigt bewusst auf den `ems-integration`-Branch, nicht auf
+`main` — die Datei liegt dort noch nicht (bekannter Stolperstein, siehe MeterHub-Fund
+01.09.2026).
+
+**Feedback-Hinweis als eigenes Panel** — lief bisher als reine `RowLayout`-Textzeile ohne
+eigene Überschrift, jetzt ein dismissibles `ExpansionPanel` „💬 Feedback" wie bei MeterHub.
+Inhaltlich unverändert (Verweis auf GitHub, da noch kein Symcon-Forum-Thread existiert).
+
+Bewusst nur in den drei von EMS benannten Modulen umgesetzt (Splitter/Ladepunkt/
+Konfigurator), nicht in Abrechnung — Rückfrage an EMS, ob das dort ebenfalls gewünscht ist.
+
 ## 0.6.27 (14.09.2026)
 
 **Doku-Durchgang vor dem Store-Launch (EMS-Bitte, im Auftrag von Dietmar)**: die
