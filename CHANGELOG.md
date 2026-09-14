@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.29 (14.09.2026)
+
+**Konsistenz-Nachzug auf EMS' Bitte**: die drei Formular-Konventions-Ergänzungen von eben
+(„👋 Wozu dieses Modul?", „🧡 Über dieses Modul", Feedback-Hinweis als eigenes Panel) jetzt
+auch in Abrechnung 0.3.8 — vorher bewusst ausgelassen (war nicht in EMS' ursprünglicher
+Modulliste), auf Rückfrage aber ausdrücklich gewünscht „der Konsistenz halber, auch wenn's
+nur intern als Kind-Instanz existiert". Damit haben jetzt alle vier OCPPHub-Module
+denselben Formular-Aufbau.
+
 ## 0.6.28 (14.09.2026)
 
 **Zwei weitere EMS-Funde im Auftrag von Dietmar, Store-Konventions-Prüfung:**

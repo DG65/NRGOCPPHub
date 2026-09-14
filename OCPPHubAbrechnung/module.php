@@ -18,12 +18,17 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.7';
+    private const VERSION = '0.3.8';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
-    private const NEWS_VERSION = '0.3.6';
+    // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
+    // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/ems-integration/LICENSE';
+    private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
+    private const NEWS_VERSION = '0.3.8';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        'Neu: „👋 Wozu dieses Modul?" und „🧡 Über dieses Modul" (Lizenz/Spenden) ergänzt, Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung, Konsistenz mit den anderen drei OCPPHub-Modulen).',
         'Store-Checkliste 9b: „Gültig bis" bei Zugängen zeigt jetzt TT.MM.JJJJ statt JJJJ-MM-TT (Konsole und Kachel). Bereits gespeicherte alte Einträge bleiben gültig — kein Migrationsschritt nötig, PHP erkennt beide Formate zuverlässig.',
         'Neu: 🎪 Vorführmodus — greift automatisch, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). Die Konfigurationskachel wird dann schreibgeschützt (Speichern/Zeile hinzufügen/Löschen/Karte übernehmen deaktiviert, gut sichtbarer Hinweis oben) — ein Besucher der Demo kann keine echten Kundendaten anlegen oder verändern.',
         'Die Instanz kann jetzt frei im Objektbaum verschoben werden (z. B. für eine aufgeräumtere WebFront-Einordnung) ohne die Verbindung zu ihrem Splitter zu verlieren — der Warnhinweis „nicht verbunden" prüft jetzt die tatsächliche Zuordnung statt der Baumposition.',
@@ -40,6 +45,11 @@ class OCPPHubAbrechnung extends IPSModule
         parent::Create();
 
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
+        // „Wozu dieses Modul?" (14.09.2026, EMS-Fund über Dietmar — Store-
+        // Konventions-Prüfung, Formular-Konvention Punkt 0, Referenz
+        // MeterHub): ganz oben VOR dem News-Panel, aufgeklappt, einmalig
+        // dismissible.
+        $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeString('ActiveAccordionPanel', '');
 
@@ -514,18 +524,28 @@ class OCPPHubAbrechnung extends IPSModule
 
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
-                'type'  => 'RowLayout',
-                'name'  => 'ReviewHint',
+                'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
+                'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub.'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub (noch kein Symcon-Forum-Thread).'],
                     ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUBA_DismissReviewHint($id);'],
                 ],
             ];
         }
 
+        $form['elements'][] = $this->licenseHint();
+
         $banner = $this->newsBanner();
         if ($banner !== null) {
             array_unshift($form['elements'], $banner);
+        }
+
+        // „Wozu dieses Modul?" VOR dem News-Banner (Formular-Konvention
+        // Punkt 0) — die Orphan-Warnung unten bleibt bewusst noch davor, sie
+        // meldet ein akutes Live-Problem, kein Einstiegstext.
+        $intro = $this->purposeIntroPanel();
+        if ($intro !== null) {
+            array_unshift($form['elements'], $intro);
         }
 
         if (!$this->isRegisteredWithSplitter()) {
@@ -544,6 +564,47 @@ class OCPPHubAbrechnung extends IPSModule
     {
         $this->WriteAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, true);
         $this->UpdateFormField('ReviewHint', 'visible', false);
+    }
+
+    // „Über dieses Modul" (SUITE.md Formular-Konvention Punkt 5) — bewusst
+    // NICHT dismissible, Wortlaut verbundweit identisch ("Variante A").
+    private function licenseHint(): array
+    {
+        return [
+            'type' => 'ExpansionPanel', 'expanded' => false,
+            'caption' => '🧡  Über dieses Modul',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Entstanden aus echter Begeisterung für die eigene Anlage — und ein paar durchgetippten Abenden. Trotzdem: Software-Hobby hin oder her, das hier ist geistiges Eigentum und echte Arbeit steckt drin.'],
+                ['type' => 'Label', 'caption' => 'Lizenz: PolyForm Noncommercial 1.0.0 — privat und nicht-kommerziell frei nutzbar, für den gewerblichen Einsatz braucht es eine gesonderte Lizenz vom Rechteinhaber.'],
+                ['type' => 'Button', 'caption' => 'Lizenztext ansehen', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Gewerbliche Nutzung oder Fragen zur Lizenz? Einfach melden: dietmar@gureth.eu'],
+                ['type' => 'Label', 'caption' => 'Gefällt dir das Modul und du möchtest trotzdem etwas dalassen? Über eine kleine Spende freue ich mich — völlig freiwillig, keine Gegenleistung nötig.'],
+                ['type' => 'Button', 'caption' => '☕  Spenden via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+            ],
+        ];
+    }
+
+    private function purposeIntroPanel(): ?array
+    {
+        if ($this->ReadAttributeBoolean('PurposeIntroGone')) {
+            return null;
+        }
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
+            'caption' => '👋 Wozu dieses Modul?',
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Diese „OCPPHub Abrechnung"-Instanz ist die Kundenverwaltung: Kunde → Zugang (RFID-Karte) → optional Fahrzeug/Gruppe, mit Verbrauchslimits und Zeitfenstern. Sie existiert immer (wird von der zugehörigen Splitter-Instanz automatisch angelegt), wirkt sich aber NUR aus, wenn dort „② Mehrere Nutzer" gewählt ist — bei „① Einzelnutzer" wird jede Karte angenommen, unabhängig von den hier gepflegten Daten.'],
+                ['type' => 'Label', 'caption' => 'Der Nutzen: mehrere Personen/Fahrzeuge an derselben Wallbox, jede mit eigener Karte, eigenen Verbrauchslimits (Woche/Monat/Jahr) und optional eigenem Zeitfenster — z. B. für eine Gastkarte, die nur tagsüber laden darf.'],
+                ['type' => 'Label', 'caption' => 'Dieselbe Verwaltung gibt es auch als WebFront-Kachel (siehe Panel „🧩 Konfigurationskachel" unten) — praktisch, um sie einem gesicherten WebFront zuzuweisen, ohne Konsolen-Zugang zu vergeben.'],
+                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUBA_AckPurposeIntro($id);'],
+            ],
+        ];
+    }
+
+    public function AckPurposeIntro(): void
+    {
+        $this->WriteAttributeBoolean('PurposeIntroGone', true);
+        $this->UpdateFormField('PurposeIntroPanel', 'visible', false);
     }
 
     // Ziehharmonika-Verhalten für die vier Reiter Fahrzeuge/Gruppen/Kunden/Zugänge:
