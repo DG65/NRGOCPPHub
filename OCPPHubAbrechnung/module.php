@@ -18,11 +18,14 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.9';
+    private const VERSION = '0.3.10';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
     private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/beta/LICENSE';
+    // Symcon-Forum-Vorstellungs-Thread (16.09.2026, von Dietmar selbst
+    // gepostet, siehe forum-ankuendigung-ocpphub.md).
+    private const FORUM_THREAD_URL = 'https://community.symcon.de/t/beta-modul-nrg-stack-ocpphub-wallboxen-per-ocpp-1-6j-anbinden-mit-pv-ueberschussladen-und-kundenverwaltung/144409';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const NEWS_VERSION = '0.3.8';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
@@ -527,7 +530,8 @@ class OCPPHubAbrechnung extends IPSModule
                 'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
                 'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub (noch kein Symcon-Forum-Thread).'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen im Symcon-Forum.'],
+                    ['type' => 'Button', 'caption' => 'Zum Forum-Thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
                     ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUBA_DismissReviewHint($id);'],
                 ],
             ];

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.31 (16.09.2026)
+
+**Echter Forum-Thread verlinkt.** Dietmar hat den Vorstellungs-Thread im Symcon-Forum
+selbst gepostet. Das „💬 Feedback"-Panel in allen vier Modulen (Splitter 0.2.28 /
+Ladepunkt 0.2.29 / Konfigurator 0.1.15 / Abrechnung 0.3.10) zeigt jetzt einen Button „Zum
+Forum-Thread" statt des bisherigen GitHub-Hinweistexts ohne Forum-Link.
+
 ## 0.6.30 (16.09.2026)
 
 **Store-Start: im Symcon Store gelistet, Kanal Beta.** Neuer Branch `beta` (aus

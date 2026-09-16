@@ -45,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.27';
+    private const VERSION = '0.2.28';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
@@ -53,6 +53,9 @@ class OCPPHubSplitter extends IPSModule
     // beim Merge nach main hierher zurückkommen und umstellen (Dietmars
     // Fund bei MeterHub: blind auf main verlinkt zeigte die alte Lizenz).
     private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/beta/LICENSE';
+    // Symcon-Forum-Vorstellungs-Thread (16.09.2026, von Dietmar selbst
+    // gepostet, siehe forum-ankuendigung-ocpphub.md).
+    private const FORUM_THREAD_URL = 'https://community.symcon.de/t/beta-modul-nrg-stack-ocpphub-wallboxen-per-ocpp-1-6j-anbinden-mit-pv-ueberschussladen-und-kundenverwaltung/144409';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
@@ -352,14 +355,15 @@ class OCPPHubSplitter extends IPSModule
         // kein Symcon-Forum-Thread, deshalb GitHub als Ziel; auf ein
         // eigenes dismissibles ExpansionPanel umgestellt (14.09.2026,
         // EMS-Fund über Dietmar — war bisher ein RowLayout, Referenz
-        // MeterHub::ForumHint()). Umstellen auf den echten Forum-Link,
-        // sobald der Thread steht.
+        // MeterHub::ForumHint()). Seit 16.09.2026: echter Forum-Thread
+        // steht (Dietmar hat ihn selbst gepostet), Link umgestellt.
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
                 'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
                 'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen über github.com/DG65/NRGOCPPHub (noch kein Symcon-Forum-Thread).'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen im Symcon-Forum.'],
+                    ['type' => 'Button', 'caption' => 'Zum Forum-Thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
                     ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUB_DismissReviewHint($id);'],
                 ],
             ];
