@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.30 (16.09.2026)
+
+**Store-Start: im Symcon Store gelistet, Kanal Beta.** Neuer Branch `beta` (aus
+`ems-integration`, Commit `4067329`) angelegt und gepusht — zeigt ab jetzt den
+tatsächlich distributierten Stand. Alle vier Module (Splitter 0.2.27 / Ladepunkt 0.2.28 /
+Konfigurator 0.1.14 / Abrechnung 0.3.9): `LICENSE_URL` im „🧡 Über dieses Modul"-Panel von
+`blob/ems-integration/LICENSE` auf `blob/beta/LICENSE` umgestellt — reiner Link-Fix, keine
+Verhaltensänderung.
+
 ## 0.6.29 (14.09.2026)
 
 **Konsistenz-Nachzug auf EMS' Bitte**: die drei Formular-Konventions-Ergänzungen von eben

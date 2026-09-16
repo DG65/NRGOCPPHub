@@ -21,12 +21,12 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.13';
+    private const VERSION = '0.1.14';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
-    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/ems-integration/LICENSE';
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/beta/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz

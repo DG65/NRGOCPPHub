@@ -45,14 +45,14 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.26';
+    private const VERSION = '0.2.27';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
     // (geprüft: `git show main:LICENSE` -> fatal, existiert dort nicht) —
     // beim Merge nach main hierher zurückkommen und umstellen (Dietmars
     // Fund bei MeterHub: blind auf main verlinkt zeigte die alte Lizenz).
-    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/ems-integration/LICENSE';
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/beta/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
 
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz

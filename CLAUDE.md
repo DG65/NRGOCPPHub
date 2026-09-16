@@ -79,6 +79,13 @@ SUITE.md nicht einsehbar.
 Während der EMS-Integrationsphase geht ALLES auf `ems-integration` (Anweisung Dietmar,
 verbundweit). `main` bleibt leer/stabil bis zum ersten Release.
 
+**Seit 16.09.2026: Modul im Symcon Store gelistet, Kanal Beta.** Branch `beta` existiert
+(erstellt aus `ems-integration`, Commit `4067329`), zeigt den tatsächlich distributierten
+Stand. Weiterhin auf `ems-integration` entwickeln; `beta` wird bei Bedarf per Fast-Forward
+nachgezogen, nicht bei jedem einzelnen Commit. `LICENSE_URL` in allen vier Modulen zeigt
+auf `blob/beta/LICENSE` (nicht `main` — die Datei liegt dort noch nicht, siehe
+MeterHub-Stolperstein 01.09.2026).
+
 ## Arbeitsweise (aus ChargerHub übernommen, hart erarbeitet)
 
 - Versions-Ritual je Änderung: `library.json` version+build bumpen, Versions-Caption in

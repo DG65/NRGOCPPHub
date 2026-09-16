@@ -18,11 +18,11 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.8';
+    private const VERSION = '0.3.9';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
-    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/ems-integration/LICENSE';
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/beta/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const NEWS_VERSION = '0.3.8';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
