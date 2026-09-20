@@ -29,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.29';
+    private const VERSION = '0.2.30';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -239,6 +239,13 @@ class OCPPHubLadepunkt extends IPSModule
         // OCPPHubSplitter::ProcessHookData()) — unabhängig vom OCPP-
         // Nachrichteninhalt, reiner Lebenszeichen-Nachweis.
         $this->RegisterAttributeInteger('LastSeenAt', 0);
+
+        // Vertrag 1.7 (EMS-Bitte 20.09.2026): was die Wallbox selbst per
+        // GetConfiguration über Stromgrenzen/Phasenumschaltung sagt.
+        // 0 bzw. -1 = (noch) unbekannt, dann fehlt das Vertragsfeld.
+        $this->RegisterAttributeInteger('StationMaxCurrentA', 0);
+        $this->RegisterAttributeInteger('StationMinCurrentA', 0);
+        $this->RegisterAttributeInteger('PhaseSwitchSupported', -1);
 
         $this->RegisterTimer('SurplusTimer', 0, 'OHUBL_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('EnableActionsTimer', 0, 'OHUBL_EnableActions($_IPS[\'TARGET\']);');
@@ -879,6 +886,22 @@ class OCPPHubLadepunkt extends IPSModule
         $this->SetValue('ocpp_connected', true);
     }
 
+    // Vom Splitter nach einer GetConfiguration-Antwort aufgerufen (Vertrag
+    // 1.7). -1 = Wallbox hat den Wert nicht (plausibel) geliefert — dann
+    // bleibt der bisherige Wert stehen, es wird nichts überschrieben.
+    public function SetStationCapabilities(int $MaxCurrentA, int $MinCurrentA, int $PhaseSwitch): void
+    {
+        if ($MaxCurrentA > 0) {
+            $this->WriteAttributeInteger('StationMaxCurrentA', $MaxCurrentA);
+        }
+        if ($MinCurrentA > 0) {
+            $this->WriteAttributeInteger('StationMinCurrentA', $MinCurrentA);
+        }
+        if ($PhaseSwitch === 0 || $PhaseSwitch === 1) {
+            $this->WriteAttributeInteger('PhaseSwitchSupported', $PhaseSwitch);
+        }
+    }
+
     // Heartbeat-Intervall ist bei uns fest auf 300s eingestellt (siehe
     // OCPPHubSplitter::onBootNotification()) — reichlich Marge (3x) gegen
     // normale Jitter/einen einzelnen verpassten Heartbeat, bevor „nicht
@@ -1366,8 +1389,8 @@ class OCPPHubLadepunkt extends IPSModule
     {
         $managedBy = $this->ReadPropertyString('ManagedBy');
         $externallyManaged = !in_array($managedBy, ['none', 'ems'], true);
-        return [
-            'contractVersion'   => '1.6',
+        $entry = [
+            'contractVersion'   => '1.7',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
@@ -1405,6 +1428,17 @@ class OCPPHubLadepunkt extends IPSModule
             // `deactivated` ergänzt — eindeutiger Name, deckungsgleich mit
             // Status 104, ohne dass ein Konsument extra den Instanzstatus
             // abfragen muss.
+            // 1.7 (EMS-Bitte 20.09.2026): stationMaxCurrentA/stationMinCurrentA
+            // (Ampere) und phaseSwitchSupported (bool) additiv und optional —
+            // nur vorhanden, wenn die Wallbox sie per GetConfiguration
+            // gemeldet hat (`Station-MaxCurrent`/`MinChargingCurrent` sind
+            // go-e-spezifisch, `ConnectorSwitch3to1PhaseSupported` OCPP-
+            // Standard); fehlt ein Feld, ist der Wert unbekannt. Bewusst
+            // eigene Namen neben minCurrent/maxCurrent: diese beiden sind
+            // die vom Nutzer eingestellten Regelgrenzen, jene die Hardware-
+            // Angabe der Wallbox. Die Phasenzahl (numberPhases) fehlt noch —
+            // OCPP 1.6 meldet sie nicht direkt, sie ließe sich nur aus
+            // Strom-Messwerten je Phase während einer Ladung ableiten.
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
@@ -1437,6 +1471,17 @@ class OCPPHubLadepunkt extends IPSModule
             // mit Instanzstatus 104.
             'deactivated'       => $this->IsDeactivated(),
         ];
+        if ($this->ReadAttributeInteger('StationMaxCurrentA') > 0) {
+            $entry['stationMaxCurrentA'] = $this->ReadAttributeInteger('StationMaxCurrentA');
+        }
+        if ($this->ReadAttributeInteger('StationMinCurrentA') > 0) {
+            $entry['stationMinCurrentA'] = $this->ReadAttributeInteger('StationMinCurrentA');
+        }
+        $phaseSwitch = $this->ReadAttributeInteger('PhaseSwitchSupported');
+        if ($phaseSwitch === 0 || $phaseSwitch === 1) {
+            $entry['phaseSwitchSupported'] = ($phaseSwitch === 1);
+        }
+        return $entry;
     }
 
     // ---------------------------------------------------------------------

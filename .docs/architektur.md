@@ -1347,6 +1347,24 @@ weiterhin verbundener Ladepunkt hat `active=false` UND ist trotzdem real in Betr
 neue, eindeutig benannte Feld `deactivated` (deckungsgleich mit 104, erspart Konsumenten
 eine separate Statusabfrage).
 
+**1.7 (EMS-Bitte 20.09.2026): `stationMaxCurrentA`, `stationMinCurrentA`,
+`phaseSwitchSupported` additiv und optional.** EMS rechnet Mindestleistung und
+Sollwerte in Watt und braucht dafür Phasenzahl und Stromgrenzen je Ladepunkt. Was OCPP
+1.6 sicher hergibt: nach jeder BootNotification fragt der Splitter per GetConfiguration
+(nur lesend, gezielte Schlüssel) `Station-MaxCurrent` und `MinChargingCurrent`
+(go-e-spezifisch) sowie `ConnectorSwitch3to1PhaseSupported` (OCPP-Standard) ab. Live an
+WB2 (go-e, 20.09.2026) beantwortet: 16 A, 6 A, `true`. Unbekannte Schlüssel landen in
+`unknownKey` und bleiben unbekannt — das Feld fehlt dann im Vertrag, nichts wird geraten.
+Bewusst eigene Namen neben `minCurrent`/`maxCurrent` (die sind die vom Nutzer
+eingestellten Regelgrenzen, keine Hardware-Angabe). **Offen: `numberPhases`.** OCPP 1.6
+meldet die Phasenzahl nirgends direkt; ableitbar nur aus `Current.Import.L1/L2/L3` (oder
+`Voltage.L1..L3`) in MeterValues während einer Ladung. go-e kennt diese Measurands
+(WB2: in `MeterValuesAlignedData` eingetragen, `ClockAlignedDataInterval` = 0), unsere
+`MeterValuesSampledData` enthält nur Leistung und Energie. Vor dem Bau nötig: Live-Test
+mit angestecktem Fahrzeug, ob go-e die Phasenströme in `MeterValuesSampledData` bzw. per
+Clock-Aligned-Intervall liefert (`MeterValuesSampledDataMaxLength` steht dort auf 1,
+obwohl zwei Einträge akzeptiert werden).
+
 ## Vermerkte, noch nicht vertiefte Punkte
 
 Kurz notiert (30.08.2026), bewusst noch nicht ausgearbeitet — vor der jeweils

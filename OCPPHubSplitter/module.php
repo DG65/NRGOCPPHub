@@ -45,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.28';
+    private const VERSION = '0.2.29';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
@@ -556,6 +556,7 @@ class OCPPHubSplitter extends IPSModule
                     // gesendet (nicht im Normalbetrieb) — darum hier bewusst IMMER
                     // dauerhaft geloggt, nicht nur bei Ablehnung, kein Spam-Risiko.
                     IPS_LogMessage('OCPPHub', 'Antwort auf GetConfiguration [' . $cpid . ']: ' . $raw);
+                    $this->forwardStationCapabilities($cpid, $message[2] ?? null);
                 }
                 // Ladeablehnung erklären (Diagnose-Feature 31.08.2026, siehe
                 // .docs/architektur.md): nur bei einer EINDEUTIGEN Ablehnung
@@ -805,6 +806,7 @@ class OCPPHubSplitter extends IPSModule
             // Wallbox-Firmware (u. a. Testgerät go-e) erwartet die Antwort
             // auf ihren eigenen Aufruf vor weiteren CALLs vom Central System.
             $this->requestFastMeterValues($cpid);
+            $this->requestStationCapabilities($cpid);
         }
     }
 
@@ -1527,6 +1529,52 @@ class OCPPHubSplitter extends IPSModule
         unset($pending[$uniqueId]);
         $this->WriteAttributeString('PendingCalls', json_encode($pending));
         return $action;
+    }
+
+    // Vertrag 1.7 (EMS-Bitte 20.09.2026): was die Wallbox selbst über
+    // Stromgrenzen und Phasenumschaltung sagt, nur lesend (GetConfiguration
+    // mit gezielten Schlüsseln). `Station-MaxCurrent`/`MinChargingCurrent`
+    // sind go-e-spezifisch (live an WB2 gesehen), `ConnectorSwitch3to1Phase
+    // Supported` ist ein OCPP-1.6-Standardschlüssel. Kennt eine Wallbox einen
+    // Schlüssel nicht, steht er in `unknownKey` und bleibt einfach unbekannt.
+    private function requestStationCapabilities(string $cpid): void
+    {
+        $this->sendCall($cpid, 'GetConfiguration', ['key' => ['Station-MaxCurrent', 'MinChargingCurrent', 'ConnectorSwitch3to1PhaseSupported']]);
+    }
+
+    // Wertet eine GetConfiguration-Antwort aus (auch die der manuellen
+    // Diagnoseabfrage) und reicht nur plausible Werte an den Ladepunkt
+    // weiter; -1 = unbekannt. Nichts wird geraten.
+    private function forwardStationCapabilities(string $cpid, $payload): void
+    {
+        $ladepunktId = $this->findLadepunkt($cpid);
+        if ($ladepunktId === 0 || !is_array($payload)) {
+            return;
+        }
+        $values = [];
+        foreach ((array)($payload['configurationKey'] ?? []) as $kv) {
+            if (is_array($kv) && isset($kv['key'])) {
+                $values[(string)$kv['key']] = trim((string)($kv['value'] ?? ''));
+            }
+        }
+        $ampere = static function ($v, int $lo, int $hi): int {
+            if ($v === null || !is_numeric($v)) {
+                return -1;
+            }
+            $a = (int)round((float)$v);
+            return ($a >= $lo && $a <= $hi) ? $a : -1;
+        };
+        $max = $ampere($values['Station-MaxCurrent'] ?? null, 6, 63);
+        $min = $ampere($values['MinChargingCurrent'] ?? null, 6, 32);
+        $switch = -1;
+        if (isset($values['ConnectorSwitch3to1PhaseSupported'])) {
+            $s = strtolower($values['ConnectorSwitch3to1PhaseSupported']);
+            $switch = ($s === 'true') ? 1 : (($s === 'false') ? 0 : -1);
+        }
+        if ($max === -1 && $min === -1 && $switch === -1) {
+            return;
+        }
+        OHUBL_SetStationCapabilities($ladepunktId, $max, $min, $switch);
     }
 
     // Erzwingt kurze MeterValues-Intervalle (ChargerHub-Empfehlung

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.32 (20.09.2026)
+
+**Vertrag 1.7: Stromgrenzen und Phasenumschaltung der Wallbox (EMS-Bitte).** Der Splitter
+(0.2.29) fragt nach jeder BootNotification gezielt `Station-MaxCurrent`,
+`MinChargingCurrent` und `ConnectorSwitch3to1PhaseSupported` per GetConfiguration ab (nur
+lesend) und reicht plausible Werte an den Ladepunkt (0.2.30) weiter. `OHUB_GetFunctions`
+liefert dann additiv und optional `stationMaxCurrentA`, `stationMinCurrentA` (Ampere) und
+`phaseSwitchSupported` (bool); fehlt ein Feld, ist der Wert unbekannt. Live an WB2 (go-e)
+gesehen: 16 A, 6 A, Umschaltung 3→1-phasig unterstützt. Die ersten beiden Schlüssel sind
+go-e-spezifisch, der dritte OCPP-Standard. Eine Phasenzahl (`numberPhases`) fehlt bewusst
+noch: OCPP 1.6 meldet sie nicht direkt.
+
 ## 0.6.31 (16.09.2026)
 
 **Echter Forum-Thread verlinkt.** Dietmar hat den Vorstellungs-Thread im Symcon-Forum
