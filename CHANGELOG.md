@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.33 (20.09.2026)
+
+Vertrag 1.7 nach Live-Test nachgeschärft (Splitter 0.2.30): die Stromgrenzen/Phasenumschaltung
+wurden nur nach einer BootNotification abgefragt, nach einem Modul-Update bootet die
+Wallbox aber nicht neu, die neuen Felder blieben leer. Jetzt fragt der Splitter auch beim
+ersten Heartbeat nach Modulstart nach (danach höchstens alle 6 Stunden). Live an WB1 und WB2
+bestätigt: 16 A, 6 A, Umschaltung unterstützt, beide Felder im Vertrag sichtbar.
+
 ## 0.6.32 (20.09.2026)
 
 **Vertrag 1.7: Stromgrenzen und Phasenumschaltung der Wallbox (EMS-Bitte).** Der Splitter

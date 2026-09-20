@@ -45,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.29';
+    private const VERSION = '0.2.30';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
@@ -799,6 +799,21 @@ class OCPPHubSplitter extends IPSModule
         }
 
         $this->sendRaw($cpid, [self::OCPP_CALLRESULT, $uniqueId, $response]);
+
+        // Nach einem Modul-Update bootet die Wallbox nicht neu, die Werte
+        // fehlten sonst bis zum nächsten Neustart. Darum auch beim ersten
+        // Heartbeat nach Modulstart nachfragen, danach höchstens alle 6 h.
+        if ($action === 'Heartbeat') {
+            $asked = json_decode($this->GetBuffer('StationCapsAsked'), true);
+            if (!is_array($asked)) {
+                $asked = [];
+            }
+            if (time() - (int)($asked[$cpid] ?? 0) > 6 * 3600) {
+                $asked[$cpid] = time();
+                $this->SetBuffer('StationCapsAsked', json_encode($asked));
+                $this->requestStationCapabilities($cpid);
+            }
+        }
 
         if ($action === 'BootNotification') {
             // ERST die BootNotification.conf raus (oben), DANACH die
