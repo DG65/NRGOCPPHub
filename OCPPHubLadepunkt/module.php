@@ -29,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.31';
+    private const VERSION = '0.2.32';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -396,7 +396,7 @@ class OCPPHubLadepunkt extends IPSModule
                         ['type' => 'Label', 'caption' => 'Dieser Anteil des Überschusses bleibt dem Speicher vorbehalten und wird von der Ampere-Berechnung fürs Laden abgezogen. 0 % = kompletter Überschuss geht in die Wallbox, 100 % = nichts geht in die Wallbox.'],
                         ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'caption' => 'Speicherkapazität (kWh, 0 = kein Speicher/unbekannt)', 'minimum' => 0, 'maximum' => 200, 'digits' => 1, 'suffix' => 'kWh'],
                         ['type' => 'Label', 'caption' => 'Aktuell nur informativ hinterlegt — die darauf aufbauende Phasenumschalt-Wartezeit (wie bei ChargerHub) ist bei OCPPHub noch nicht umgesetzt (Phasenumschaltung ist Stufe-2-Thema).'],
-                        ['type' => 'SelectInstance', 'name' => 'SurplusMeterID', 'caption' => 'Netzzähler erzwingen (leer = automatisch über MeterHub-Vertrag)', 'moduleID' => self::METERHUB_GUID],
+                        ...$this->surplusMeterFieldElements(),
                     ],
                 ],
             ],
@@ -1703,6 +1703,35 @@ class OCPPHubLadepunkt extends IPSModule
             $items[] = ['type' => 'Label', 'caption' => $line];
         }
         return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
+    }
+
+    // SUITE.md „Wert kommt automatisch: Eingabefeld ersetzen" (21.09.2026):
+    // findet die Automatik (MeterHub-Vertrag) einen Netzzähler und das Feld ist
+    // leer, wird stattdessen eine schreibgeschützte 🔗-Zeile gezeigt; das Feld
+    // liegt nur in einem eingeklappten Panel für bewusstes Überschreiben.
+    // Eigene Auswahl: ✏️, Feld sichtbar. Nichts gefunden: ℹ️, Feld sichtbar.
+    private function surplusMeterFieldElements(): array
+    {
+        $field = ['type' => 'SelectInstance', 'name' => 'SurplusMeterID', 'caption' => 'Netzzähler (MeterHub)', 'moduleID' => self::METERHUB_GUID];
+        $forced = $this->ReadPropertyInteger('SurplusMeterID');
+        if ($forced > 0) {
+            $name = @IPS_InstanceExists($forced) ? '„' . IPS_GetName($forced) . '"' : '(existiert nicht mehr)';
+            return [
+                ['type' => 'Label', 'caption' => '✏️ Netzzähler: MeterHub #' . $forced . ' ' . $name . ' (eigene Auswahl, hat Vorrang vor der automatischen Erkennung)'],
+                $field,
+            ];
+        }
+        $meter = $this->findGridMeter();
+        if ($meter !== null) {
+            return [
+                ['type' => 'Label', 'caption' => '🔗 Netzzähler: MeterHub #' . $meter['iid'] . ' „' . IPS_GetName($meter['iid']) . '" (automatisch über den MeterHub-Vertrag, Netzleistung in Echtzeit)'],
+                ['type' => 'ExpansionPanel', 'caption' => '✏️ Eigenen Netzzähler stattdessen verwenden', 'expanded' => false, 'items' => [$field]],
+            ];
+        }
+        return [
+            ['type' => 'Label', 'caption' => 'ℹ️ Netzzähler: keiner automatisch gefunden (MeterHub mit Echtzeit-Netzleistung), wird fürs Überschussladen gebraucht. Bitte unten auswählen.'],
+            $field,
+        ];
     }
 
     private function agoText(int $ts): string

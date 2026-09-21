@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.35 (21.09.2026)
+
+**Automatisch gefundene Werte ersetzen das Eingabefeld (SUITE.md, EMS-Auftrag von Dietmar).**
+Wo eine Automatik ein Feld überholt, zeigt das Formular jetzt eine schreibgeschützte
+🔗-Zeile mit Wert und Quelle statt eines leeren Eingabefelds; das Auswahlfeld liegt nur noch in
+einem eingeklappten Panel „Eigenen … stattdessen verwenden". Eigene Auswahl bleibt sichtbar und
+gewinnt (✏️), findet die Automatik nichts, steht das Feld sichtbar da (ℹ️). Betrifft zwei Felder:
+Ladepunkt 0.2.32, Netzzähler fürs Überschussladen (automatisch über den MeterHub-Vertrag);
+Konfigurator 0.1.17, Splitter (automatisch die übergeordnete Instanz, und nur wenn sie wirklich
+ein Splitter ist; vorher galt auch eine Kategorie als „Splitter"). Es wird nie ein Wert ins Feld
+geschrieben. Neu: Prüfstand `php .tools/test-form.php` (11 Szenarien über alle vier Module)
+prüft, dass Statuszeilen und 🔗/✏️/ℹ️-Zeilen im ausgelieferten Formular stehen.
+
 ## 0.6.34 (21.09.2026)
 
 **Verbindungen im Verbund sichtbar (neue SUITE.md-Regel, EMS-Auftrag von Dietmar).** Alle vier

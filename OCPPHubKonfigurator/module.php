@@ -21,7 +21,7 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.16';
+    private const VERSION = '0.1.17';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
@@ -68,7 +68,53 @@ class OCPPHubKonfigurator extends IPSModule
         if ($explicit > 0) {
             return $explicit;
         }
-        return (int)(@IPS_GetParent($this->InstanceID) ?: 0);
+        return $this->autoSplitterId();
+    }
+
+    // Automatisch erkannt wird nur die übergeordnete Instanz, und nur wenn sie
+    // wirklich ein OCPPHub-Splitter ist (eine Kategorie o. ä. zählt nicht).
+    private function autoSplitterId(): int
+    {
+        $parent = (int)(@IPS_GetParent($this->InstanceID) ?: 0);
+        if ($parent > 0 && @IPS_InstanceExists($parent) && IPS_GetInstance($parent)['ModuleInfo']['ModuleID'] === self::SPLITTER_GUID) {
+            return $parent;
+        }
+        return 0;
+    }
+
+    // SUITE.md „Wert kommt automatisch: Eingabefeld ersetzen" (21.09.2026):
+    // liefert die Automatik einen Splitter und das Feld ist leer, wird das
+    // Auswahlfeld nicht als Eingabe gezeigt, sondern eine schreibgeschützte
+    // 🔗-Zeile; das Feld liegt nur in einem eingeklappten Panel für ein
+    // bewusstes Überschreiben. Eigene Auswahl: ✏️, Feld sichtbar. Nichts
+    // automatisch: ℹ️, Feld sichtbar. Nie ein Wert ins Feld schreiben.
+    private function splitterFieldElements(): array
+    {
+        $field = [
+            'type'     => 'SelectInstance',
+            'name'     => 'SplitterID',
+            'caption'  => 'OCPPHub-Splitter',
+            'moduleID' => self::SPLITTER_GUID,
+        ];
+        $explicit = $this->ReadPropertyInteger('SplitterID');
+        if ($explicit > 0) {
+            $name = @IPS_InstanceExists($explicit) ? '„' . IPS_GetName($explicit) . '"' : '(existiert nicht mehr)';
+            return [
+                ['type' => 'Label', 'caption' => '✏️ Splitter: #' . $explicit . ' ' . $name . ' (eigene Auswahl, hat Vorrang vor der automatischen Erkennung)'],
+                $field,
+            ];
+        }
+        $auto = $this->autoSplitterId();
+        if ($auto > 0) {
+            return [
+                ['type' => 'Label', 'caption' => '🔗 Splitter: #' . $auto . ' „' . IPS_GetName($auto) . '" (automatisch: übergeordnete Instanz)'],
+                ['type' => 'ExpansionPanel', 'caption' => '✏️ Eigenen Splitter stattdessen verwenden', 'expanded' => false, 'items' => [$field]],
+            ];
+        }
+        return [
+            ['type' => 'Label', 'caption' => 'ℹ️ Splitter: nichts automatisch erkannt, wird gebraucht. Bitte unten auswählen.'],
+            $field,
+        ];
     }
 
     // SUITE.md „Verbund-Verbindungen im Formular sichtbar machen" (21.09.2026):
@@ -169,12 +215,7 @@ class OCPPHubKonfigurator extends IPSModule
                         ['type' => 'Label', 'caption' => 'ℹ️ Falls oben kein Splitter automatisch erkannt wird (Meldung „Kein OCPPHub-Splitter gefunden"): im Auswahlfeld „OCPPHub-Splitter" die passende Instanz manuell wählen. Das betrifft nur DIESE Konfigurator-Instanz — für jede einzeln erstellte Ladepunkt-Instanz ist die Splitter-Zuordnung dort im eigenen Formular ohnehin Pflicht (siehe deren Dokumentation).'],
                     ],
                 ],
-                [
-                    'type'     => 'SelectInstance',
-                    'name'     => 'SplitterID',
-                    'caption'  => 'OCPPHub-Splitter (nur nötig, falls nicht automatisch erkannt)',
-                    'moduleID' => self::SPLITTER_GUID,
-                ],
+                ...$this->splitterFieldElements(),
                 ['type' => 'Label', 'name' => 'SplitterStatus', 'caption' => $this->splitterStatusLine($splitterId, $values)],
                 [
                     'type'     => 'Configurator',
