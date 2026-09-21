@@ -21,7 +21,7 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.15';
+    private const VERSION = '0.1.16';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
@@ -69,6 +69,47 @@ class OCPPHubKonfigurator extends IPSModule
             return $explicit;
         }
         return (int)(@IPS_GetParent($this->InstanceID) ?: 0);
+    }
+
+    // SUITE.md „Verbund-Verbindungen im Formular sichtbar machen" (21.09.2026):
+    // live berechnete Statuszeile zur Splitter-Verbindung, nie ein statischer
+    // Satz. Zustände: ✅ verbunden (mit Zahlen), ⚠️ verbunden, aber nichts
+    // Brauchbares bzw. mehrdeutig, ℹ️ nicht gefunden, ⛔ Angabe ungültig.
+    private function splitterStatusLine(int $splitterId, array $seenRows): string
+    {
+        $all = @IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [];
+        if ($splitterId <= 0) {
+            if (count($all) === 0) {
+                return 'ℹ️ Kein OCPPHub-Splitter im System gefunden. Zuerst eine „OCPPHub Splitter"-Instanz anlegen; ohne sie zeigt diese Liste keine Wallboxen.';
+            }
+            $nennen = implode(', ', array_map(fn ($id) => '#' . $id . ' „' . IPS_GetName($id) . '"', $all));
+            return '⚠️ Kein Splitter zugeordnet, im System gibt es ' . $nennen . '. Bitte oben auswählen, es wird nichts geraten.';
+        }
+        if (!@IPS_InstanceExists($splitterId) || IPS_GetInstance($splitterId)['ModuleInfo']['ModuleID'] !== self::SPLITTER_GUID) {
+            return '⛔ Die gewählte Instanz #' . $splitterId . ' ist kein OCPPHub-Splitter (oder existiert nicht mehr). Bitte oben neu auswählen.';
+        }
+        $name = '#' . $splitterId . ' „' . IPS_GetName($splitterId) . '"';
+        $lib = @IPS_GetLibrary(IPS_GetInstance($splitterId)['ModuleInfo']['LibraryID'])['Version'] ?? '';
+        $version = $lib !== '' ? ' (OCPPHub ' . $lib . ')' : '';
+        if (!(bool)@IPS_GetProperty($splitterId, 'Active')) {
+            return '⚠️ Verbunden mit Splitter ' . $name . $version . ', aber der ist deaktiviert: Wallboxen können sich dort nicht melden, die Liste bleibt so, wie sie zuletzt war.';
+        }
+        $angelegt = [];
+        $fehlt = [];
+        foreach ($seenRows as $row) {
+            if ((int)$row['instanceID'] > 0) {
+                $angelegt[] = $row['cpid'];
+            } else {
+                $fehlt[] = $row['cpid'];
+            }
+        }
+        if (count($seenRows) === 0) {
+            return 'ℹ️ Verbunden mit Splitter ' . $name . $version . ', aber noch keine Wallbox hat sich dort gemeldet. Endpunkt an der Wallbox eintragen (steht im Splitter-Formular), danach erscheint sie hier.';
+        }
+        $text = '✅ Verbunden mit Splitter ' . $name . $version . '. ' . count($seenRows) . ' Wallbox(en) gemeldet: ';
+        $text .= count($angelegt) > 0 ? 'als Ladepunkt angelegt: ' . implode(', ', $angelegt) : 'noch keine als Ladepunkt angelegt';
+        $text .= count($fehlt) > 0 ? '; noch ohne Ladepunkt: ' . implode(', ', $fehlt) . ' (unten „Erstellen").' : '.';
+        return $text;
     }
 
     public function GetConfigurationForm()
@@ -134,9 +175,7 @@ class OCPPHubKonfigurator extends IPSModule
                     'caption'  => 'OCPPHub-Splitter (nur nötig, falls nicht automatisch erkannt)',
                     'moduleID' => self::SPLITTER_GUID,
                 ],
-                $splitterId > 0
-                    ? ['type' => 'Label', 'caption' => 'Verbunden mit Splitter-Instanz #' . $splitterId]
-                    : ['type' => 'Label', 'caption' => '⚠️ Kein OCPPHub-Splitter gefunden — oben manuell auswählen.'],
+                ['type' => 'Label', 'name' => 'SplitterStatus', 'caption' => $this->splitterStatusLine($splitterId, $values)],
                 [
                     'type'     => 'Configurator',
                     'name'     => 'ChargePointList',

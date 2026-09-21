@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.34 (21.09.2026)
+
+**Verbindungen im Verbund sichtbar (neue SUITE.md-Regel, EMS-Auftrag von Dietmar).** Alle vier
+Module (Splitter 0.2.31 / Ladepunkt 0.2.31 / Konfigurator 0.1.16 / Abrechnung 0.3.11) zeigen
+jetzt live berechnete Statuszeilen (✅ verbunden mit den geltenden Werten, ⚠️ verbunden, aber
+nichts Brauchbares, ℹ️ nicht gefunden und was dann gilt, ⛔ Pflichtangabe fehlt) statt
+statischer Sätze. Splitter: Abrechnung und zugeordnete Ladepunkte samt Verbindungszustand,
+Wallboxen ohne Ladepunkt. Ladepunkt: Splitter und Wallbox (Gerät, zuletzt gesehen, von der Wallbox
+gemeldete Stromgrenzen), Netzzähler fürs Überschussladen samt Instanz und aktuellem Wert, EMS,
+doppelte Anbindung, erkanntes Fahrzeug. Konfigurator: Splitter mit Zahl der gemeldeten und schon
+angelegten Wallboxen (bei mehreren Splittern ohne Auswahl wird nicht geraten). Abrechnung: welcher
+Splitter sie benutzt, Tessie-Verknüpfung der Fahrzeuge, und ehrlich, dass es noch keine
+Preis-/Tarifquelle gibt.
+
 ## 0.6.33 (20.09.2026)
 
 Vertrag 1.7 nach Live-Test nachgeschärft (Splitter 0.2.30): die Stromgrenzen/Phasenumschaltung

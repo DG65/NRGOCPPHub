@@ -18,7 +18,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.10';
+    private const VERSION = '0.3.11';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -515,6 +515,7 @@ class OCPPHubAbrechnung extends IPSModule
                         ['type' => 'Label', 'caption' => '🧩 Konfigurationskachel: dieselbe Verwaltung (Fahrzeuge/Gruppen/Kunden/Zugänge, Karte anlernen) gibt es auch als WebFront-Kachel dieser Instanz — nützlich, um sie einem gesicherten WebFront zuzuweisen, ohne Konsolen-Zugang zu vergeben. Voraussetzung: eine WebHook-Control-Instanz muss im Objektbaum vorhanden sein (Symcon legt sie i. d. R. automatisch an); die Kachel meldet sich dort unter „/hook/ohubadmin' . $this->InstanceID . '" an. Zugriffsschutz läuft komplett über Symcons eigene WebFront-Sichtbarkeit je Instanz — kein zusätzliches Passwort in diesem Modul.'],
                     ],
                 ],
+                $this->connectionsPanel(),
                 [
                     'type'  => 'RowLayout',
                     'items' => array_map(fn ($name) => $panelDefs[$name], $panelOrder),
@@ -562,6 +563,66 @@ class OCPPHubAbrechnung extends IPSModule
         }
 
         return json_encode($form);
+    }
+
+    // SUITE.md „Verbund-Verbindungen im Formular sichtbar machen" (21.09.2026):
+    // je Verbindung eine live berechnete Zeile (✅/⚠️/ℹ️/⛔), direkt beim Bau
+    // des Formulars, kein Platzhalter-Label zum nachträglichen Suchen.
+    private function connectionsPanel(): array
+    {
+        $lines = [];
+
+        // 1) Splitter, der diese Abrechnung tatsächlich benutzt
+        $bound = 0;
+        foreach (@IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [] as $splitterId) {
+            if (OHUB_GetAbrechnungID($splitterId) === $this->InstanceID) {
+                $bound = (int)$splitterId;
+                break;
+            }
+        }
+        if ($bound > 0) {
+            $wirkung = (int)@IPS_GetProperty($bound, 'Betriebsart') === 2
+                ? 'Betriebsart ②: jede Kartenauflage wird gegen diese Zugänge geprüft.'
+                : 'Betriebsart ①: die Zugänge hier werden nicht ausgewertet, jede Karte lädt.';
+            $lines[] = '✅ Wird von Splitter #' . $bound . ' „' . IPS_GetName($bound) . '" verwendet. ' . $wirkung;
+        } else {
+            $lines[] = '⚠️ Kein Splitter verwendet diese Instanz als seine Abrechnung. Eingaben hier bleiben wirkungslos (siehe Hinweis oben).';
+        }
+
+        // 2) Tessie-Fahrzeuge
+        $verknuepft = [];
+        $kaputt = [];
+        foreach ($this->getFahrzeuge() as $f) {
+            $tid = (int)($f['tessieInstanceId'] ?? 0);
+            if ($tid <= 0) {
+                continue;
+            }
+            if (@IPS_InstanceExists($tid) && IPS_GetInstance($tid)['ModuleInfo']['ModuleID'] === self::TESSIE_VEHICLE_GUID) {
+                $verknuepft[] = $this->resolveFahrzeugName($f) . ' (Tessie #' . $tid . ')';
+            } else {
+                $kaputt[] = (string)($f['name'] ?? ('Fahrzeug ' . ($f['id'] ?? '?')));
+            }
+        }
+        $tessieVorhanden = count(@IPS_GetInstanceListByModuleID(self::TESSIE_VEHICLE_GUID) ?: []);
+        if (count($kaputt) > 0) {
+            $lines[] = '⚠️ Verknüpftes Tessie-Fahrzeug nicht mehr vorhanden bei: ' . implode(', ', $kaputt) . '. Der Name kommt dort nicht mehr live, bitte neu verknüpfen oder Namen von Hand eintragen.';
+        }
+        if (count($verknuepft) > 0) {
+            $lines[] = '✅ Fahrzeugnamen live von Tessie übernommen: ' . implode(', ', $verknuepft) . '.';
+        } elseif ($tessieVorhanden > 0) {
+            $lines[] = 'ℹ️ Im System gibt es ' . $tessieVorhanden . ' Tessie-Fahrzeug(e), aber kein Fahrzeug hier ist verknüpft. Unter „Fahrzeuge" auswählbar, sonst gelten die von Hand eingetragenen Namen.';
+        } else {
+            $lines[] = 'ℹ️ Kein Tessie-Fahrzeug im System gefunden: Fahrzeugnamen gelten wie von Hand eingetragen.';
+        }
+
+        // 3) Preis-/Tarifquelle: gibt es (noch) nicht, das ehrlich sagen
+        $lines[] = 'ℹ️ Preis-/Tarifquelle: es gibt noch keine Kostenberechnung (geplant, Stufe 3). Erfasst werden nur die kWh je Ladevorgang, es wird kein Preis angesetzt und keine Tarif-Instanz (z. B. Tibber) abgefragt.';
+
+        $items = [];
+        foreach ($lines as $line) {
+            $items[] = ['type' => 'Label', 'caption' => $line];
+        }
+        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
     }
 
     public function DismissReviewHint(): void

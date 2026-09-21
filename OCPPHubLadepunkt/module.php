@@ -29,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.30';
+    private const VERSION = '0.2.31';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -321,6 +321,7 @@ class OCPPHubLadepunkt extends IPSModule
                         ['type' => 'Label', 'caption' => '🔒 Reservierung: unabhängig von der Splitter-Betriebsart nutzbar (Backend-Funktionen `OHUBL_Reserve`/`OHUBL_CancelReservation`, Dashboard baut die Bedienoberfläche). Solange eine Reservierung aktiv ist, wird jede Kartenauflage mit einem ANDEREN idTag abgelehnt — sichtbar in `reserved_by`/`reserved_until`. Diese Blockade prüfen wir selbst (unabhängig davon, ob die Wallbox den OCPP-Kernbefehl `ReserveNow` selbst unterstützt) — manche Modelle (z. B. go-e) lehnen `ReserveNow` mit „NotImplemented" ab, was nur eine etwaige eigene Anzeige an der Wallbox betrifft, nicht unsere Durchsetzung.'],
                     ],
                 ],
+                $this->connectionsPanel(),
                 [
                     'type'    => 'ValidationTextBox',
                     'name'    => 'CPID',
@@ -1605,6 +1606,123 @@ class OCPPHubLadepunkt extends IPSModule
         $this->SetValue('surplus_status', sprintf('Lädt mit %d A (%.0f W Überschuss)', $clamped, $surplusW));
     }
 
+    // SUITE.md „Verbund-Verbindungen im Formular sichtbar machen" (21.09.2026):
+    // je Verbindung eine live berechnete Zeile (✅/⚠️/ℹ️/⛔) mit den tatsächlich
+    // geltenden Werten und ihrer Quelle. Direkt beim Bau des Formulars
+    // berechnet, kein Platzhalter-Label, das nachträglich gesucht werden müsste.
+    private function connectionsPanel(): array
+    {
+        $lines = [];
+
+        // 1) Splitter und Wallbox
+        $cpid = $this->ReadPropertyString('CPID');
+        $splitterId = $this->resolveSplitterId();
+        if ($cpid === '') {
+            $lines[] = '⛔ Charge-Point-Identity fehlt. Ohne sie kann keine Wallbox diesem Ladepunkt zugeordnet werden.';
+        }
+        if ($splitterId <= 0 || !@IPS_InstanceExists($splitterId)) {
+            $lines[] = '⛔ Kein OCPPHub-Splitter zugeordnet (Pflichtfeld unten). Ohne ihn kommen weder Messwerte an, noch lässt sich die Wallbox steuern.';
+        } elseif ($cpid !== '') {
+            $lib = @IPS_GetLibrary(IPS_GetInstance($splitterId)['ModuleInfo']['LibraryID'])['Version'] ?? '';
+            $sName = 'Splitter #' . $splitterId . ' „' . IPS_GetName($splitterId) . '"' . ($lib !== '' ? ' (OCPPHub ' . $lib . ')' : '');
+            $ts = $this->ReadAttributeInteger('LastSeenAt');
+            if ($ts <= 0) {
+                $lines[] = '⚠️ ' . $sName . ' zugeordnet, aber die Wallbox „' . $cpid . '" hat sich dort noch nie gemeldet. Endpunkt und Charge-Point-Identity an der Wallbox prüfen.';
+            } else {
+                $frisch = (time() - $ts) < self::MAX_LAST_SEEN_AGE_SECONDS;
+                $geraet = trim($this->ReadAttributeString('DeviceModel') . ' ' . ($this->ReadAttributeString('DeviceSerial') !== '' ? 'Seriennr. ' . $this->ReadAttributeString('DeviceSerial') : ''));
+                $text = ($frisch ? '✅ ' : '⚠️ ') . $sName . ': Wallbox „' . $cpid . '"' . ($geraet !== '' ? ' (' . $geraet . ')' : '') . ' zuletzt gesehen ' . $this->agoText($ts) . ($frisch ? '.' : ', gilt als nicht verbunden.');
+                $max = $this->ReadAttributeInteger('StationMaxCurrentA');
+                $min = $this->ReadAttributeInteger('StationMinCurrentA');
+                $sw = $this->ReadAttributeInteger('PhaseSwitchSupported');
+                $grenzen = [];
+                if ($max > 0) {
+                    $grenzen[] = 'max. ' . $max . ' A';
+                }
+                if ($min > 0) {
+                    $grenzen[] = 'min. ' . $min . ' A';
+                }
+                if ($sw === 0 || $sw === 1) {
+                    $grenzen[] = 'Phasenumschaltung ' . ($sw === 1 ? 'unterstützt' : 'nicht unterstützt');
+                }
+                $text .= count($grenzen) > 0 ? ' Von der Wallbox gemeldet: ' . implode(', ', $grenzen) . '.' : ' Stromgrenzen hat die Wallbox (noch) nicht gemeldet, es gelten die eigenen Einstellungen unten.';
+                $lines[] = $text;
+            }
+        }
+
+        // 2) Steuerhoheit und Überschussladen
+        $managedBy = $this->ReadPropertyString('ManagedBy');
+        if ($this->IsDeactivated()) {
+            $lines[] = 'ℹ️ Ladepunkt ist deaktiviert: Autorisierung, Ladefreigabe und Stromlimit werden nicht geschrieben, gemessen wird weiter.';
+        }
+        if (!$this->ReadPropertyBoolean('EnableSurplusCharging')) {
+            $lines[] = 'ℹ️ Eigenständiges Überschussladen ist aus, ein Netzzähler wird deshalb nicht gesucht.';
+        } elseif ($managedBy !== 'none') {
+            $lines[] = 'ℹ️ Überschussladen ist aktiviert, bleibt aber passiv: Regelungshoheit liegt bei „' . (self::MANAGEDBY_LABELS[$managedBy] ?? $managedBy) . '".';
+        } else {
+            $emsIds = @IPS_GetInstanceListByModuleID(self::EMS_GUID) ?: [];
+            if (count($emsIds) > 0 && $this->IsEmsActive()) {
+                $lines[] = '✅ EMS #' . $emsIds[0] . ' „' . IPS_GetName($emsIds[0]) . '" ist aktiv und hat Vorrang, das eigenständige Überschussladen bleibt passiv.';
+            } else {
+                $lines[] = 'ℹ️ ' . (count($emsIds) > 0 ? 'EMS #' . $emsIds[0] . ' ist installiert, aber nicht aktiv' : 'Kein EMS gefunden') . ': das eigenständige Überschussladen regelt selbst.';
+                $meter = $this->findGridMeter();
+                if ($meter === null) {
+                    $lines[] = function_exists('MHUB_GetFunctions')
+                        ? '⚠️ Kein MeterHub-Zähler mit Echtzeit-Netzleistung gefunden. Ohne ihn pausiert das Überschussladen. Unten kann ein Netzzähler fest gewählt werden.'
+                        : '⚠️ MeterHub ist nicht installiert, es gibt keinen Netzzähler für das Überschussladen. Es bleibt pausiert.';
+                } else {
+                    $wert = @GetValue($meter['powerID']);
+                    $lines[] = '✅ Netzzähler: MeterHub #' . $meter['iid'] . ' „' . IPS_GetName($meter['iid']) . '"' . ($this->ReadPropertyInteger('SurplusMeterID') > 0 ? ' (fest gewählt)' : ' (automatisch über den MeterHub-Vertrag erkannt)') . ', Netzleistung aktuell ' . (is_numeric($wert) ? round((float)$wert) . ' W (+ Bezug, − Einspeisung)' : 'nicht lesbar') . '.';
+                }
+            }
+        }
+
+        // 3) Doppelte Anbindung
+        $source = $this->ReadPropertyString('DuplicateOfSource');
+        $targetId = $this->ReadPropertyInteger('DuplicateOfInstanceID');
+        if ($source === '') {
+            $lines[] = 'ℹ️ Keine doppelte Anbindung eingetragen: dieser Eintrag zählt normal im Verbund.';
+        } elseif ($targetId <= 0 || !@IPS_InstanceExists($targetId)) {
+            $lines[] = '⚠️ Als Duplikat markiert, aber die zählende Instanz ist nicht ausgewählt oder existiert nicht mehr. Bis das behoben ist, wird dieser Eintrag im Verbund nicht sauber zugeordnet.';
+        } else {
+            $lines[] = '✅ Duplikat von ' . ($source === 'chargerhub' ? 'ChargerHub' : 'OCPPHub-Ladepunkt') . ' #' . $targetId . ' „' . IPS_GetName($targetId) . '": gezählt wird dort. Ob dieser Ladepunkt schreiben darf, entscheidet „Wer regelt?" (aktuell: ' . (self::MANAGEDBY_LABELS[$managedBy] ?? $managedBy) . ').';
+            if ($this->hasDuplicateWriteConflict()) {
+                $lines[] = '⚠️ Beide Seiten dürfen schreiben (hier und bei der zählenden Instanz steht die Steuerhoheit nicht bei einem externen Regler). Bitte „Wer regelt?" hier oder dort setzen.';
+            }
+        }
+
+        // 4) Fahrzeug
+        $vehicleVarId = (int)@IPS_GetObjectIDByIdent('vehicle_name', $this->InstanceID);
+        $fahrzeug = $vehicleVarId > 0 ? trim((string)GetValue($vehicleVarId)) : '';
+        $lines[] = $fahrzeug !== ''
+            ? '✅ Fahrzeug erkannt: „' . $fahrzeug . '" (Zuordnung durch das Dashboard).'
+            : 'ℹ️ Noch kein Fahrzeug zugeordnet. Das Dashboard meldet die Zuordnung, sobald ein Fahrzeug angesteckt und erkannt ist.';
+
+        $items = [];
+        foreach ($lines as $line) {
+            $items[] = ['type' => 'Label', 'caption' => $line];
+        }
+        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
+    }
+
+    private function agoText(int $ts): string
+    {
+        if ($ts <= 0) {
+            return 'nie';
+        }
+        $d = max(0, time() - $ts);
+        if ($d < 90) {
+            return 'vor ' . $d . ' s';
+        }
+        if ($d < 5400) {
+            return 'vor ' . (int)round($d / 60) . ' Min';
+        }
+        if ($d < 172800) {
+            return 'vor ' . (int)round($d / 3600) . ' Std';
+        }
+        return 'vor ' . (int)round($d / 86400) . ' Tagen';
+    }
+
     // Vorrangkaskade: EMS aktiv → passiv. Prüft eine Statusvariable
     // 'Active_State' unter der EMS-Instanz (Ident-Name wie in
     // .docs/architektur.md „Steuerung / Überschussladen" beschrieben,
@@ -1634,6 +1752,19 @@ class OCPPHubLadepunkt extends IPSModule
     // max(0, -wert).
     private function FindGridSurplusW(): ?float
     {
+        $meter = $this->findGridMeter();
+        if ($meter === null) {
+            return null;
+        }
+        $value = @GetValue($meter['powerID']);
+        return is_numeric($value) ? max(0, -(float)$value) : null;
+    }
+
+    // Wie FindGridSurplusW(), liefert aber die gefundene Quelle (Instanz und
+    // Variable) statt nur den Wert — Grundlage für die Verbindungs-Statuszeile
+    // im Formular, damit dort benannt werden kann, WOHER der Wert kommt.
+    private function findGridMeter(): ?array
+    {
         if (!function_exists('MHUB_GetFunctions')) {
             return null;
         }
@@ -1659,15 +1790,11 @@ class OCPPHubLadepunkt extends IPSModule
                 }
                 $billing = ($assignment['authority'] ?? '') === 'billing';
                 if ($best === null || ($billing && !$best['billing'])) {
-                    $best = ['powerID' => $powerID, 'billing' => $billing];
+                    $best = ['iid' => (int)$iid, 'powerID' => $powerID, 'billing' => $billing];
                 }
             }
         }
-        if ($best === null) {
-            return null;
-        }
-        $value = @GetValue($best['powerID']);
-        return is_numeric($value) ? max(0, -(float)$value) : null;
+        return $best;
     }
 
     // Speicher-Ladeleistung über den InverterHub-Vertrag (batPowerID) —

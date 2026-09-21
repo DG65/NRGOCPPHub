@@ -45,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.30';
+    private const VERSION = '0.2.31';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
@@ -295,6 +295,7 @@ class OCPPHubSplitter extends IPSModule
                         ['type' => 'Label', 'caption' => '🧩 Verbund: OCPPHub ist das OCPP-Geschwistermodul zu ChargerHub (Modbus TCP) — beide melden Wallboxen über einen feldgleichen Vertrag (`OHUB_GetFunctions`/`CHUB_GetFunctions`) an EMS und Dashboard, sodass es für die konsumierenden Module keinen Unterschied macht, ob eine Wallbox per Modbus oder OCPP angebunden ist.'],
                     ],
                 ],
+                $this->connectionsPanel(),
                 [
                     'type'    => 'CheckBox',
                     'name'    => 'Active',
@@ -458,6 +459,84 @@ class OCPPHubSplitter extends IPSModule
     {
         $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
         $this->UpdateFormField('NewsPanel', 'visible', false);
+    }
+
+    // SUITE.md „Verbund-Verbindungen im Formular sichtbar machen" (21.09.2026):
+    // je Verbindung eine live berechnete Zeile (✅/⚠️/ℹ️/⛔), nie ein
+    // statischer Satz. Direkt beim Bau des Formulars berechnet, es gibt kein
+    // Platzhalter-Label, das nachträglich gesucht werden müsste.
+    private function connectionsPanel(): array
+    {
+        $lines = [];
+
+        if (!$this->ReadPropertyBoolean('Active')) {
+            $lines[] = '⚠️ Dieser Splitter ist deaktiviert: eingehende Wallbox-Nachrichten werden ignoriert, und er meldet dem Verbund keine Ladepunkte.';
+        }
+
+        // Abrechnung (Betriebsart-abhängig)
+        $abrId = $this->ReadAttributeInteger('AbrechnungID');
+        $betriebsart = $this->ReadPropertyInteger('Betriebsart');
+        if ($abrId > 0 && @IPS_InstanceExists($abrId)) {
+            $wirkung = $betriebsart === 2
+                ? 'Betriebsart ②: jede Kartenauflage wird gegen die dort gepflegten Zugänge geprüft.'
+                : 'Betriebsart ①: dort gepflegte Zugänge werden NICHT ausgewertet, jede Karte lädt.';
+            $lines[] = '✅ Abrechnung #' . $abrId . ' „' . IPS_GetName($abrId) . '" verbunden. ' . $wirkung;
+        } else {
+            $lines[] = '⚠️ Keine Abrechnung-Instanz hinterlegt. Sie wird beim nächsten „Übernehmen" automatisch angelegt; bis dahin gibt es weder Kundenverwaltung noch Kartenprüfung.';
+        }
+
+        // Ladepunkte dieses Splitters
+        $own = $this->ownLadepunkte();
+        $seen = $this->GetSeenChargePoints();
+        $ownCpids = [];
+        $rows = [];
+        foreach ($own as $lpId) {
+            $cpid = (string)@IPS_GetProperty($lpId, 'CPID');
+            $ownCpids[] = $cpid;
+            try {
+                $entry = OHUBL_GetContractEntry($lpId);
+            } catch (\Throwable $e) {
+                $entry = [];
+            }
+            $ts = (int)($entry['lastSeenAt'] ?? 0);
+            $frisch = $ts > 0 && (time() - $ts) < 900;
+            $zustand = !empty($entry['deactivated']) ? 'deaktiviert' : ($frisch ? 'verbunden' : 'nicht verbunden');
+            $rows[] = ($cpid !== '' ? $cpid : '(ohne Identity)') . ' #' . $lpId . ' (' . $zustand . ', zuletzt ' . $this->agoText($ts) . ')';
+        }
+        if (count($rows) > 0) {
+            $lines[] = '✅ ' . count($rows) . ' Ladepunkt(e) zugeordnet: ' . implode('; ', $rows) . '.';
+        }
+        $ohne = array_values(array_diff(array_keys($seen), $ownCpids));
+        if (count($ohne) > 0) {
+            $lines[] = '⚠️ Gemeldet, aber ohne Ladepunkt-Instanz: ' . implode(', ', $ohne) . '. Im „OCPPHub Konfigurator" mit einem Klick anlegen.';
+        }
+        if (count($rows) === 0 && count($ohne) === 0) {
+            $lines[] = 'ℹ️ Noch keine Wallbox hat sich hier gemeldet und kein Ladepunkt ist zugeordnet. Endpunkt (siehe unten) in der Wallbox eintragen.';
+        }
+
+        $items = [];
+        foreach ($lines as $line) {
+            $items[] = ['type' => 'Label', 'caption' => $line];
+        }
+        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
+    }
+
+    private function agoText(int $ts): string
+    {
+        if ($ts <= 0) {
+            return 'nie';
+        }
+        $d = max(0, time() - $ts);
+        if ($d < 90) {
+            return 'vor ' . $d . ' s';
+        }
+        if ($d < 5400) {
+            return 'vor ' . (int)round($d / 60) . ' Min';
+        }
+        if ($d < 172800) {
+            return 'vor ' . (int)round($d / 3600) . ' Std';
+        }
+        return 'vor ' . (int)round($d / 86400) . ' Tagen';
     }
 
     private function hookPath(): string
