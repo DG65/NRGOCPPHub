@@ -21,7 +21,7 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.17';
+    private const VERSION = '0.1.18';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
@@ -107,7 +107,7 @@ class OCPPHubKonfigurator extends IPSModule
         $auto = $this->autoSplitterId();
         if ($auto > 0) {
             return [
-                ['type' => 'Label', 'caption' => '🔗 Splitter: #' . $auto . ' „' . IPS_GetName($auto) . '" (automatisch: übergeordnete Instanz)'],
+                ['type' => 'Label', 'caption' => '🔗 Splitter: #' . $auto . ' „' . IPS_GetName($auto) . '" (automatisch: übergeordnete Instanz)', 'color' => 0x2E8B3D],
                 ['type' => 'ExpansionPanel', 'caption' => '✏️ Eigenen Splitter stattdessen verwenden', 'expanded' => false, 'items' => [$field]],
             ];
         }
@@ -156,6 +156,15 @@ class OCPPHubKonfigurator extends IPSModule
         $text .= count($angelegt) > 0 ? 'als Ladepunkt angelegt: ' . implode(', ', $angelegt) : 'noch keine als Ladepunkt angelegt';
         $text .= count($fehlt) > 0 ? '; noch ohne Ladepunkt: ' . implode(', ', $fehlt) . ' (unten „Erstellen").' : '.';
         return $text;
+    }
+
+    private function splitterStatusLabel(string $line): array
+    {
+        $label = ['type' => 'Label', 'name' => 'SplitterStatus', 'caption' => $line];
+        if (str_starts_with($line, '⛔')) {
+            $label['color'] = 0xFF0000;
+        }
+        return $label;
     }
 
     public function GetConfigurationForm()
@@ -216,7 +225,7 @@ class OCPPHubKonfigurator extends IPSModule
                     ],
                 ],
                 ...$this->splitterFieldElements(),
-                ['type' => 'Label', 'name' => 'SplitterStatus', 'caption' => $this->splitterStatusLine($splitterId, $values)],
+                $this->splitterStatusLabel($this->splitterStatusLine($splitterId, $values)),
                 [
                     'type'     => 'Configurator',
                     'name'     => 'ChargePointList',

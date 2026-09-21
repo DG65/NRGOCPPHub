@@ -29,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.32';
+    private const VERSION = '0.2.33';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -1700,7 +1700,11 @@ class OCPPHubLadepunkt extends IPSModule
 
         $items = [];
         foreach ($lines as $line) {
-            $items[] = ['type' => 'Label', 'caption' => $line];
+            $label = ['type' => 'Label', 'caption' => $line];
+            if (str_starts_with($line, '⛔')) {
+                $label['color'] = 0xFF0000;
+            }
+            $items[] = $label;
         }
         return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
     }
@@ -1724,7 +1728,7 @@ class OCPPHubLadepunkt extends IPSModule
         $meter = $this->findGridMeter();
         if ($meter !== null) {
             return [
-                ['type' => 'Label', 'caption' => '🔗 Netzzähler: MeterHub #' . $meter['iid'] . ' „' . IPS_GetName($meter['iid']) . '" (automatisch über den MeterHub-Vertrag, Netzleistung in Echtzeit)'],
+                ['type' => 'Label', 'caption' => '🔗 Netzzähler: MeterHub #' . $meter['iid'] . ' „' . IPS_GetName($meter['iid']) . '" (automatisch über den MeterHub-Vertrag, Netzleistung in Echtzeit)', 'color' => 0x2E8B3D],
                 ['type' => 'ExpansionPanel', 'caption' => '✏️ Eigenen Netzzähler stattdessen verwenden', 'expanded' => false, 'items' => [$field]],
             ];
         }

@@ -45,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.31';
+    private const VERSION = '0.2.32';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
@@ -516,7 +516,11 @@ class OCPPHubSplitter extends IPSModule
 
         $items = [];
         foreach ($lines as $line) {
-            $items[] = ['type' => 'Label', 'caption' => $line];
+            $label = ['type' => 'Label', 'caption' => $line];
+            if (str_starts_with($line, '⛔')) {
+                $label['color'] = 0xFF0000;
+            }
+            $items[] = $label;
         }
         return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
     }

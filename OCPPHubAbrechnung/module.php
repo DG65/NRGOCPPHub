@@ -18,7 +18,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.11';
+    private const VERSION = '0.3.12';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -620,7 +620,11 @@ class OCPPHubAbrechnung extends IPSModule
 
         $items = [];
         foreach ($lines as $line) {
-            $items[] = ['type' => 'Label', 'caption' => $line];
+            $label = ['type' => 'Label', 'caption' => $line];
+            if (str_starts_with($line, '⛔')) {
+                $label['color'] = 0xFF0000;
+            }
+            $items[] = $label;
         }
         return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
     }

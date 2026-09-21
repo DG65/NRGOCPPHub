@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.36 (21.09.2026)
+
+Farben nach SUITE.md: die 🔗-Zeilen (automatisch übernommen) werden grün dargestellt
+(`color` = 0x2E8B3D, Ladepunkt 0.2.33 und Konfigurator 0.1.18), ⛔-Zeilen rot (0xFF0000, auch
+Splitter 0.2.32 und Abrechnung 0.3.12), alle anderen in der Standardfarbe. Der Prüfstand
+prüft die Farbe mit.
+
 ## 0.6.35 (21.09.2026)
 
 **Automatisch gefundene Werte ersetzen das Eingabefeld (SUITE.md, EMS-Auftrag von Dietmar).**

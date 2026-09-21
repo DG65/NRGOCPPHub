@@ -256,11 +256,14 @@ $inCollapsedPanel = function (string $name) use ($field) {
     $parent = end($hit['trail']);
     return ($parent['type'] ?? '') === 'ExpansionPanel' && ($parent['expanded'] ?? true) === false;
 };
+$green = 0x2E8B3D;
+$labelWith = fn (string $prefix) => find($form['elements'], fn ($n) => ($n['type'] ?? '') === 'Label' && str_starts_with($n['caption'] ?? '', $prefix));
 $connectionsPanel = find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'ConnectionsPanel');
 
 switch ($scenario) {
     case 'k_auto':
         $check('🔗-Zeile für den automatischen Splitter fehlt', $has('🔗 Splitter: #100 „OCPPHub Splitter" (automatisch'));
+        $check('🔗-Zeile ist nicht grün', ($labelWith('🔗 Splitter')['node']['color'] ?? null) === $green);
         $check('Auswahlfeld liegt nicht im eingeklappten Panel', $inCollapsedPanel('SplitterID'));
         $check('Auswahlfeld darf nicht ungeschützt oben stehen', !$topLevel('SplitterID'));
         $check('Statuszeile ✅ mit Zahlen fehlt', $has('✅ Verbunden mit Splitter #100') && $has('2 Wallbox(en) gemeldet') && $has('WB3'));
@@ -268,11 +271,13 @@ switch ($scenario) {
         break;
     case 'k_eigen':
         $check('✏️-Zeile fehlt', $has('✏️ Splitter: #101 „Splitter B"'));
+        $check('✏️-Zeile darf nicht grün sein', !isset($labelWith('✏️ Splitter')['node']['color']));
         $check('Auswahlfeld muss sichtbar oben stehen', $topLevel('SplitterID'));
         $check('Statuszeile fehlt', $has('Verbunden mit Splitter #101'));
         break;
     case 'k_keins':
         $check('ℹ️-Zeile fehlt', $has('ℹ️ Splitter: nichts automatisch erkannt'));
+        $check('ℹ️-Zeile darf nicht grün sein', !isset($labelWith('ℹ️ Splitter')['node']['color']));
         $check('Auswahlfeld muss sichtbar sein', $topLevel('SplitterID'));
         $check('ℹ️ „kein Splitter im System" fehlt', $has('Kein OCPPHub-Splitter im System gefunden'));
         break;
@@ -282,6 +287,7 @@ switch ($scenario) {
         break;
     case 'l_auto':
         $check('🔗-Zeile für den Netzzähler fehlt', $has('🔗 Netzzähler: MeterHub #500 „Netz-Zähler" (automatisch'));
+        $check('🔗-Zeile ist nicht grün', ($labelWith('🔗 Netzzähler')['node']['color'] ?? null) === $green);
         $check('Netzzähler-Feld liegt nicht im eingeklappten Panel', $inCollapsedPanel('SurplusMeterID'));
         $check('Verbindungs-Panel fehlt', $connectionsPanel !== null);
         $check('✅ Wallbox-Zeile fehlt', $has('✅ Splitter #100') && $has('Wallbox „WB2"'));
