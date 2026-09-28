@@ -18,7 +18,7 @@ $all = [
     'k_auto', 'k_eigen', 'k_keins', 'k_mehrere',
     'l_auto', 'l_eigen', 'l_keins',
     's_ok', 's_leer',
-    'a_ok', 'a_verwaist',
+    'a_ok', 'a_verwaist', 'a_tessie_frei',
 ];
 
 if ($scenario === null) {
@@ -183,6 +183,17 @@ switch ($scenario) {
         add(900, ABRECHNUNG, 'Abrechnung', 0);
         $props['Fahrzeuge'] = '[]';
         break;
+    // Vierter Tessie-Zustand (EMS-Rückfrage 28.09.2026): Tessie ist im System
+    // installiert, aber KEIN Fahrzeug hier ist damit verknüpft — eigener,
+    // dritter ℹ️-Text ("… aber kein Fahrzeug hier ist verknüpft"), nicht zu
+    // verwechseln mit "gar kein Tessie im System" (a_verwaist deckt das ab).
+    case 'a_tessie_frei':
+        $module = 'Abrechnung';
+        add(100, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 900, 'props' => ['Betriebsart' => 1]]);
+        add(900, ABRECHNUNG, 'Abrechnung', 100);
+        add(600, TESSIE, 'Kohlekasten', 0);
+        $props['Fahrzeuge'] = json_encode([['id' => 1, 'name' => 'Auto', 'kennzeichen' => '', 'tessieInstanceId' => 0]]);
+        break;
 }
 
 require dirname(__DIR__) . '/OCPPHub' . $module . '/module.php';
@@ -322,6 +333,11 @@ switch ($scenario) {
     case 'a_verwaist':
         $check('⚠️ „kein Splitter verwendet diese Instanz" fehlt', $has('⚠️ Kein Splitter verwendet diese Instanz'));
         $check('ℹ️ kein Tessie fehlt', $has('ℹ️ Kein Tessie-Fahrzeug im System gefunden'));
+        break;
+    case 'a_tessie_frei':
+        $check('ℹ️ „Tessie vorhanden, aber nichts verknüpft" fehlt', $has('ℹ️ Im System gibt es 1 Tessie-Fahrzeug(e), aber kein Fahrzeug hier ist verknüpft'));
+        $check('darf NICHT mit „kein Tessie im System" verwechselt werden', !$has('Kein Tessie-Fahrzeug im System gefunden'));
+        $check('darf NICHT als verknüpft (✅) gelten', !$has('✅ Fahrzeugnamen live von Tessie übernommen'));
         break;
 }
 
