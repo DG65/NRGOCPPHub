@@ -81,11 +81,13 @@ verbundweit). `main` bleibt leer/stabil bis zum ersten Release.
 
 **Seit 16.09.2026: Modul im Symcon Store gelistet, Kanal Beta.** Branch `beta` existiert
 (erstellt aus `ems-integration`, Commit `4067329`), zeigt den tatsächlich distributierten
-Stand. **Seit 20.09.2026 (Dietmar): auf beiden Branches arbeiten, beide gleich halten** —
-jede Änderung nach `ems-integration` committen und pushen, danach `beta` per
-`git checkout beta && git merge --ff-only ems-integration && git push origin beta`
-nachziehen (vorher `php /Users/dietmar/Nextcloud/Claude/.tools/migrationsvergleich.php .
-origin/beta HEAD`, muss „kein Bruch" melden). `LICENSE_URL` in allen vier Modulen zeigt
+Stand. **20.09.–28.09.2026: auf beiden Branches gearbeitet, beide gleich gehalten.**
+**Seit 28.09.2026 (Dietmar, hat `ems-integration` gerade nicht in Betrieb): Arbeitsbranch
+ist direkt `beta`** — committen und pushen auf `beta`, danach `ems-integration` per
+`git checkout ems-integration && git merge --ff-only beta && git push origin ems-integration
+&& git checkout beta` nachziehen (vorher `php /Users/dietmar/Nextcloud/Claude/.tools/
+migrationsvergleich.php . origin/ems-integration HEAD`, muss „kein Bruch" melden — gleiche
+Prüfung wie vorher, nur mit vertauschten Rollen). `LICENSE_URL` in allen vier Modulen zeigt
 auf `blob/beta/LICENSE` (nicht `main` — die Datei liegt dort noch nicht, siehe
 MeterHub-Stolperstein 01.09.2026).
 
