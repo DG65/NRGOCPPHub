@@ -45,7 +45,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.32';
+    private const VERSION = '0.2.33';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
@@ -628,7 +628,7 @@ class OCPPHubSplitter extends IPSModule
                 $isFailure = (int)$message[0] === self::OCPP_CALLERROR || $this->responseIndicatesFailure($message[2] ?? null);
                 $action = $this->resolvePendingCall((string)($message[1] ?? ''));
                 if ($isFailure) {
-                    IPS_LogMessage('OCPPHub', 'Ablehnung/Fehler auf gesendeten Aufruf [' . $cpid . ']: ' . $raw);
+                    $this->LogMessage('Ablehnung/Fehler auf gesendeten Aufruf [' . $cpid . ']: ' . $raw, KL_WARNING);
                 } elseif ($action === 'GetConfiguration') {
                     // Live-Fund 31.08.2026 (Dietmar, am eigenen Leib erlebt): eine
                     // ERFOLGREICHE Antwort ohne "status"-Feld (z. B. GetConfiguration.conf
@@ -638,7 +638,7 @@ class OCPPHubSplitter extends IPSModule
                     // GetConfiguration wird nur gezielt/selten manuell zur Fehlersuche
                     // gesendet (nicht im Normalbetrieb) — darum hier bewusst IMMER
                     // dauerhaft geloggt, nicht nur bei Ablehnung, kein Spam-Risiko.
-                    IPS_LogMessage('OCPPHub', 'Antwort auf GetConfiguration [' . $cpid . ']: ' . $raw);
+                    $this->LogMessage('Antwort auf GetConfiguration [' . $cpid . ']: ' . $raw, KL_MESSAGE);
                     $this->forwardStationCapabilities($cpid, $message[2] ?? null);
                 }
                 // Ladeablehnung erklären (Diagnose-Feature 31.08.2026, siehe
@@ -669,7 +669,7 @@ class OCPPHubSplitter extends IPSModule
                 // berechtigter Einwand: "es kann doch nicht sein, dass man
                 // solche Tricks und Unfähigkeiten leben soll".
                 if ($action === 'RemoteStopTransaction' && $isFailure) {
-                    IPS_LogMessage('OCPPHub', 'RemoteStopTransaction abgelehnt [' . $cpid . '] — versuche Stromlimit 0 A als Ausweichweg.');
+                    $this->LogMessage('RemoteStopTransaction abgelehnt [' . $cpid . '] — versuche Stromlimit 0 A als Ausweichweg.', KL_WARNING);
                     $this->SetCurrentLimit($cpid, 0.0);
                 }
                 // Herstellerneutraler Ausweichweg (01.09.2026): schlägt
@@ -700,9 +700,9 @@ class OCPPHubSplitter extends IPSModule
                     $ladepunktIdForRecovery = $this->findLadepunkt($cpid);
                     $alreadyCharging = $ladepunktIdForRecovery !== 0 && OHUBL_GetState($ladepunktIdForRecovery) === 2;
                     if ($alreadyCharging) {
-                        IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — Ladepunkt lädt aber bereits (vermutlich andere Sitzung), Reset/frc-Ausweichweg übersprungen.');
+                        $this->LogMessage('RemoteStartTransaction abgelehnt [' . $cpid . '] — Ladepunkt lädt aber bereits (vermutlich andere Sitzung), Reset/frc-Ausweichweg übersprungen.', KL_WARNING);
                     } else {
-                        IPS_LogMessage('OCPPHub', 'RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.');
+                        $this->LogMessage('RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.', KL_WARNING);
                         $this->Reset($cpid, 'Soft');
                         // go-e-spezifisch, additiv zum Reset oben (siehe
                         // tryClearGoeForceLock()-Docblock) — bei jedem
@@ -965,7 +965,7 @@ class OCPPHubSplitter extends IPSModule
     private function checkIdTag(string $cpid, string $idTag): string
     {
         $status = $this->checkIdTagInternal($cpid, $idTag);
-        IPS_LogMessage('OCPPHub', 'Authorize [' . $cpid . ']: idTag="' . $idTag . '" -> ' . $status);
+        $this->LogMessage('Authorize [' . $cpid . ']: idTag="' . $idTag . '" -> ' . $status, KL_MESSAGE);
         return $status;
     }
 
@@ -1369,11 +1369,11 @@ class OCPPHubSplitter extends IPSModule
         // direkt aufruft, ohne über OCPPHubLadepunkt::RequestAction() zu
         // laufen. Siehe IsDemoMode().
         if ($this->IsDemoMode()) {
-            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — RemoteStartTransaction [' . $cpid . '] unterdrückt, keine echte Ladesteuerung gesendet.');
+            $this->LogMessage('Vorführmodus aktiv — RemoteStartTransaction [' . $cpid . '] unterdrückt, keine echte Ladesteuerung gesendet.', KL_WARNING);
             return;
         }
         if ($this->isWriteBlocked($cpid)) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — RemoteStartTransaction unterdrückt.');
+            $this->LogMessage('Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — RemoteStartTransaction unterdrückt.', KL_WARNING);
             return;
         }
         $this->sendCall($cpid, 'RemoteStartTransaction', ['connectorId' => 1, 'idTag' => $idTag]);
@@ -1394,11 +1394,11 @@ class OCPPHubSplitter extends IPSModule
     public function Reset(string $cpid, string $Type): void
     {
         if ($this->IsDemoMode()) {
-            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Reset [' . $cpid . '] unterdrückt.');
+            $this->LogMessage('Vorführmodus aktiv — Reset [' . $cpid . '] unterdrückt.', KL_WARNING);
             return;
         }
         if ($this->isWriteBlocked($cpid)) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — Reset unterdrückt.');
+            $this->LogMessage('Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — Reset unterdrückt.', KL_WARNING);
             return;
         }
         $this->sendCall($cpid, 'Reset', ['type' => $Type]);
@@ -1453,7 +1453,7 @@ class OCPPHubSplitter extends IPSModule
         $chargerHubId = $this->findChargerHubInstanceForCurrentIp();
         if ($chargerHubId !== 0 && function_exists('CHUB_ClearForceLock')) {
             $cleared = CHUB_ClearForceLock($chargerHubId);
-            IPS_LogMessage('OCPPHub', 'ChargerHub-Kooperation [' . $cpid . ']: ClearForceLock() -> ' . ($cleared ? 'erfolgreich' : 'kein Effekt') . '.');
+            $this->LogMessage('ChargerHub-Kooperation [' . $cpid . ']: ClearForceLock() -> ' . ($cleared ? 'erfolgreich' : 'kein Effekt') . '.', KL_MESSAGE);
             if ($cleared) {
                 return;
             }
@@ -1463,7 +1463,7 @@ class OCPPHubSplitter extends IPSModule
             return;
         }
         $ok = $this->writeModbusRegister($ip, 502, 1, 337, 0);
-        IPS_LogMessage('OCPPHub', 'go-e-Ausweichweg [' . $cpid . ']: FORCE_STATE per Modbus auf 0 setzen -> ' . ($ok ? 'erfolgreich' : 'fehlgeschlagen') . '.');
+        $this->LogMessage('go-e-Ausweichweg [' . $cpid . ']: FORCE_STATE per Modbus auf 0 setzen -> ' . ($ok ? 'erfolgreich' : 'fehlgeschlagen') . '.', KL_MESSAGE);
     }
 
     // Findet eine ChargerHub-Instanz mit derselben IP wie die aktuelle
@@ -1526,11 +1526,11 @@ class OCPPHubSplitter extends IPSModule
     public function SetCurrentLimit(string $cpid, float $ampere): void
     {
         if ($this->IsDemoMode()) {
-            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — SetChargingProfile [' . $cpid . '] unterdrückt.');
+            $this->LogMessage('Vorführmodus aktiv — SetChargingProfile [' . $cpid . '] unterdrückt.', KL_WARNING);
             return;
         }
         if ($this->isWriteBlocked($cpid)) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — SetChargingProfile unterdrückt.');
+            $this->LogMessage('Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — SetChargingProfile unterdrückt.', KL_WARNING);
             return;
         }
         // TxDefaultProfile mit einer einzigen Periode — reicht für ein

@@ -29,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.33';
+    private const VERSION = '0.2.34';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -647,7 +647,7 @@ class OCPPHubLadepunkt extends IPSModule
         // Zustand, statt optimistisch auf dem angeklickten Wert stehen zu
         // bleiben.
         if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && $splitterId > 0 && OHUB_IsDemoMode($splitterId)) {
-            IPS_LogMessage('OCPPHub', 'Vorführmodus aktiv — Steuerbefehl „' . $Ident . '" an Ladepunkt ' . $this->InstanceID . ' abgelehnt, keine echte Ladesteuerung ausgelöst.');
+            $this->LogMessage('Vorführmodus aktiv — Steuerbefehl „' . $Ident . '" an Ladepunkt ' . $this->InstanceID . ' abgelehnt, keine echte Ladesteuerung ausgelöst.', KL_WARNING);
             $this->SetValue($Ident, $this->GetValue($Ident));
             return;
         }
@@ -660,7 +660,7 @@ class OCPPHubLadepunkt extends IPSModule
         // nochmal direkt an der Absendestelle.
         $externallyManaged = !in_array($this->ReadPropertyString('ManagedBy'), ['none', 'ems'], true);
         if (in_array($Ident, ['ctl_enable', 'ctl_curr_limit'], true) && ($externallyManaged || $this->IsDeactivated())) {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' ist gesperrt (externe Steuerhoheit oder deaktiviert) — Steuerbefehl „' . $Ident . '" abgelehnt.');
+            $this->LogMessage('Ladepunkt ' . $this->InstanceID . ' ist gesperrt (externe Steuerhoheit oder deaktiviert) — Steuerbefehl „' . $Ident . '" abgelehnt.', KL_WARNING);
             $this->SetValue($Ident, $this->GetValue($Ident));
             return;
         }
@@ -729,7 +729,7 @@ class OCPPHubLadepunkt extends IPSModule
     public function UpdateStatus(string $ocppStatus, string $errorCode): void
     {
         if ($errorCode !== '' && $errorCode !== 'NoError') {
-            IPS_LogMessage('OCPPHub', 'Ladepunkt ' . $this->InstanceID . ' meldet Fehler: ' . $errorCode);
+            $this->LogMessage('Ladepunkt ' . $this->InstanceID . ' meldet Fehler: ' . $errorCode, KL_WARNING);
         }
         // FIX 30.08.2026: vehicle_plugged/state nur bei ERKANNTEM Status
         // setzen — vorher wurde bei einem unbekannten OCPP-Status-String

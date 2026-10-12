@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.37 (12.10.2026)
+
+**Logging-Konvention (SUITE.md Store-Review Punkt 15, EMS-Fund bei Batteriewächter).**
+Splitter (0.2.33, 15 Stellen) und Ladepunkt (0.2.34, 3 Stellen) nutzen jetzt
+`$this->LogMessage($text, KL_...)` statt `IPS_LogMessage($absender, $text)` — landet damit
+im Meldungsprotokoll der jeweiligen Instanz (Konsole „Meldungen"), nicht nur im globalen
+Systemprotokoll. Konfigurator/Abrechnung waren bereits sauber. Neuer Prüfstand
+`.tools/check-logging.php` hält das fest.
+
 ## 0.6.36 (21.09.2026)
 
 Farben nach SUITE.md: die 🔗-Zeilen (automatisch übernommen) werden grün dargestellt
