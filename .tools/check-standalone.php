@@ -27,7 +27,7 @@
 // OHUB/OHUBL/OHUBK sind die EIGENEN Präfixe dieses Repos (Splitter/
 // Ladepunkt/Konfigurator) und gehören daher NICHT in die Liste — sonst
 // meldet das Skript die eigenen Funktionen als ungeschützte Fremdaufrufe.
-const FOREIGN_PREFIXES = ['IHUB', 'IHUBD', 'IHUBNRG', 'IHUBMON', 'IHUBTILE', 'MHUB', 'MHUBD', 'CHUB', 'CHUBD', 'PVF', 'HEISHA', 'SGW', 'TIBBERGR', 'TESSIE', 'EMS', 'GWET', 'STRUKT', 'STBX'];
+const FOREIGN_PREFIXES = ['IHUB', 'IHUBD', 'IHUBNRG', 'IHUBMON', 'IHUBTILE', 'MHUB', 'MHUBD', 'CHUB', 'CHUBD', 'PVF', 'HEISHA', 'SGW', 'TIBBERGR', 'TESSIE', 'EMS', 'GWET', 'STRUKT', 'STBX', 'FSCHUTZ'];
 
 $root = dirname(__DIR__);
 $rx   = '/\b((' . implode('|', FOREIGN_PREFIXES) . ')_[A-Za-z_][A-Za-z0-9_]*)\s*\(/';
