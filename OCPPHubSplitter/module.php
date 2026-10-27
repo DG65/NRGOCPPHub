@@ -45,14 +45,13 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.33';
+    private const VERSION = '0.2.34';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
-    // — LICENSE liegt bislang NUR auf `ems-integration`, NICHT auf `main`
-    // (geprüft: `git show main:LICENSE` -> fatal, existiert dort nicht) —
-    // beim Merge nach main hierher zurückkommen und umstellen (Dietmars
-    // Fund bei MeterHub: blind auf main verlinkt zeigte die alte Lizenz).
-    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/beta/LICENSE';
+    // — seit dem Stable-Start (27.10.2026) liegt LICENSE auf `main`, dorthin
+    // zeigt die URL (Dietmars Fund bei MeterHub: blind auf einen Branch ohne
+    // LICENSE verlinkt zeigte die alte Lizenz).
+    private const LICENSE_URL = 'https://github.com/DG65/NRGOCPPHub/blob/main/LICENSE';
     // Symcon-Forum-Vorstellungs-Thread (16.09.2026, von Dietmar selbst
     // gepostet, siehe forum-ankuendigung-ocpphub.md).
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/beta-modul-nrg-stack-ocpphub-wallboxen-per-ocpp-1-6j-anbinden-mit-pv-ueberschussladen-und-kundenverwaltung/144409';

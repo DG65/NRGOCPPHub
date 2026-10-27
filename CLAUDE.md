@@ -76,20 +76,16 @@ SUITE.md nicht einsehbar.
 
 ## Branch-Regel
 
-Während der EMS-Integrationsphase geht ALLES auf `ems-integration` (Anweisung Dietmar,
-verbundweit). `main` bleibt leer/stabil bis zum ersten Release.
-
-**Seit 16.09.2026: Modul im Symcon Store gelistet, Kanal Beta.** Branch `beta` existiert
-(erstellt aus `ems-integration`, Commit `4067329`), zeigt den tatsächlich distributierten
-Stand. **20.09.–28.09.2026: auf beiden Branches gearbeitet, beide gleich gehalten.**
-**Seit 28.09.2026 (Dietmar, hat `ems-integration` gerade nicht in Betrieb): Arbeitsbranch
-ist direkt `beta`** — committen und pushen auf `beta`, danach `ems-integration` per
-`git checkout ems-integration && git merge --ff-only beta && git push origin ems-integration
-&& git checkout beta` nachziehen (vorher `php /Users/dietmar/Nextcloud/Claude/.tools/
-migrationsvergleich.php . origin/ems-integration HEAD`, muss „kein Bruch" melden — gleiche
-Prüfung wie vorher, nur mit vertauschten Rollen). `LICENSE_URL` in allen vier Modulen zeigt
-auf `blob/beta/LICENSE` (nicht `main` — die Datei liegt dort noch nicht, siehe
-MeterHub-Stolperstein 01.09.2026).
+**Seit 27.10.2026 (Dietmar, verbundweit): alle Betas sind im Symcon Store auf Stable
+umgestellt, der Branch `ems-integration` entfällt.** Gearbeitet wird auf `beta`, ausgeliefert
+wird `main`: committen und pushen auf `beta`, danach `main` per Fast-Forward nachziehen
+(`git checkout main && git merge --ff-only beta && git push origin main && git checkout
+beta`), vorher `php /Users/dietmar/Nextcloud/Claude/.tools/migrationsvergleich.php .
+origin/main HEAD`, muss „kein Bruch" melden (erst committen, dann vergleichen, dann pushen).
+`main` == `beta` nach jedem Release. `LICENSE_URL` in allen vier Modulen zeigt auf
+`blob/main/LICENSE`. Der Branch `ems-integration` wird nicht mehr gepflegt und gelöscht,
+sobald keine Symcon-Installation ihn mehr verfolgt (Stand 27.10.2026: Privat, Geschäft, Paul
+führen OCPPHub nicht als Git-Modul, Solarpark war nicht erreichbar).
 
 ## Arbeitsweise (aus ChargerHub übernommen, hart erarbeitet)
 

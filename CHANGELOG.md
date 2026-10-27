@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.38 (27.10.2026)
+
+**Stable-Start.** Dietmar hat im Symcon Store alle Betas auf Stable umgestellt: `main` wird
+jetzt ausgeliefert (Fast-Forward von `beta`, erstmals mit allen vier Modulen), der Branch
+`ems-integration` entfällt. In allen vier Modulen (Splitter 0.2.34 / Ladepunkt 0.2.35 /
+Konfigurator 0.1.19 / Abrechnung 0.3.13) zeigt `LICENSE_URL` jetzt auf `blob/main/LICENSE`.
+Reiner Link-Fix, keine Verhaltensänderung.
+
 ## 0.6.37 (12.10.2026)
 
 **Logging-Konvention (SUITE.md Store-Review Punkt 15, EMS-Fund bei Batteriewächter).**
