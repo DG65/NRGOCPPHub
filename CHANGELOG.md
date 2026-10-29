@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.39 (29.10.2026)
+
+**Formular: Aufbau (SUITE.md 3a, Dietmars Wunsch für alle Module mit mehr als zwei Fachpanels).**
+Ladepunkt (0.2.36) und Abrechnung (0.3.14) bekommen ein eingeklapptes Panel „🪟 Formular: Aufbau"
+vor dem Forum-Hinweis. Ladepunkt: je Fachpanel (Stromgrenzen & Steuerungshoheit, Doppelte
+Anbindung, PV-Überschussladen) „Aufgeklappt/Zugeklappt/Ausgeblendet" und Position, neue Property
+`FormLayout`, `OHUBL_ResetFormLayout()`. „Verbindungen im Verbund" bleibt fest oben. Abrechnung:
+nur Position und „Ausgeblendet" für die vier Reiter (Ziehharmonika, den aktiven Reiter merkt das Modul
+selbst), `OHUBA_ResetFormLayout()`. Ausgeblendet heißt `visible: false`, nichts geht verloren.
+Splitter und Konfigurator haben höchstens zwei Fachpanels und brauchen es nicht. Prüfstand
+`.tools/test-form.php` um sieben Szenarien erweitert (Reihenfolge, Aufklapp-Zustand, `visible:false`,
+Widerspruch, unbekannter Schlüssel, Reset).
+
 ## 0.6.38 (27.10.2026)
 
 **Stable-Start.** Dietmar hat im Symcon Store alle Betas auf Stable umgestellt: `main` wird

@@ -29,7 +29,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.35';
+    private const VERSION = '0.2.36';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -42,8 +42,9 @@ class OCPPHubLadepunkt extends IPSModule
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.27';
+    private const NEWS_VERSION = '0.2.36';
     private const NEWS_ITEMS = [
+        '🪟 Neu: „Formular: Aufbau" (eingeklappt unter den Fachpanels) — du legst je Bereich (Stromgrenzen & Steuerungshoheit, Doppelte Anbindung, PV-Überschussladen) fest, ob er beim Öffnen aufgeklappt, zugeklappt oder ausgeblendet ist, und an welcher Position er steht. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt. Gilt nach „Übernehmen" beim nächsten Öffnen; „Auf Standard zurücksetzen" stellt alles zurück.',
         'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
         'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Kritischer Fix (Live-Fund, Dietmar wollte nur WB1 abschalten): es gab keinen sichtbaren Schalter, um EINEN einzelnen Ladepunkt zu deaktivieren — nur der ganze Splitter ließ sich abschalten, was gleich alle anderen Ladepunkte mit lahmlegte. Neuer Schalter „🔌 Diesen Ladepunkt deaktivieren" oben im Formular, identisch zu `OHUBL_SetActive(false)` (ein gemeinsamer Zustand für Konsole UND externe Aufrufe wie MeterHubVirtual).',
@@ -167,6 +168,8 @@ class OCPPHubLadepunkt extends IPSModule
         // SetActive() persistiert denselben Wert, EIN Datenstand für Konsole
         // UND externe Aufrufe.
         $this->RegisterPropertyBoolean('Deaktiviert', false);
+        // SUITE.md 3a „Formular: Aufbau“: Liste {Key, Panel, Opened, Closed, Hidden, Pos}
+        $this->RegisterPropertyString('FormLayout', '[]');
         // Gerätemerkmale aus BootNotification (13.09.2026, MeterHub-Anfrage
         // für Dual-Writer-Erkennung) — vorher nur SendDebug(), nirgends
         // gespeichert. IP steckt schon in SourceIP (siehe forwardSourceIp()).
@@ -344,61 +347,7 @@ class OCPPHubLadepunkt extends IPSModule
                     'caption' => '🔌 Diesen Ladepunkt deaktivieren',
                 ],
                 ['type' => 'Label', 'caption' => 'Live-Fund 13.09.2026: nur DIESEN Ladepunkt abschalten wollen, ohne den ganzen Splitter zu deaktivieren (das würde auch alle anderen Ladepunkte mit lahmlegen). Aktiviert: OCPP-Protokoll wird weiter normal beantwortet, aber Authorize/RemoteStart/Stromlimit/Reset werden verweigert. Eine gerade laufende Ladung wird NICHT unterbrochen, erst ab dann keine neue Autorisierung/Steuerung mehr. Instanz-Status zeigt dann „Inaktiv" (bewusst, kein Fehler) und der Eintrag im Verbund-Vertrag trägt `deactivated: true`. Entspricht genau `OHUBL_SetActive(false)` — derselbe Wert, egal ob hier oder von außen (z. B. MeterHubVirtual) gesetzt. Unterscheidet sich von „Wer regelt?" weiter unten: dort geht es NUR ums Schreibrecht, ein extern geregelter Ladepunkt bleibt trotzdem „in Betrieb" (Status 102) — nur dieser Schalter hier bedeutet „wirklich abgeschaltet".'],
-                [
-                    'type'    => 'ExpansionPanel',
-                    'caption' => '⚡ Stromgrenzen & Steuerungshoheit',
-                    'items'   => [
-                        ['type' => 'NumberSpinner', 'name' => 'MinCurrent', 'caption' => 'Minimaler Ladestrom (A)', 'minimum' => 6, 'maximum' => 32, 'suffix' => 'A'],
-                        ['type' => 'Label', 'caption' => 'Kleinster Ladestrom, den die Wallbox/das Fahrzeug akzeptiert (IEC 61851: 6 A). Unterhalb dieser Schwelle pausiert das Überschussladen die Ladung komplett, statt mit zu wenig Strom weiterzuladen.'],
-                        ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => 'Maximaler Ladestrom (A)', 'minimum' => 6, 'maximum' => 63, 'suffix' => 'A'],
-                        ['type' => 'Label', 'caption' => 'Zuleitung/Absicherung dieses Ladepunkts — harte Obergrenze für jedes Stromlimit, das OCPPHub setzt (zusätzlich zum Hardware-Limit der Wallbox), unabhängig davon, was ein EMS anfordert.'],
-                        [
-                            'type'    => 'Select',
-                            'name'    => 'ManagedBy',
-                            'caption' => 'Wer regelt diesen Ladepunkt?',
-                            'options' => array_map(
-                                fn ($key) => ['value' => $key, 'caption' => self::MANAGEDBY_LABELS[$key]],
-                                self::MANAGEDBY_ALL
-                            ),
-                        ],
-                        ['type' => 'Label', 'caption' => '⚠️ Zwei-Regler-Warnung: Regelt bereits etwas anderes diese Wallbox — go-e Controller, Lastmanagement, Tibber Grid Rewards oder eine §14a-Steuerung —, darf OCPPHub nicht parallel Ladefreigabe/Stromlimit schreiben (beide Regler überschreiben sich sonst). Hier eintragen, wer die Hoheit hat: bei allem außer „Niemand" bleibt das eigenständige Überschussladen unten automatisch passiv.'],
-                    ],
-                ],
-                [
-                    'type'    => 'ExpansionPanel',
-                    'caption' => '🔀 Doppelte Anbindung (Dual-Writer-Zählung)',
-                    'items'   => [
-                        ['type' => 'Label', 'caption' => 'Nur ausfüllen, wenn DIESELBE Wallbox zusätzlich noch über ein anderes Verbund-Modul angebunden ist (z. B. dieselbe Box sowohl hier als OCPPHub-Ladepunkt als auch als eigene ChargerHub-Instanz). Legt fest, welcher der beiden Einträge für EMS/MeterHub/Dashboard als maßgeblich für die Verbrauchszählung gilt — bewusst NIE automatisch erkannt, IMMER eine Nutzerentscheidung.'],
-                        [
-                            'type'    => 'Select',
-                            'name'    => 'DuplicateOfSource',
-                            'caption' => 'Diese Instanz ist ein Duplikat von …',
-                            'options' => [
-                                ['value' => '', 'caption' => '— nein, dieser Eintrag zählt normal —'],
-                                ['value' => 'chargerhub', 'caption' => 'einer ChargerHub-Instanz (unten auswählen)'],
-                                ['value' => 'ocpphub', 'caption' => 'einer anderen OCPPHub-Ladepunkt-Instanz (unten auswählen)'],
-                            ],
-                        ],
-                        ['type' => 'SelectInstance', 'name' => 'DuplicateOfInstanceID', 'caption' => 'Zählende Instanz (bei „ChargerHub"/„OCPPHub" oben, sonst ignoriert)'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Wirkung, sobald hier etwas ausgewählt ist: der Eintrag bleibt in `OHUB_GetFunctions()` sichtbar (trägt jetzt das Feld `duplicateOf`), Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst bei der Verbrauchszählung. Betrifft NUR das Zählen — ob dieser Ladepunkt weiterhin an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" oben (bzw. `OHUBL_SetActive()`).'],
-                        ['type' => 'Label', 'caption' => '⚠️ Deshalb wichtig: steht „Wer regelt?" oben weiterhin auf „Niemand" UND die als zählend gewählte Instanz regelt ebenfalls selbst (kein externes Lastmanagement dort eingetragen), könnten beide Seiten gleichzeitig schreiben. Für genau diesen vergessenen Fall zeigt die Instanz dann einen Warnstatus („Zwei Regler an einer Wallbox"), bis „Wer regelt?" hier oder dort auf einen externen Wert gestellt wird.'],
-                    ],
-                ],
-                [
-                    'type'    => 'ExpansionPanel',
-                    'caption' => '☀️ PV-Überschussladen (eigenständig, nur ohne aktives EMS)',
-                    'items'   => [
-                        ['type' => 'CheckBox', 'name' => 'EnableSurplusCharging', 'caption' => 'Aktivieren'],
-                        ['type' => 'Label', 'caption' => 'Nur wirksam, wenn oben „Wer regelt?" auf „Niemand" steht UND kein aktives EMS installiert ist UND ein MeterHub-Zähler am Netzanschlusspunkt einen Echtzeit-Wert liefert. Ist EMS aktiv, hat es immer Vorrang — diese Option greift dann automatisch nicht. Sichtbarer Status erscheint als Variable „Überschussladen" (`surplus_status`), sobald diese Option angehakt ist.'],
-                        ['type' => 'NumberSpinner', 'name' => 'IntervalFast', 'caption' => 'Regelintervall (s, Fallback/Watchdog)', 'minimum' => 5, 'maximum' => 300, 'suffix' => 's'],
-                        ['type' => 'Label', 'caption' => 'Die Regelung rechnet primär EREIGNISGETRIEBEN neu, sobald die Wallbox eine frische Messung (MeterValues) meldet — dieser Timer ist nur der Fallback, falls mal keine Meldung kommt.'],
-                        ['type' => 'NumberSpinner', 'name' => 'StorageSharePercent', 'caption' => 'Anteil für Speicher (%)', 'minimum' => 0, 'maximum' => 100, 'suffix' => '%'],
-                        ['type' => 'Label', 'caption' => 'Dieser Anteil des Überschusses bleibt dem Speicher vorbehalten und wird von der Ampere-Berechnung fürs Laden abgezogen. 0 % = kompletter Überschuss geht in die Wallbox, 100 % = nichts geht in die Wallbox.'],
-                        ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'caption' => 'Speicherkapazität (kWh, 0 = kein Speicher/unbekannt)', 'minimum' => 0, 'maximum' => 200, 'digits' => 1, 'suffix' => 'kWh'],
-                        ['type' => 'Label', 'caption' => 'Aktuell nur informativ hinterlegt — die darauf aufbauende Phasenumschalt-Wartezeit (wie bei ChargerHub) ist bei OCPPHub noch nicht umgesetzt (Phasenumschaltung ist Stufe-2-Thema).'],
-                        ...$this->surplusMeterFieldElements(),
-                    ],
-                ],
+                ...$this->layoutedPanels(),
             ],
             'actions' => [
                 ['type' => 'Button', 'caption' => '🔄 Übernehmen erzwingen (ohne Formularänderung)', 'onClick' => "IPS_ApplyChanges(\$id); echo '✅ ApplyChanges() ausgeführt.';"],
@@ -447,6 +396,188 @@ class OCPPHubLadepunkt extends IPSModule
         }
 
         return json_encode($form);
+    }
+
+    private function limitsPanel(): array
+    {
+        return
+        [
+            'type'    => 'ExpansionPanel',
+            'caption' => '⚡ Stromgrenzen & Steuerungshoheit',
+            'items'   => [
+                ['type' => 'NumberSpinner', 'name' => 'MinCurrent', 'caption' => 'Minimaler Ladestrom (A)', 'minimum' => 6, 'maximum' => 32, 'suffix' => 'A'],
+                ['type' => 'Label', 'caption' => 'Kleinster Ladestrom, den die Wallbox/das Fahrzeug akzeptiert (IEC 61851: 6 A). Unterhalb dieser Schwelle pausiert das Überschussladen die Ladung komplett, statt mit zu wenig Strom weiterzuladen.'],
+                ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => 'Maximaler Ladestrom (A)', 'minimum' => 6, 'maximum' => 63, 'suffix' => 'A'],
+                ['type' => 'Label', 'caption' => 'Zuleitung/Absicherung dieses Ladepunkts — harte Obergrenze für jedes Stromlimit, das OCPPHub setzt (zusätzlich zum Hardware-Limit der Wallbox), unabhängig davon, was ein EMS anfordert.'],
+                [
+                    'type'    => 'Select',
+                    'name'    => 'ManagedBy',
+                    'caption' => 'Wer regelt diesen Ladepunkt?',
+                    'options' => array_map(
+                        fn ($key) => ['value' => $key, 'caption' => self::MANAGEDBY_LABELS[$key]],
+                        self::MANAGEDBY_ALL
+                    ),
+                ],
+                ['type' => 'Label', 'caption' => '⚠️ Zwei-Regler-Warnung: Regelt bereits etwas anderes diese Wallbox — go-e Controller, Lastmanagement, Tibber Grid Rewards oder eine §14a-Steuerung —, darf OCPPHub nicht parallel Ladefreigabe/Stromlimit schreiben (beide Regler überschreiben sich sonst). Hier eintragen, wer die Hoheit hat: bei allem außer „Niemand" bleibt das eigenständige Überschussladen unten automatisch passiv.'],
+            ],
+        ];
+    }
+
+    private function duplicatePanel(): array
+    {
+        return
+        [
+            'type'    => 'ExpansionPanel',
+            'caption' => '🔀 Doppelte Anbindung (Dual-Writer-Zählung)',
+            'items'   => [
+                ['type' => 'Label', 'caption' => 'Nur ausfüllen, wenn DIESELBE Wallbox zusätzlich noch über ein anderes Verbund-Modul angebunden ist (z. B. dieselbe Box sowohl hier als OCPPHub-Ladepunkt als auch als eigene ChargerHub-Instanz). Legt fest, welcher der beiden Einträge für EMS/MeterHub/Dashboard als maßgeblich für die Verbrauchszählung gilt — bewusst NIE automatisch erkannt, IMMER eine Nutzerentscheidung.'],
+                [
+                    'type'    => 'Select',
+                    'name'    => 'DuplicateOfSource',
+                    'caption' => 'Diese Instanz ist ein Duplikat von …',
+                    'options' => [
+                        ['value' => '', 'caption' => '— nein, dieser Eintrag zählt normal —'],
+                        ['value' => 'chargerhub', 'caption' => 'einer ChargerHub-Instanz (unten auswählen)'],
+                        ['value' => 'ocpphub', 'caption' => 'einer anderen OCPPHub-Ladepunkt-Instanz (unten auswählen)'],
+                    ],
+                ],
+                ['type' => 'SelectInstance', 'name' => 'DuplicateOfInstanceID', 'caption' => 'Zählende Instanz (bei „ChargerHub"/„OCPPHub" oben, sonst ignoriert)'],
+                ['type' => 'Label', 'caption' => 'ℹ️ Wirkung, sobald hier etwas ausgewählt ist: der Eintrag bleibt in `OHUB_GetFunctions()` sichtbar (trägt jetzt das Feld `duplicateOf`), Verbund-Konsumenten (EMS/MeterHub/Dashboard) überspringen ihn aber selbst bei der Verbrauchszählung. Betrifft NUR das Zählen — ob dieser Ladepunkt weiterhin an die Wallbox schreiben darf, entscheidet ausschließlich „Wer regelt?" oben (bzw. `OHUBL_SetActive()`).'],
+                ['type' => 'Label', 'caption' => '⚠️ Deshalb wichtig: steht „Wer regelt?" oben weiterhin auf „Niemand" UND die als zählend gewählte Instanz regelt ebenfalls selbst (kein externes Lastmanagement dort eingetragen), könnten beide Seiten gleichzeitig schreiben. Für genau diesen vergessenen Fall zeigt die Instanz dann einen Warnstatus („Zwei Regler an einer Wallbox"), bis „Wer regelt?" hier oder dort auf einen externen Wert gestellt wird.'],
+            ],
+        ];
+    }
+
+    private function surplusPanel(): array
+    {
+        return
+        [
+            'type'    => 'ExpansionPanel',
+            'caption' => '☀️ PV-Überschussladen (eigenständig, nur ohne aktives EMS)',
+            'items'   => [
+                ['type' => 'CheckBox', 'name' => 'EnableSurplusCharging', 'caption' => 'Aktivieren'],
+                ['type' => 'Label', 'caption' => 'Nur wirksam, wenn oben „Wer regelt?" auf „Niemand" steht UND kein aktives EMS installiert ist UND ein MeterHub-Zähler am Netzanschlusspunkt einen Echtzeit-Wert liefert. Ist EMS aktiv, hat es immer Vorrang — diese Option greift dann automatisch nicht. Sichtbarer Status erscheint als Variable „Überschussladen" (`surplus_status`), sobald diese Option angehakt ist.'],
+                ['type' => 'NumberSpinner', 'name' => 'IntervalFast', 'caption' => 'Regelintervall (s, Fallback/Watchdog)', 'minimum' => 5, 'maximum' => 300, 'suffix' => 's'],
+                ['type' => 'Label', 'caption' => 'Die Regelung rechnet primär EREIGNISGETRIEBEN neu, sobald die Wallbox eine frische Messung (MeterValues) meldet — dieser Timer ist nur der Fallback, falls mal keine Meldung kommt.'],
+                ['type' => 'NumberSpinner', 'name' => 'StorageSharePercent', 'caption' => 'Anteil für Speicher (%)', 'minimum' => 0, 'maximum' => 100, 'suffix' => '%'],
+                ['type' => 'Label', 'caption' => 'Dieser Anteil des Überschusses bleibt dem Speicher vorbehalten und wird von der Ampere-Berechnung fürs Laden abgezogen. 0 % = kompletter Überschuss geht in die Wallbox, 100 % = nichts geht in die Wallbox.'],
+                ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'caption' => 'Speicherkapazität (kWh, 0 = kein Speicher/unbekannt)', 'minimum' => 0, 'maximum' => 200, 'digits' => 1, 'suffix' => 'kWh'],
+                ['type' => 'Label', 'caption' => 'Aktuell nur informativ hinterlegt — die darauf aufbauende Phasenumschalt-Wartezeit (wie bei ChargerHub) ist bei OCPPHub noch nicht umgesetzt (Phasenumschaltung ist Stufe-2-Thema).'],
+                ...$this->surplusMeterFieldElements(),
+            ],
+        ];
+    }
+
+    // SUITE.md 3a „Formular: Aufbau“ (29.10.2026): die drei Fachpanels (Stromgrenzen,
+    // Doppelte Anbindung, PV-Überschussladen) sind in Reihenfolge und Aufklapp-Zustand
+    // wählbar. „Verbindungen im Verbund“ ist eine Statuszeilen-Gruppe und bleibt fest.
+    private const LAYOUT_KEYS = ['limits', 'duplicate', 'surplus'];
+
+    private function freePanels(): array
+    {
+        return [
+            'limits'    => $this->limitsPanel(),
+            'duplicate' => $this->duplicatePanel(),
+            'surplus'   => $this->surplusPanel(),
+        ];
+    }
+
+    private function formLayout(): array
+    {
+        $saved = json_decode($this->ReadPropertyString('FormLayout'), true);
+        $by = [];
+        foreach (is_array($saved) ? $saved : [] as $row) {
+            if (is_array($row) && isset($row['Key'])) {
+                $by[(string)$row['Key']] = $row;
+            }
+        }
+        $out = [];
+        foreach (self::LAYOUT_KEYS as $i => $k) {
+            $r = $by[$k] ?? [];
+            $open = !empty($r['Hidden']) ? 'hidden' : (!empty($r['Closed']) ? 'closed' : (!empty($r['Opened']) ? 'open' : 'std'));
+            $out[$k] = [
+                'open' => $open,
+                'pos'  => isset($r['Pos']) ? max(1, min(99, (int)$r['Pos'])) : $i + 1,
+                'idx'  => $i,
+            ];
+        }
+        uasort($out, fn ($a, $b) => [$a['pos'], $a['idx']] <=> [$b['pos'], $b['idx']]);
+        return $out;
+    }
+
+    // Fachpanels in der gewählten Reihenfolge, dahinter das Aufbau-Panel selbst.
+    private function layoutedPanels(): array
+    {
+        $free = $this->freePanels();
+        $layout = $this->formLayout();
+        $out = [];
+        foreach ($layout as $key => $l) {
+            $panel = $free[$key];
+            if ($l['open'] === 'open') {
+                $panel['expanded'] = true;
+            } elseif ($l['open'] === 'closed') {
+                $panel['expanded'] = false;
+            } elseif ($l['open'] === 'hidden') {
+                // Nicht weglassen: die Felder bleiben im Formular, gespeicherte Werte bleiben erhalten.
+                $panel['visible'] = false;
+            }
+            $out[] = $panel;
+        }
+        $out[] = $this->layoutPanel($layout, $free);
+        return $out;
+    }
+
+    private function layoutPanel(array $layout, array $free): array
+    {
+        $rows = [];
+        $hidden = [];
+        foreach ($layout as $key => $l) {
+            $name = trim((string)preg_replace('/\s*\(.*$/u', '', (string)($free[$key]['caption'] ?? $key)));
+            $rows[] = ['Key' => $key, 'Panel' => $name, 'Opened' => $l['open'] === 'open', 'Closed' => $l['open'] === 'closed',
+                'Hidden' => $l['open'] === 'hidden', 'Pos' => $l['pos']];
+            if ($l['open'] === 'hidden') {
+                $hidden[] = trim((string)preg_replace('/^[^\p{L}\p{N}]+/u', '', $name));
+            }
+        }
+        $hiddenLine = $hidden
+            ? [['type' => 'Label', 'caption' => '🙈 Ausgeblendet: ' . implode(', ', $hidden) . ' — zum Wiederzeigen den Haken bei „Ausgeblendet“ entfernen. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt.']]
+            : [];
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'LayoutPanel', 'expanded' => false,
+            'caption' => '🪟  Formular: Aufbau' . ($hidden ? ' (' . count($hidden) . ' ausgeblendet)' : ''),
+            'items' => array_merge($hiddenLine, [
+                ['type' => 'Label', 'caption' => 'Hier legst du fest, welche Bereiche beim Öffnen des Formulars aufgeklappt sind und in welcher Reihenfolge sie stehen. Symcon merkt sich das Auf- und Zuklappen nicht selbst, deshalb gilt die Einstellung hier jedes Mal beim Öffnen. Sie wirkt nach „Übernehmen“ beim nächsten Öffnen des Formulars.'],
+                ['type' => 'Label', 'caption' => 'Kein Haken heißt „Standard“: wie das Modul es vorsieht. Die Position ist eine Zahl; bei gleicher Zahl bleibt die Standardreihenfolge. „Ausgeblendet“ nimmt einen Bereich aus der Anzeige, ohne dass er etwas verliert: seine Einstellungen bleiben erhalten und wirken weiter (gedacht für Bereiche, die man selten braucht). Zum Wiederzeigen den Haken bei „Ausgeblendet“ entfernen oder „Auf Standard zurücksetzen“ klicken. Sind mehrere Haken gesetzt, gilt „Ausgeblendet“ vor „Zugeklappt“ vor „Aufgeklappt“. Die Bereiche oben (Zweck, Neu, Dokumentation, Verbindungen) und unten (Rückmeldungen, Über dieses Modul) bleiben, wo sie sind und lassen sich nicht ausblenden.'],
+                [
+                    'type' => 'List', 'name' => 'FormLayout', 'caption' => 'Bereiche', 'rowCount' => count($rows), 'add' => false, 'delete' => false,
+                    'loadValuesFromConfiguration' => false,
+                    'values' => $rows,
+                    'columns' => [
+                        ['caption' => 'Bereich', 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
+                        ['caption' => 'Schlüssel', 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
+                        ['caption' => 'Aufgeklappt', 'name' => 'Opened', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Zugeklappt', 'name' => 'Closed', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => '🙈 Ausgeblendet', 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Position', 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
+                    ],
+                ],
+                ['type' => 'Button', 'caption' => '↩️ Auf Standard zurücksetzen', 'onClick' => 'echo OHUBL_ResetFormLayout($id);'],
+            ]),
+        ];
+    }
+
+    // Setzt Aufklapp-Zustand und Reihenfolge der Fachpanels im offenen Formular auf den Standard
+    // (gilt erst nach „Übernehmen“, keine Selbstpersistenz).
+    public function ResetFormLayout(): string
+    {
+        $free = $this->freePanels();
+        $rows = [];
+        foreach (self::LAYOUT_KEYS as $i => $k) {
+            $name = trim((string)preg_replace('/\s*\(.*$/u', '', (string)($free[$k]['caption'] ?? $k)));
+            $rows[] = ['Key' => $k, 'Panel' => $name, 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => $i + 1];
+        }
+        $this->UpdateFormField('FormLayout', 'values', json_encode($rows, JSON_UNESCAPED_UNICODE));
+        return 'ℹ️ Auf Standard gesetzt. Zum Speichern unten „Übernehmen“ klicken.';
     }
 
     // „Über dieses Modul" (SUITE.md Formular-Konvention Punkt 5) — bewusst

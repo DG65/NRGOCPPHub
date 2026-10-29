@@ -19,6 +19,8 @@ $all = [
     'l_auto', 'l_eigen', 'l_keins',
     's_ok', 's_leer',
     'a_ok', 'a_verwaist', 'a_tessie_frei',
+    'l_aufbau_std', 'l_aufbau_eigen', 'l_aufbau_unbekannt', 'l_aufbau_reset',
+    'a_aufbau_std', 'a_aufbau_eigen', 'a_aufbau_reset',
 ];
 
 if ($scenario === null) {
@@ -61,7 +63,9 @@ class IPSModule
     public function ReadAttributeInteger($n) { return (int) ($GLOBALS['attrs'][$n] ?? 0); }
     public function ReadAttributeBoolean($n) { return (bool) ($GLOBALS['attrs'][$n] ?? false); }
     public function GetValue($ident) { return ''; }
+    public function UpdateFormField($f, $p, $v) { $GLOBALS['updates'][] = [$f, $p, $v]; }
 }
+$updates = [];
 
 function IPS_GetLibrary($g) { return ['Version' => '0.6.34']; }
 function IPS_GetName($id) { return $GLOBALS['modules'][$id]['name'] ?? ('Objekt ' . $id); }
@@ -194,6 +198,48 @@ switch ($scenario) {
         add(600, TESSIE, 'Kohlekasten', 0);
         $props['Fahrzeuge'] = json_encode([['id' => 1, 'name' => 'Auto', 'kennzeichen' => '', 'tessieInstanceId' => 0]]);
         break;
+    // SUITE.md 3a „Formular: Aufbau“
+    case 'l_aufbau_std':
+    case 'l_aufbau_eigen':
+    case 'l_aufbau_unbekannt':
+    case 'l_aufbau_reset':
+        $module = 'Ladepunkt';
+        add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
+        add(900, LADEPUNKT, 'WB2', 0);
+        $props += ['CPID' => 'WB2', 'SplitterID' => 100, 'ManagedBy' => 'none'];
+        if ($scenario === 'l_aufbau_eigen') {
+            // PV zuerst und aufgeklappt, Stromgrenzen ausgeblendet, Doppelte Anbindung zugeklappt
+            $props['FormLayout'] = json_encode([
+                ['Key' => 'surplus', 'Panel' => 'x', 'Opened' => true, 'Closed' => false, 'Hidden' => false, 'Pos' => 1],
+                ['Key' => 'limits', 'Panel' => 'x', 'Opened' => true, 'Closed' => true, 'Hidden' => true, 'Pos' => 2],
+                ['Key' => 'duplicate', 'Panel' => 'x', 'Opened' => false, 'Closed' => true, 'Hidden' => false, 'Pos' => 3],
+            ]);
+        } elseif ($scenario === 'l_aufbau_unbekannt') {
+            // alter/unbekannter Schlüssel, ein bekannter fehlt ganz, kaputtes JSON-Element dazwischen
+            $props['FormLayout'] = json_encode([
+                ['Key' => 'gibt_es_nicht', 'Hidden' => true, 'Pos' => 1],
+                'kaputt',
+                ['Key' => 'duplicate', 'Hidden' => true, 'Pos' => 99],
+            ]);
+        }
+        break;
+    case 'a_aufbau_std':
+    case 'a_aufbau_eigen':
+    case 'a_aufbau_reset':
+        $module = 'Abrechnung';
+        add(100, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 900, 'props' => ['Betriebsart' => 2]]);
+        add(900, ABRECHNUNG, 'Abrechnung', 100);
+        $props['Fahrzeuge'] = '[]';
+        if ($scenario === 'a_aufbau_eigen') {
+            $props['FormLayout'] = json_encode([
+                ['Key' => 'Zugaenge', 'Panel' => 'x', 'Hidden' => false, 'Pos' => 1],
+                ['Key' => 'Kunden', 'Panel' => 'x', 'Hidden' => true, 'Pos' => 2],
+                ['Key' => 'Fahrzeuge', 'Panel' => 'x', 'Hidden' => false, 'Pos' => 3],
+                ['Key' => 'Gruppen', 'Panel' => 'x', 'Hidden' => false, 'Pos' => 4],
+            ]);
+            $attrs['ActiveAccordionPanel'] = 'Kunden';   // aktiver Reiter ist ausgeblendet -> darf nicht nach vorn wandern
+        }
+        break;
 }
 
 require dirname(__DIR__) . '/OCPPHub' . $module . '/module.php';
@@ -223,6 +269,20 @@ function find(array $nodes, callable $pred, array $trail = []): ?array
     }
     return null;
 }
+// Reihenfolge der Panels (nach Caption-Präfix) auf der obersten Ebene von elements
+function panelOrder(array $elements, array $prefixes): array
+{
+    $out = [];
+    foreach ($elements as $n) {
+        foreach ($prefixes as $p) {
+            if (is_array($n) && str_starts_with($n['caption'] ?? '', $p)) {
+                $out[] = $p;
+            }
+        }
+    }
+    return $out;
+}
+
 $fails = [];
 $check = function (string $text, bool $ok) use (&$fails) {
     if (!$ok) {
@@ -338,6 +398,80 @@ switch ($scenario) {
         $check('ℹ️ „Tessie vorhanden, aber nichts verknüpft" fehlt', $has('ℹ️ Im System gibt es 1 Tessie-Fahrzeug(e), aber kein Fahrzeug hier ist verknüpft'));
         $check('darf NICHT mit „kein Tessie im System" verwechselt werden', !$has('Kein Tessie-Fahrzeug im System gefunden'));
         $check('darf NICHT als verknüpft (✅) gelten', !$has('✅ Fahrzeugnamen live von Tessie übernommen'));
+        break;
+    case 'l_aufbau_std':
+    case 'l_aufbau_eigen':
+    case 'l_aufbau_unbekannt':
+        $order = panelOrder($form['elements'], ['⚡ Stromgrenzen', '🔀 Doppelte Anbindung', '☀️ PV-Überschussladen']);
+        $lay = find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'LayoutPanel');
+        $pan = fn (string $prefix) => find($form['elements'], fn ($n) => ($n['type'] ?? '') === 'ExpansionPanel' && str_starts_with($n['caption'] ?? '', $prefix))['node'] ?? [];
+        $check('Aufbau-Panel fehlt', $lay !== null);
+        $check('Aufbau-Panel muss eingeklappt sein', ($lay['node']['expanded'] ?? true) === false);
+        // Reihenfolge der obersten Ebene: Aufbau-Panel nach den Fachpanels, vor Feedback und Über dieses Modul
+        $names = array_map(fn ($n) => ($n['name'] ?? '') . '|' . ($n['caption'] ?? ''), $form['elements']);
+        $iLay = array_search(true, array_map(fn ($x) => str_starts_with($x, 'LayoutPanel|'), $names), true);
+        $iFeed = array_search(true, array_map(fn ($x) => str_starts_with($x, 'ReviewHint|'), $names), true);
+        $iLic = array_search(true, array_map(fn ($x) => str_contains($x, 'Über dieses Modul'), $names), true);
+        $check('Aufbau-Panel muss vor dem Forum-Hinweis stehen', $iLay !== false && $iFeed !== false && $iLay < $iFeed);
+        $check('„Über dieses Modul“ muss ganz unten stehen', $iLic !== false && $iLic > $iFeed);
+        $check('Feld FormLayout fehlt (Schlüsselspalte mit save)', (function () use ($lay) {
+            foreach ($lay['node']['items'] ?? [] as $it) {
+                if (($it['name'] ?? '') === 'FormLayout') {
+                    foreach ($it['columns'] as $c) {
+                        if (($c['name'] ?? '') === 'Key' && ($c['save'] ?? false) === true) { return true; }
+                    }
+                }
+            }
+            return false;
+        })());
+        if ($scenario === 'l_aufbau_std') {
+            $check('Standardreihenfolge Stromgrenzen, Doppelte, PV', $order === ['⚡ Stromgrenzen', '🔀 Doppelte Anbindung', '☀️ PV-Überschussladen']);
+            $check('im Standard darf nichts ausgeblendet sein', !isset($pan('⚡ Stromgrenzen')['visible']) && !isset($pan('☀️')['visible']));
+            $check('im Standard darf nichts erzwungen aufgeklappt sein', !isset($pan('☀️')['expanded']));
+            $check('Caption ohne Ausgeblendet-Zähler', str_ends_with($lay['node']['caption'], 'Aufbau'));
+        } elseif ($scenario === 'l_aufbau_eigen') {
+            $check('gewählte Reihenfolge PV, Stromgrenzen, Doppelte', $order === ['☀️ PV-Überschussladen', '⚡ Stromgrenzen', '🔀 Doppelte Anbindung']);
+            $check('PV muss aufgeklappt sein', ($pan('☀️')['expanded'] ?? null) === true);
+            $check('Stromgrenzen müssen visible:false haben, aber im Formular stehen bleiben', ($pan('⚡ Stromgrenzen')['visible'] ?? null) === false && find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'MinCurrent') !== null);
+            $check('Widerspruch: ausgeblendet gewinnt vor zugeklappt und aufgeklappt', ($pan('⚡ Stromgrenzen')['visible'] ?? null) === false && ($pan('⚡ Stromgrenzen')['expanded'] ?? false) !== true);
+            $check('Doppelte Anbindung muss zugeklappt sein', ($pan('🔀 Doppelte')['expanded'] ?? null) === false);
+            $check('Caption zeigt „(1 ausgeblendet)“', str_contains($lay['node']['caption'], '(1 ausgeblendet)'));
+            $check('Zeile mit den ausgeblendeten Bereichen fehlt', $has('🙈 Ausgeblendet: Stromgrenzen & Steuerungshoheit'));
+        } else {
+            $check('unbekannter Schlüssel darf nichts ändern; Doppelte steht wegen Position 99 hinten', $order === ['⚡ Stromgrenzen', '☀️ PV-Überschussladen', '🔀 Doppelte Anbindung']);
+            $check('bekannter Schlüssel bleibt wirksam (Doppelte ausgeblendet)', ($pan('🔀 Doppelte')['visible'] ?? null) === false);
+            $check('fehlender Schlüssel fällt auf Standard zurück (PV sichtbar)', !isset($pan('☀️')['visible']));
+        }
+        break;
+    case 'l_aufbau_reset':
+        $msg = $m->ResetFormLayout();
+        $check('Reset muss Klartext zurückgeben', str_contains($msg, 'Übernehmen'));
+        $check('Reset muss genau ein UpdateFormField auf FormLayout/values senden', count($updates) === 1 && $updates[0][0] === 'FormLayout' && $updates[0][1] === 'values');
+        $rows = json_decode($updates[0][2] ?? '[]', true) ?: [];
+        $check('Reset-Zeilen: drei Bereiche in Standardreihenfolge ohne Haken', array_map(fn ($r) => $r['Key'], $rows) === ['limits', 'duplicate', 'surplus'] && !array_filter($rows, fn ($r) => $r['Opened'] || $r['Closed'] || $r['Hidden']) && array_map(fn ($r) => $r['Pos'], $rows) === [1, 2, 3]);
+        break;
+    case 'a_aufbau_std':
+    case 'a_aufbau_eigen':
+        $lay = find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'LayoutPanel');
+        $row = find($form['elements'], fn ($n) => ($n['type'] ?? '') === 'RowLayout' && isset($n['items'][0]['name']) && str_starts_with($n['items'][0]['name'], 'Panel'));
+        $tabs = array_map(fn ($n) => $n['name'], $row['node']['items'] ?? []);
+        $vis = array_map(fn ($n) => $n['visible'] ?? true, $row['node']['items'] ?? []);
+        $check('Aufbau-Panel fehlt', $lay !== null && ($lay['node']['expanded'] ?? true) === false);
+        $check('Abrechnung hat keine Auf-/Zuklapp-Spalten (Ziehharmonika)', !str_contains(json_encode($lay['node'] ?? []), '"Opened"'));
+        if ($scenario === 'a_aufbau_std') {
+            $check('Standardreihenfolge der Reiter', $tabs === ['PanelFahrzeuge', 'PanelGruppen', 'PanelKunden', 'PanelZugaenge']);
+            $check('alle Reiter sichtbar', !in_array(false, $vis, true));
+        } else {
+            $check('gewählte Reihenfolge Zugänge, Kunden, Fahrzeuge, Gruppen', $tabs === ['PanelZugaenge', 'PanelKunden', 'PanelFahrzeuge', 'PanelGruppen']);
+            $check('Kunden muss visible:false haben und im Formular stehen bleiben', ($row['node']['items'][1]['visible'] ?? null) === false && find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'Kunden') !== null);
+            $check('ausgeblendeter aktiver Reiter wandert nicht ans Ende', end($tabs) !== 'PanelKunden');
+        }
+        break;
+    case 'a_aufbau_reset':
+        $msg = $m->ResetFormLayout();
+        $check('Reset muss Klartext zurückgeben', str_contains($msg, 'Übernehmen'));
+        $rows = json_decode($updates[0][2] ?? '[]', true) ?: [];
+        $check('Reset-Zeilen: vier Reiter in Standardreihenfolge ohne Haken', array_map(fn ($r) => $r['Key'], $rows) === ['Fahrzeuge', 'Gruppen', 'Kunden', 'Zugaenge'] && !array_filter($rows, fn ($r) => $r['Hidden']));
         break;
 }
 

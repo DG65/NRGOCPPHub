@@ -18,7 +18,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.13';
+    private const VERSION = '0.3.14';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -27,10 +27,11 @@ class OCPPHubAbrechnung extends IPSModule
     // gepostet, siehe forum-ankuendigung-ocpphub.md).
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/beta-modul-nrg-stack-ocpphub-wallboxen-per-ocpp-1-6j-anbinden-mit-pv-ueberschussladen-und-kundenverwaltung/144409';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
-    private const NEWS_VERSION = '0.3.8';
+    private const NEWS_VERSION = '0.3.14';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     private const NEWS_ITEMS = [
+        '🪟 Neu: „Formular: Aufbau" (eingeklappt unter den vier Reitern) — du legst fest, in welcher Reihenfolge Fahrzeuge, Gruppen, Kunden und Zugänge stehen und welche du ausblendest. Ausgeblendete Reiter arbeiten weiter, ihre Einträge bleiben erhalten. Auf-/Zuklappen gibt es hier nicht: die Reiter sind eine Ziehharmonika, das Modul merkt sich den zuletzt geöffneten selbst. Gilt nach „Übernehmen" beim nächsten Öffnen.',
         'Neu: „👋 Wozu dieses Modul?" und „🧡 Über dieses Modul" (Lizenz/Spenden) ergänzt, Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung, Konsistenz mit den anderen drei OCPPHub-Modulen).',
         'Store-Checkliste 9b: „Gültig bis" bei Zugängen zeigt jetzt TT.MM.JJJJ statt JJJJ-MM-TT (Konsole und Kachel). Bereits gespeicherte alte Einträge bleiben gültig — kein Migrationsschritt nötig, PHP erkennt beide Formate zuverlässig.',
         'Neu: 🎪 Vorführmodus — greift automatisch, sobald am zugehörigen Splitter aktiviert (Dietmars geplante öffentliche Verbund-Demo). Die Konfigurationskachel wird dann schreibgeschützt (Speichern/Zeile hinzufügen/Löschen/Karte übernehmen deaktiviert, gut sichtbarer Hinweis oben) — ein Besucher der Demo kann keine echten Kundendaten anlegen oder verändern.',
@@ -62,6 +63,8 @@ class OCPPHubAbrechnung extends IPSModule
         $this->RegisterPropertyString('Gruppen', '[]');
         $this->RegisterPropertyString('Kunden', '[]');
         $this->RegisterPropertyString('Zugaenge', '[]');
+        // SUITE.md 3a „Formular: Aufbau“: Liste {Key, Panel, Hidden, Pos} (Accordion: keine Auf-/Zuklapp-Wahl)
+        $this->RegisterPropertyString('FormLayout', '[]');
 
         $this->RegisterAttributeInteger('NextEntityId', 1);
 
@@ -492,10 +495,23 @@ class OCPPHubAbrechnung extends IPSModule
 
         // Aktiver Reiter wandert ans Ende der Reihenfolge (= ganz rechts), die übrigen
         // drei behalten ihre relative Reihenfolge zueinander bei.
-        $panelOrder = self::PANEL_NAMES;
+        // SUITE.md 3a „Formular: Aufbau“: Position und Ausblenden der vier Reiter. Auf-/Zuklappen
+        // gibt es hier nicht, weil die Ziehharmonika sich den aktiven Reiter selbst merkt.
+        $layout = $this->formLayout();
+        $panelOrder = array_keys($layout);
+        if ($activePanel !== '' && in_array($activePanel, $panelOrder, true) && $layout[$activePanel]['hidden']) {
+            $activePanel = '';
+        }
         if ($activePanel !== '' && in_array($activePanel, $panelOrder, true)) {
             $panelOrder = array_values(array_diff($panelOrder, [$activePanel]));
             $panelOrder[] = $activePanel;
+        }
+        foreach ($layout as $key => $l) {
+            if ($l['hidden']) {
+                // Nicht weglassen: die Listen bleiben im Formular, gespeicherte Werte bleiben erhalten.
+                $panelDefs[$key]['visible'] = false;
+                $panelDefs[$key]['expanded'] = false;
+            }
         }
 
         $form = [
@@ -520,6 +536,7 @@ class OCPPHubAbrechnung extends IPSModule
                     'type'  => 'RowLayout',
                     'items' => array_map(fn ($name) => $panelDefs[$name], $panelOrder),
                 ],
+                $this->layoutPanel($layout, $panelDefs),
             ],
             'status' => [
                 ['code' => 102, 'icon' => 'active', 'caption' => 'Aktiv'],
@@ -687,6 +704,81 @@ class OCPPHubAbrechnung extends IPSModule
     private const PANEL_NAMES = ['Fahrzeuge', 'Gruppen', 'Kunden', 'Zugaenge'];
     private const WIDTH_NARROW = '400px';
     private const WIDTH_FULL = '1600px';
+
+    // SUITE.md 3a „Formular: Aufbau“ (29.10.2026). Die vier Reiter (Fahrzeuge, Gruppen, Kunden,
+    // Zugänge) sind eine Ziehharmonika, bei der immer nur einer offen ist und das Modul sich den
+    // aktiven Reiter selbst merkt (ActiveAccordionPanel). Wählbar sind deshalb nur die Position und
+    // „Ausgeblendet“; „Aufgeklappt/Zugeklappt“ gibt es hier bewusst nicht.
+    private function formLayout(): array
+    {
+        $saved = json_decode($this->ReadPropertyString('FormLayout'), true);
+        $by = [];
+        foreach (is_array($saved) ? $saved : [] as $row) {
+            if (is_array($row) && isset($row['Key'])) {
+                $by[(string)$row['Key']] = $row;
+            }
+        }
+        $out = [];
+        foreach (self::PANEL_NAMES as $i => $k) {
+            $r = $by[$k] ?? [];
+            $out[$k] = [
+                'hidden' => !empty($r['Hidden']),
+                'pos'    => isset($r['Pos']) ? max(1, min(99, (int)$r['Pos'])) : $i + 1,
+                'idx'    => $i,
+            ];
+        }
+        uasort($out, fn ($a, $b) => [$a['pos'], $a['idx']] <=> [$b['pos'], $b['idx']]);
+        return $out;
+    }
+
+    private function layoutPanel(array $layout, array $panelDefs): array
+    {
+        $rows = [];
+        $hidden = [];
+        foreach ($layout as $key => $l) {
+            $name = trim((string)preg_replace('/\s*\(.*$/u', '', (string)($panelDefs[$key]['caption'] ?? $key)));
+            $rows[] = ['Key' => $key, 'Panel' => $name, 'Hidden' => $l['hidden'], 'Pos' => $l['pos']];
+            if ($l['hidden']) {
+                $hidden[] = trim((string)preg_replace('/^[^\p{L}\p{N}]+/u', '', $name));
+            }
+        }
+        $hiddenLine = $hidden
+            ? [['type' => 'Label', 'caption' => '🙈 Ausgeblendet: ' . implode(', ', $hidden) . ' — zum Wiederzeigen den Haken bei „Ausgeblendet“ entfernen. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt.']]
+            : [];
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'LayoutPanel', 'expanded' => false,
+            'caption' => '🪟  Formular: Aufbau' . ($hidden ? ' (' . count($hidden) . ' ausgeblendet)' : ''),
+            'items' => array_merge($hiddenLine, [
+                ['type' => 'Label', 'caption' => 'Hier legst du fest, in welcher Reihenfolge die vier Reiter (Fahrzeuge, Gruppen, Kunden, Zugänge) stehen und welche davon du gar nicht sehen willst. Sie wirkt nach „Übernehmen“ beim nächsten Öffnen des Formulars. Auf- und Zuklappen kannst du hier nicht festlegen: die vier Reiter sind eine Ziehharmonika (immer nur einer offen), und das Modul merkt sich den zuletzt geöffneten selbst.'],
+                ['type' => 'Label', 'caption' => 'Kein Haken bei „Ausgeblendet“ heißt „Standard“: sichtbar. Die Position ist eine Zahl; bei gleicher Zahl bleibt die Standardreihenfolge. „Ausgeblendet“ nimmt einen Reiter aus der Anzeige, ohne dass er etwas verliert: seine Einträge bleiben erhalten und wirken weiter (gedacht für Bereiche, die man selten braucht). Zum Wiederzeigen den Haken entfernen oder „Auf Standard zurücksetzen“ klicken. Die Bereiche oben (Zweck, Neu, Dokumentation, Verbindungen) und unten (Rückmeldungen, Über dieses Modul) bleiben, wo sie sind und lassen sich nicht ausblenden.'],
+                [
+                    'type' => 'List', 'name' => 'FormLayout', 'caption' => 'Bereiche', 'rowCount' => count($rows), 'add' => false, 'delete' => false,
+                    'loadValuesFromConfiguration' => false,
+                    'values' => $rows,
+                    'columns' => [
+                        ['caption' => 'Bereich', 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
+                        ['caption' => 'Schlüssel', 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
+                        ['caption' => '🙈 Ausgeblendet', 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Position', 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
+                    ],
+                ],
+                ['type' => 'Button', 'caption' => '↩️ Auf Standard zurücksetzen', 'onClick' => 'echo OHUBA_ResetFormLayout($id);'],
+            ]),
+        ];
+    }
+
+    // Setzt Position und Sichtbarkeit der Reiter im offenen Formular auf den Standard
+    // (gilt erst nach „Übernehmen“, keine Selbstpersistenz).
+    public function ResetFormLayout(): string
+    {
+        $captions = ['Fahrzeuge' => '🚙 Fahrzeuge', 'Gruppen' => '👥 Gruppen', 'Kunden' => '🙋 Kunden', 'Zugaenge' => '🪪 Zugänge'];
+        $rows = [];
+        foreach (self::PANEL_NAMES as $i => $k) {
+            $rows[] = ['Key' => $k, 'Panel' => $captions[$k] ?? $k, 'Hidden' => false, 'Pos' => $i + 1];
+        }
+        $this->UpdateFormField('FormLayout', 'values', json_encode($rows, JSON_UNESCAPED_UNICODE));
+        return 'ℹ️ Auf Standard gesetzt. Zum Speichern unten „Übernehmen“ klicken.';
+    }
 
     private function panelWidth(string $name, string $activePanel): string
     {
