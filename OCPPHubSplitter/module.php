@@ -36,6 +36,10 @@ class OCPPHubSplitter extends IPSModule
     private const WEBHOOK_CONTROL_GUID = '{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}';
 
     private const LADEPUNKT_GUID = '{27A1625F-A006-4945-8A36-FFBAA38A5FB5}';
+    // Datenfluss (Symcon-Review 30.10.2026): Splitter -> Kinder (Ladepunkt, Abrechnung) per
+    // SendDataToChildren; die Gegenrichtung (Kind -> Splitter, ForwardData) trägt die in
+    // module.json unter `implemented` stehende Schnittstelle, siehe .docs/datenfluss.md.
+    private const DATA_ZUM_KIND = '{DD617475-D014-4559-BC1C-6A39FCA4EDEE}';
     private const ABRECHNUNG_GUID = '{64980198-6B36-45D5-A84F-A0EAE9CCC63A}';
     private const CHARGERHUB_GUID = '{9256C34E-5CFD-4F37-8BFE-E65390EBB37C}';
 
@@ -45,7 +49,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.2.34';
+    private const VERSION = '0.3.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — seit dem Stable-Start (27.10.2026) liegt LICENSE auf `main`, dorthin
@@ -60,8 +64,9 @@ class OCPPHubSplitter extends IPSModule
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.2.26';
+    private const NEWS_VERSION = '0.3.0';
     private const NEWS_ITEMS = [
+        '🔌 Technik: Splitter, Ladepunkte, Abrechnung und Konfigurator reden jetzt über den Symcon-Datenfluss miteinander (Nachrichten statt direkter Funktionsaufrufe auf fremden Instanzen), wie es der Store-Review verlangt. Die Ladepunkte, die Abrechnung und der Konfigurator hängen dafür am Splitter als echtem übergeordneten Gerät. Bestehende Instanzen werden beim ersten Übernehmen nach dem Update automatisch verbunden. Am Verhalten ändert sich nichts.',
         'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
         'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Neu: 🎪 Vorführmodus (Formularfeld am Splitter) — für Dietmars geplante öffentliche Demo-Instanz des ganzen NRG-Stack-Verbunds. Aktiviert, lehnt OCPPHub jeden echten Ladesteuerbefehl (RemoteStartTransaction/SetChargingProfile/Reset) serverseitig ab, egal ob manuell, per PV-Überschussladen oder automatischer Fahrzeug-Autorisierung ausgelöst — ein Besucher der Demo kann Dietmars echte Wallbox damit nicht schalten. Auch die Kundenverwaltungs-Kachel wird dabei automatisch schreibgeschützt.',
@@ -207,6 +212,7 @@ class OCPPHubSplitter extends IPSModule
     {
         $existing = $this->ReadAttributeInteger('AbrechnungID');
         if ($existing > 0 && @IPS_InstanceExists($existing)) {
+            $this->abrechnungVerbinden($existing);
             return $existing;
         }
         $newId = @IPS_CreateInstance(self::ABRECHNUNG_GUID);
@@ -215,9 +221,20 @@ class OCPPHubSplitter extends IPSModule
         }
         @IPS_SetParent($newId, $this->InstanceID);
         @IPS_SetName($newId, IPS_GetName($this->InstanceID) . ' Abrechnung');
+        $this->abrechnungVerbinden($newId);
         @IPS_ApplyChanges($newId);
         $this->WriteAttributeInteger('AbrechnungID', $newId);
         return $newId;
+    }
+
+    // Hängt die Abrechnung als Kind an diesen Splitter (Datenfluss, Symcon-Review 30.10.2026). Bestands-
+    // Abrechnungen waren bisher nur über das Attribut AbrechnungID gebunden und werden hier beim
+    // nächsten Übernehmen einmalig verbunden. Eine bereits anderswo verbundene Abrechnung bleibt unberührt.
+    private function abrechnungVerbinden(int $abrechnungId): void
+    {
+        if ((int)(IPS_GetInstance($abrechnungId)['ConnectionID'] ?? 0) === 0) {
+            @IPS_ConnectInstance($abrechnungId, $this->InstanceID);
+        }
     }
 
     // Öffentlicher Zugriff auf die tatsächliche, funktionale Bindung
@@ -485,18 +502,14 @@ class OCPPHubSplitter extends IPSModule
         }
 
         // Ladepunkte dieses Splitters
-        $own = $this->ownLadepunkte();
         $seen = $this->GetSeenChargePoints();
         $ownCpids = [];
         $rows = [];
-        foreach ($own as $lpId) {
-            $cpid = (string)@IPS_GetProperty($lpId, 'CPID');
+        foreach ($this->kindVertraege() as $kind) {
+            $entry = $kind['eintrag'];
+            $lpId = (int)($entry['instanceID'] ?? 0);
+            $cpid = $kind['cpid'];
             $ownCpids[] = $cpid;
-            try {
-                $entry = OHUBL_GetContractEntry($lpId);
-            } catch (\Throwable $e) {
-                $entry = [];
-            }
             $ts = (int)($entry['lastSeenAt'] ?? 0);
             $frisch = $ts > 0 && (time() - $ts) < 900;
             $zustand = !empty($entry['deactivated']) ? 'deaktiviert' : ($frisch ? 'verbunden' : 'nicht verbunden');
@@ -589,8 +602,6 @@ class OCPPHubSplitter extends IPSModule
 
         $this->SendDebug('OCPPHub Receive [' . $cpid . ']', $raw, 0);
         $this->rememberSeenChargePoint($cpid);
-        $this->forwardSourceIp($cpid);
-        $this->markLadepunktSeen($cpid);
 
         // FIX 30.08.2026 (Live-Fund WB2, Fatal Error bei jedem MeterValues):
         // json_decode() OHNE den Assoziativ-Parameter lässt verschachtelte
@@ -646,16 +657,13 @@ class OCPPHubSplitter extends IPSModule
                 // Ladevorgang anstoßen sollen — eine abgelehnte
                 // ChangeConfiguration o. ä. braucht keine Fahrzeugdiagnose.
                 if (in_array($action, ['RemoteStartTransaction', 'SetChargingProfile'], true)) {
-                    $ladepunktId = $this->findLadepunkt($cpid);
-                    if ($ladepunktId !== 0) {
-                        if ($isFailure) {
-                            OHUBL_DiagnoseBlockReason($ladepunktId);
-                        } else {
-                            // War zuvor eine Begründung gesetzt und jetzt
-                            // klappt derselbe Aufruftyp doch (z. B. nach
-                            // Aufwecken des Fahrzeugs) — nicht stehen lassen.
-                            OHUBL_ClearBlockReason($ladepunktId);
-                        }
+                    if ($isFailure) {
+                        $this->anKind($cpid, 'BlockGrundDiagnose');
+                    } else {
+                        // War zuvor eine Begründung gesetzt und jetzt
+                        // klappt derselbe Aufruftyp doch (z. B. nach
+                        // Aufwecken des Fahrzeugs) — nicht stehen lassen.
+                        $this->anKind($cpid, 'BlockGrundLoeschen');
                     }
                 }
                 // Live-Fund 01.09.2026 (Dietmar, live erlebt): go-e lehnte
@@ -696,8 +704,7 @@ class OCPPHubSplitter extends IPSModule
                     // Ladeimpulse statt einer stabilen Sitzung). Deshalb
                     // JETZT ERST prüfen, ob am Ladepunkt schon `Charging`
                     // ansteht, und den Ausweichweg nur auslösen, wenn nicht.
-                    $ladepunktIdForRecovery = $this->findLadepunkt($cpid);
-                    $alreadyCharging = $ladepunktIdForRecovery !== 0 && OHUBL_GetState($ladepunktIdForRecovery) === 2;
+                    $alreadyCharging = (int)(($this->kindZustand($cpid)['state'] ?? 0)) === 2;
                     if ($alreadyCharging) {
                         $this->LogMessage('RemoteStartTransaction abgelehnt [' . $cpid . '] — Ladepunkt lädt aber bereits (vermutlich andere Sitzung), Reset/frc-Ausweichweg übersprungen.', KL_WARNING);
                     } else {
@@ -788,7 +795,7 @@ class OCPPHubSplitter extends IPSModule
 
     private function rememberSeenChargePoint(string $cpid): void
     {
-        if ($this->findLadepunkt($cpid) !== 0) {
+        if ($this->lebenszeichen($cpid)) {
             return; // schon als Instanz angelegt, für den Konfigurator uninteressant
         }
         $seen = json_decode($this->ReadAttributeString('SeenChargePoints'), true);
@@ -809,17 +816,8 @@ class OCPPHubSplitter extends IPSModule
     // Ladepunkt weitergereicht, wenn die Instanz schon existiert — vor
     // deren Anlage (nur „gesehene" Charge-Point-Identity) gibt es noch
     // keine Instanz, die die Warnung anzeigen könnte.
-    private function forwardSourceIp(string $cpid): void
-    {
-        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-        if ($ip === '') {
-            return;
-        }
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId !== 0) {
-            OHUBL_SetSourceIP($ladepunktId, $ip);
-        }
-    }
+    // Seit 0.7.0 geht Quell-IP und Lebenszeichen in EINER Nachricht an den Ladepunkt
+    // (siehe lebenszeichen()), die Antwort sagt zugleich, ob es einen Ladepunkt gibt.
 
     // Verfügbarkeits-Fund ChargerHub 12.09.2026 (Routine-Prüfung nach dem
     // WB2-Vorfall): rememberSeenChargePoint() oben trackt bewusst NUR noch
@@ -829,12 +827,133 @@ class OCPPHubSplitter extends IPSModule
     // Bei jeder eingehenden Nachricht (unabhängig vom Inhalt) an die
     // zuständige Ladepunkt-Instanz durchgereicht — siehe dortiges
     // UpdateLastSeen()/CheckConnectivity().
-    private function markLadepunktSeen(string $cpid): void
+    // Meldet dem Ladepunkt der Wallbox „es kam etwas an" samt Quell-IP. Liefert true,
+    // wenn es einen Ladepunkt für diese Kennung gibt.
+    private function lebenszeichen(string $cpid): bool
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId !== 0) {
-            OHUBL_UpdateLastSeen($ladepunktId);
+        return $this->anKind($cpid, 'Lebenszeichen', ['Ip' => (string)($_SERVER['REMOTE_ADDR'] ?? '')]) !== null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Datenfluss zu den Kindern (Ladepunkte, Abrechnung) — Symcon-Review 30.10.2026.
+    // Statt Instanzen zu suchen und deren öffentliche Funktionen aufzurufen, geht jede
+    // Nachricht per SendDataToChildren an ALLE angehängten Kinder; jedes Kind prüft in
+    // ReceiveData, ob sie ihm gilt (Kennung `Cpid` bzw. `InstanzID`) und antwortet
+    // sonst mit einer leeren Zeichenkette. Protokoll: .docs/datenfluss.md.
+    // ---------------------------------------------------------------------
+
+    /**
+     * Schickt eine Aktion an die Kinder und liefert die Antwort des Kindes, das sich
+     * angesprochen fühlt: `daten` (Array, bei reinen Befehlen leer) oder null, wenn kein
+     * Kind geantwortet hat (es gibt keinen Ladepunkt für diese Kennung).
+     */
+    private function anKinder(array $nachricht): ?array
+    {
+        $nachricht['DataID'] = self::DATA_ZUM_KIND;
+        $antworten = $this->SendDataToChildren((string)json_encode($nachricht));
+        foreach ((array)$antworten as $roh) {
+            if (!is_string($roh) || $roh === '') {
+                continue;
+            }
+            $a = json_decode($roh, true);
+            if (is_array($a) && !empty($a['ok'])) {
+                return (array)($a['daten'] ?? []);
+            }
         }
+        return null;
+    }
+
+    private function anKind(string $cpid, string $aktion, array $parameter = []): ?array
+    {
+        return $this->anKinder(array_merge($parameter, ['Aktion' => $aktion, 'Cpid' => $cpid]));
+    }
+
+    /** Zustand des Ladepunkts einer Wallbox (null = es gibt keinen Ladepunkt für diese Kennung). */
+    private function kindZustand(string $cpid): ?array
+    {
+        return $this->anKind($cpid, 'Zustand');
+    }
+
+    /**
+     * Vertragseinträge aller angehängten Ladepunkte, je [cpid, eintrag] (für OHUB_GetFunctions
+     * und das Verbindungs-Panel).
+     */
+    private function kindVertraege(): array
+    {
+        $antworten = (array)$this->SendDataToChildren((string)json_encode(['DataID' => self::DATA_ZUM_KIND, 'Aktion' => 'Vertrag']));
+        $out = [];
+        foreach ($antworten as $roh) {
+            $a = is_string($roh) && $roh !== '' ? json_decode($roh, true) : null;
+            if (is_array($a) && !empty($a['ok']) && is_array($a['daten']['eintrag'] ?? null)) {
+                $out[] = ['cpid' => (string)($a['daten']['cpid'] ?? ''), 'eintrag' => $a['daten']['eintrag']];
+            }
+        }
+        return $out;
+    }
+
+    /** Anfrage an die Abrechnung, die dieser Splitter führt (genau EINE, siehe GetAbrechnungID()). */
+    private function anAbrechnung(string $aktion, array $parameter = []): ?array
+    {
+        $id = $this->ReadAttributeInteger('AbrechnungID');
+        if ($id <= 0) {
+            return null;
+        }
+        return $this->anKinder(array_merge($parameter, ['Aktion' => $aktion, 'Ziel' => 'Abrechnung', 'InstanzID' => $id]));
+    }
+
+    /**
+     * Anfragen der Kinder (Ladepunkt, Abrechnung, Konfigurator) an den Splitter.
+     * Eingang:  {"DataID": ZS, "Aktion": "...", "Cpid": "...", ...}
+     * Antwort:  {"ok": true, "daten": ...} bzw. {"ok": false, "fehler": "..."}
+     */
+    public function ForwardData($JSONString)
+    {
+        $a = json_decode((string)$JSONString, true);
+        if (!is_array($a)) {
+            return (string)json_encode(['ok' => false, 'fehler' => 'Ungültige Anfrage.']);
+        }
+        try {
+            return (string)json_encode(['ok' => true, 'daten' => $this->bearbeiteAnfrage($a)]);
+        } catch (\Throwable $e) {
+            $this->LogMessage('Anfrage „' . (string)($a['Aktion'] ?? '?') . '" eines Kindes fehlgeschlagen: ' . $e->getMessage(), KL_WARNING);
+            return (string)json_encode(['ok' => false, 'fehler' => $e->getMessage()]);
+        }
+    }
+
+    private function bearbeiteAnfrage(array $a): array
+    {
+        $cpid = (string)($a['Cpid'] ?? '');
+        switch ((string)($a['Aktion'] ?? '')) {
+            case 'ManuellStart':
+                $this->ManualStart($cpid);
+                return [];
+            case 'Stopp':
+                $this->RemoteStop($cpid, (int)($a['TransaktionsId'] ?? 0));
+                return [];
+            case 'Stromlimit':
+                $this->SetCurrentLimit($cpid, (float)($a['Ampere'] ?? 0));
+                return [];
+            case 'AutoFreigabe':
+                $this->AutoAuthorizeVehicle($cpid, (string)($a['Name'] ?? ''));
+                return [];
+            case 'ForceLockLoesen':
+                $this->ClearGoeForceLock($cpid);
+                return [];
+            case 'Reservieren':
+                return ['reservierungsId' => $this->ReserveNow($cpid, (string)($a['IdTag'] ?? ''), (string)($a['Bis'] ?? ''))];
+            case 'ReservierungAufheben':
+                $this->CancelReservation($cpid, (int)($a['ReservierungsId'] ?? 0));
+                return [];
+            case 'Vorfuehrmodus':
+                return ['aktiv' => $this->IsDemoMode()];
+            case 'GeseheneWallboxen':
+                return $this->GetSeenChargePoints();
+            case 'Vertraege':
+                return ['liste' => $this->kindVertraege()];
+            case 'AbrechnungGebunden':
+                return ['gebunden' => (int)($a['InstanzID'] ?? 0) > 0 && (int)($a['InstanzID'] ?? 0) === $this->ReadAttributeInteger('AbrechnungID')];
+        }
+        throw new \RuntimeException('Unbekannte Aktion.');
     }
 
     // Für den Konfigurator: gesehene, aber noch nicht angelegte Charge-Point-
@@ -909,16 +1028,12 @@ class OCPPHubSplitter extends IPSModule
 
     private function onBootNotification(string $cpid, array $payload): array
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
         $vendor = (string)($payload['chargePointVendor'] ?? '');
-        if ($ladepunktId !== 0) {
-            OHUBL_UpdateBootInfo(
-                $ladepunktId,
-                $vendor,
-                (string)($payload['chargePointModel'] ?? ''),
-                (string)($payload['chargePointSerialNumber'] ?? '')
-            );
-        }
+        $this->anKind($cpid, 'Boot', [
+            'Hersteller'   => $vendor,
+            'Modell'       => (string)($payload['chargePointModel'] ?? ''),
+            'Seriennummer' => (string)($payload['chargePointSerialNumber'] ?? ''),
+        ]);
         if ($vendor !== '') {
             $vendors = json_decode($this->ReadAttributeString('ChargePointVendor'), true);
             if (!is_array($vendors)) {
@@ -936,14 +1051,10 @@ class OCPPHubSplitter extends IPSModule
 
     private function onStatusNotification(string $cpid, array $payload): \stdClass
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId !== 0) {
-            OHUBL_UpdateStatus(
-                $ladepunktId,
-                (string)($payload['status'] ?? ''),
-                (string)($payload['errorCode'] ?? '')
-            );
-        }
+        $this->anKind($cpid, 'Status', [
+            'Status'     => (string)($payload['status'] ?? ''),
+            'Fehlercode' => (string)($payload['errorCode'] ?? ''),
+        ]);
         return new \stdClass(); // StatusNotification.conf: leeres Objekt
     }
 
@@ -970,14 +1081,15 @@ class OCPPHubSplitter extends IPSModule
 
     private function checkIdTagInternal(string $cpid, string $idTag): string
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
+        $zustand = $this->kindZustand($cpid);
+        $hatLadepunkt = $zustand !== null;
 
         // Schreibsperre (Duplikat/deaktiviert, siehe isWriteBlocked()) geht
         // JEDER anderen Prüfung vor — ein gesperrter Ladepunkt darf auch
         // keine neue Ladung autorisieren, unabhängig von Betriebsart/
         // Reservierung/Kundenverwaltung.
-        if ($ladepunktId !== 0 && $this->isWriteBlocked($cpid)) {
-            OHUBL_ReportBlockedStart($ladepunktId, 'Dieser Ladepunkt ist deaktiviert oder als Duplikat markiert — eine andere Instanz ist zuständig.');
+        if ($hatLadepunkt && $this->zustandGesperrt($zustand)) {
+            $this->anKind($cpid, 'Blockiert', ['Grund' => 'Dieser Ladepunkt ist deaktiviert oder als Duplikat markiert — eine andere Instanz ist zuständig.']);
             return 'Blocked';
         }
 
@@ -985,10 +1097,10 @@ class OCPPHubSplitter extends IPSModule
         // .docs/architektur.md „Reservierung"). Geht der Prüfung unten vor,
         // auch bei Betriebsart ①, weil eine Reservierung nur sinnvoll ist,
         // wenn sie auch durchgesetzt wird.
-        if ($ladepunktId !== 0) {
-            $reservedIdTag = OHUBL_GetActiveReservationIdTag($ladepunktId);
+        if ($hatLadepunkt) {
+            $reservedIdTag = (string)($zustand['reservedIdTag'] ?? '');
             if ($reservedIdTag !== '' && $reservedIdTag !== $idTag) {
-                OHUBL_ReportBlockedStart($ladepunktId, $this->explainAuthStatus('Blocked', 'reserviert'));
+                $this->anKind($cpid, 'Blockiert', ['Grund' => $this->explainAuthStatus('Blocked', 'reserviert')]);
                 return 'Blocked';
             }
         }
@@ -1008,7 +1120,7 @@ class OCPPHubSplitter extends IPSModule
             // architektur.md „Verfügbarkeit / Offline-Verhalten").
             return 'Accepted';
         }
-        $result = OHUBA_CheckAuthorization($abrechnungId, $idTag);
+        $result = (array)($this->anAbrechnung('Autorisierung', ['IdTag' => $idTag]) ?? []);
         $status = (string)($result['status'] ?? 'Invalid');
         $reason = (string)($result['reason'] ?? '');
 
@@ -1021,11 +1133,11 @@ class OCPPHubSplitter extends IPSModule
         // abgelehnte RemoteStartTransaction/SetChargingProfile OHNE
         // erkennbaren Grund) kennen wir den Grund hier bereits exakt aus
         // unserer eigenen Zugänge-Prüfung — kein Rätselraten nötig.
-        if ($ladepunktId !== 0) {
+        if ($hatLadepunkt) {
             if ($status === 'Accepted') {
-                OHUBL_ClearBlockReason($ladepunktId);
+                $this->anKind($cpid, 'BlockGrundLoeschen');
             } else {
-                OHUBL_ReportBlockedStart($ladepunktId, $this->explainAuthStatus($status, $reason));
+                $this->anKind($cpid, 'Blockiert', ['Grund' => $this->explainAuthStatus($status, $reason)]);
             }
         }
 
@@ -1033,7 +1145,7 @@ class OCPPHubSplitter extends IPSModule
         // mit Dashboard abgestimmt, siehe architektur.md „Fahrzeug-
         // Zuordnung & SOC") — bei erfolgreicher Autorisierung mit
         // bekanntem Fahrzeug sofort setzen.
-        if ($status === 'Accepted' && $ladepunktId !== 0 && !empty($result['vehicleName'])) {
+        if ($status === 'Accepted' && $hatLadepunkt && !empty($result['vehicleName'])) {
             // $TimeCorrelated = false: diese Zuordnung läuft bereits mitten in
             // einer ECHTEN Autorisierung (Karte war schon Accepted) — eine
             // zusätzliche Auto-Autorisierung (siehe AutoAuthorizeVehicle()
@@ -1041,13 +1153,13 @@ class OCPPHubSplitter extends IPSModule
             // RemoteStartTransaction auf eine bereits laufende Transaktion
             // auslösen. Der Parameter ist NUR für Dashboards eigenständige,
             // von keiner Autorisierung begleitete Fahrzeugerkennung gedacht.
-            OHUBL_SetVehicleName($ladepunktId, (string)$result['vehicleName'], false);
+            $this->anKind($cpid, 'Fahrzeug', ['Name' => (string)$result['vehicleName'], 'Zeitkorrelation' => false]);
             // Additiv (Diagnose-Feature 31.08.2026): merkt sich die
             // verknüpfte Tessie-Instanz für eine spätere Ladeablehnung-
             // Diagnose (siehe OHUBL_DiagnoseBlockReason()) — 0 = kein
             // Tessie-verknüpftes Fahrzeug, dann bleibt die Diagnose auf den
             // Tibber-Namensabgleich beschränkt.
-            OHUBL_SetVehicleTessieId($ladepunktId, (int)($result['vehicleTessieInstanceId'] ?? 0));
+            $this->anKind($cpid, 'FahrzeugTessie', ['Id' => (int)($result['vehicleTessieInstanceId'] ?? 0)]);
         }
 
         return $status;
@@ -1073,16 +1185,13 @@ class OCPPHubSplitter extends IPSModule
         // Fall wie zuvor) — wird jetzt auch für den "kein Zugang gefunden"-
         // Fehlerpfad gebraucht (Live-Fund 01.09.2026: dieser Fall blieb
         // bislang komplett stumm, kein block_reason, keine Erklärung).
-        $ladepunktId = $this->findLadepunkt($cpid);
         $abrechnungId = $this->ensureAbrechnung();
         if ($abrechnungId === 0) {
             return;
         }
-        $idTag = OHUBA_FindIdTagForVehicleName($abrechnungId, $vehicleName);
+        $idTag = (string)($this->anAbrechnung('IdTagZuFahrzeug', ['Name' => $vehicleName])['idTag'] ?? '');
         if ($idTag === '') {
-            if ($ladepunktId !== 0) {
-                OHUBL_ReportBlockedStart($ladepunktId, 'Kein Zugang für „' . $vehicleName . '" registriert — bitte Karte anlernen oder Zugang anlegen.');
-            }
+            $this->anKind($cpid, 'Blockiert', ['Grund' => 'Kein Zugang für „' . $vehicleName . '" registriert — bitte Karte anlernen oder Zugang anlegen.']);
             return;
         }
         if ($this->checkIdTag($cpid, $idTag) !== 'Accepted') {
@@ -1090,14 +1199,13 @@ class OCPPHubSplitter extends IPSModule
             // konkreten Grund (gesperrt/abgelaufen/Limit/...) gesetzt.
             return;
         }
-        if ($ladepunktId === 0) {
-            return;
-        }
         // Echten idTag verwenden (nicht 'symcon' wie beim manuellen Dashboard-
         // Start) — StartTransaction.req der Wallbox trägt ihn zurück,
         // RecordConsumption() rechnet den Verbrauch dadurch dem richtigen
         // Kunden zu.
-        OHUBL_ConfirmAutoStart($ladepunktId);
+        if ($this->anKind($cpid, 'AutoStartBestaetigt') === null) {
+            return;   // kein Ladepunkt für diese Kennung
+        }
         $this->RemoteStart($cpid, $idTag);
     }
 
@@ -1115,8 +1223,7 @@ class OCPPHubSplitter extends IPSModule
     // 'symcon'-Weg.
     public function ManualStart(string $cpid): void
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        $vehicleName = $ladepunktId !== 0 ? OHUBL_GetVehicleName($ladepunktId) : '';
+        $vehicleName = (string)($this->kindZustand($cpid)['vehicleName'] ?? '');
         if ($vehicleName !== '' && $this->ReadPropertyInteger('Betriebsart') === 2) {
             $this->AutoAuthorizeVehicle($cpid, $vehicleName);
             return;
@@ -1164,15 +1271,11 @@ class OCPPHubSplitter extends IPSModule
         $transactionId = $this->nextTransactionId();
         $idTag = (string)($payload['idTag'] ?? '');
         $status = $this->checkIdTag($cpid, $idTag);
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId !== 0) {
-            OHUBL_StartTransaction(
-                $ladepunktId,
-                $transactionId,
-                $idTag,
-                (int)($payload['meterStart'] ?? 0)
-            );
-        }
+        $this->anKind($cpid, 'TransaktionStart', [
+            'TransaktionsId' => $transactionId,
+            'IdTag'          => $idTag,
+            'ZaehlerStart'   => (int)($payload['meterStart'] ?? 0),
+        ]);
         return [
             'idTagInfo'     => ['status' => $status],
             'transactionId' => $transactionId,
@@ -1181,15 +1284,14 @@ class OCPPHubSplitter extends IPSModule
 
     private function onStopTransaction(string $cpid, array $payload): array
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId !== 0) {
+        $zustand = $this->kindZustand($cpid);
+        if ($zustand !== null) {
             $meterStop = (int)($payload['meterStop'] ?? 0);
-            $meterStart = OHUBL_GetMeterStartWh($ladepunktId);
-            OHUBL_StopTransaction(
-                $ladepunktId,
-                (int)($payload['transactionId'] ?? 0),
-                $meterStop
-            );
+            $meterStart = (int)($zustand['meterStartWh'] ?? 0);
+            $this->anKind($cpid, 'TransaktionStopp', [
+                'TransaktionsId' => (int)($payload['transactionId'] ?? 0),
+                'ZaehlerStop'    => $meterStop,
+            ]);
 
             // Verbrauch dem Kunden gutschreiben (Stufe 2, für die
             // Limit-Prüfung in checkIdTag()/OHUBA_CheckAuthorization()).
@@ -1197,10 +1299,10 @@ class OCPPHubSplitter extends IPSModule
             // OPTIONAL — falls die Wallbox es nicht mitschickt, auf den bei
             // StartTransaction gemerkten idTag zurückfallen.
             if ($this->ReadPropertyInteger('Betriebsart') === 2 && $meterStop > $meterStart) {
-                $idTag = (string)($payload['idTag'] ?? '') ?: OHUBL_GetLastIdTag($ladepunktId);
+                $idTag = (string)($payload['idTag'] ?? '') ?: (string)($zustand['lastIdTag'] ?? '');
                 $abrechnungId = $this->ensureAbrechnung();
                 if ($idTag !== '' && $abrechnungId > 0) {
-                    OHUBA_RecordConsumption($abrechnungId, $idTag, ($meterStop - $meterStart) / 1000.0, time());
+                    $this->anAbrechnung('Verbrauch', ['IdTag' => $idTag, 'Kwh' => ($meterStop - $meterStart) / 1000.0, 'Zeit' => time()]);
                 }
             }
         }
@@ -1209,35 +1311,32 @@ class OCPPHubSplitter extends IPSModule
 
     private function onMeterValues(string $cpid, array $payload): \stdClass
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId !== 0) {
-            $powerW = null;
-            $energyWh = null;
-            $socPercent = null;
-            foreach ((array)($payload['meterValue'] ?? []) as $mv) {
-                foreach ((array)($mv['sampledValue'] ?? []) as $sv) {
-                    $measurand = $sv['measurand'] ?? 'Energy.Active.Import.Register';
-                    $value = is_numeric($sv['value'] ?? null) ? (float)$sv['value'] : null;
-                    if ($value === null) {
-                        continue;
-                    }
-                    $unit = $sv['unit'] ?? '';
-                    if ($measurand === 'Power.Active.Import') {
-                        $powerW = ($unit === 'kW') ? $value * 1000 : $value;
-                    } elseif ($measurand === 'Energy.Active.Import.Register') {
-                        $energyWh = ($unit === 'kWh') ? $value * 1000 : $value;
-                    } elseif ($measurand === 'SoC') {
-                        // Nicht jede Wallbox/jedes Fahrzeug liefert das (eher
-                        // DC-Laden/ISO 15118) — siehe OCPPHubLadepunkt::
-                        // UpdateMeterValues()-Kommentar zum vehicleSocID-
-                        // Vertragsstatus.
-                        $socPercent = $value;
-                    }
+        $powerW = null;
+        $energyWh = null;
+        $socPercent = null;
+        foreach ((array)($payload['meterValue'] ?? []) as $mv) {
+            foreach ((array)($mv['sampledValue'] ?? []) as $sv) {
+                $measurand = $sv['measurand'] ?? 'Energy.Active.Import.Register';
+                $value = is_numeric($sv['value'] ?? null) ? (float)$sv['value'] : null;
+                if ($value === null) {
+                    continue;
+                }
+                $unit = $sv['unit'] ?? '';
+                if ($measurand === 'Power.Active.Import') {
+                    $powerW = ($unit === 'kW') ? $value * 1000 : $value;
+                } elseif ($measurand === 'Energy.Active.Import.Register') {
+                    $energyWh = ($unit === 'kWh') ? $value * 1000 : $value;
+                } elseif ($measurand === 'SoC') {
+                    // Nicht jede Wallbox/jedes Fahrzeug liefert das (eher
+                    // DC-Laden/ISO 15118) — siehe OCPPHubLadepunkt::
+                    // UpdateMeterValues()-Kommentar zum vehicleSocID-
+                    // Vertragsstatus.
+                    $socPercent = $value;
                 }
             }
-            if ($powerW !== null || $energyWh !== null || $socPercent !== null) {
-                OHUBL_UpdateMeterValues($ladepunktId, $powerW, $energyWh, $socPercent);
-            }
+        }
+        if ($powerW !== null || $energyWh !== null || $socPercent !== null) {
+            $this->anKind($cpid, 'Messwerte', ['Leistung' => $powerW, 'Energie' => $energyWh, 'Soc' => $socPercent]);
         }
         return new \stdClass(); // MeterValues.conf: leeres Objekt
     }
@@ -1249,15 +1348,6 @@ class OCPPHubSplitter extends IPSModule
         return $id;
     }
 
-    private function findLadepunkt(string $cpid): int
-    {
-        foreach ($this->ownLadepunkte() as $childId) {
-            if (@IPS_GetProperty($childId, 'CPID') === $cpid) {
-                return $childId;
-            }
-        }
-        return 0;
-    }
 
     // Schreibsperre für einen Ladepunkt — vor JEDEM echten Steuerbefehl UND
     // vor jeder Authorize/StartTransaction-Prüfung geprüft, analog zur
@@ -1273,47 +1363,13 @@ class OCPPHubSplitter extends IPSModule
     // Tatsachen.
     private function isWriteBlocked(string $cpid): bool
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId === 0) {
-            return false;
-        }
-        if (OHUBL_IsDeactivated($ladepunktId)) {
-            return true;
-        }
-        $entry = OHUBL_GetContractEntry($ladepunktId);
-        return (bool)($entry['externallyManaged'] ?? false);
+        $zustand = $this->kindZustand($cpid);
+        return $zustand !== null && $this->zustandGesperrt($zustand);
     }
 
-    // FIX 30.08.2026 (Live-Fund, Dashboard-Diagnose + eigene Nachprüfung
-    // direkt an Dietmars Instanz): `IPS_GetChildrenIDs($this->InstanceID)`
-    // spiegelt NICHT zuverlässig die Splitter-Zuordnung — Instanzen lassen
-    // sich in der Konsole frei in andere Kategorien verschieben (bei
-    // Dietmar unter „Geräte / Module" organisiert), wodurch die
-    // Objektbaum-Position von der tatsächlichen Splitter-Zugehörigkeit
-    // abweicht. Live bestätigt: WB1 lag unter einer fremden Kategorie
-    // (#29186), `IPS_GetChildrenIDs()` auf den Splitter lieferte leer.
-    // Jetzt: alle Ladepunkt-Instanzen im System durchsuchen und über die
-    // eigene `SplitterID`-Property filtern (Property, keine Objektbaum-
-    // Abfrage) — mit Objektbaum-Position als Rückfall für Alt-Instanzen,
-    // die noch keine SplitterID gesetzt haben.
-    private function ownLadepunkte(): array
+    private function zustandGesperrt(array $zustand): bool
     {
-        $result = [];
-        foreach (@IPS_GetInstanceListByModuleID(self::LADEPUNKT_GUID) ?: [] as $childId) {
-            $explicitSplitterId = (int)@IPS_GetProperty($childId, 'SplitterID');
-            if ($explicitSplitterId > 0) {
-                if ($explicitSplitterId === $this->InstanceID) {
-                    $result[] = $childId;
-                }
-                continue;
-            }
-            // Rückfall für Instanzen ohne gesetzte SplitterID (Alt-Stand
-            // vor diesem Fix, oder noch nicht konfiguriert).
-            if ((int)(@IPS_GetParent($childId) ?: 0) === $this->InstanceID) {
-                $result[] = $childId;
-            }
-        }
-        return $result;
+        return !empty($zustand['deactivated']) || !empty($zustand['externallyManaged']);
     }
 
     // Diagnose-Hilfsfunktion (Live-Fund 31.08.2026, Dietmar: "man steht wie der
@@ -1644,8 +1700,7 @@ class OCPPHubSplitter extends IPSModule
     // weiter; -1 = unbekannt. Nichts wird geraten.
     private function forwardStationCapabilities(string $cpid, $payload): void
     {
-        $ladepunktId = $this->findLadepunkt($cpid);
-        if ($ladepunktId === 0 || !is_array($payload)) {
+        if (!is_array($payload)) {
             return;
         }
         $values = [];
@@ -1671,7 +1726,7 @@ class OCPPHubSplitter extends IPSModule
         if ($max === -1 && $min === -1 && $switch === -1) {
             return;
         }
-        OHUBL_SetStationCapabilities($ladepunktId, $max, $min, $switch);
+        $this->anKind($cpid, 'Kapazitaeten', ['MaxA' => $max, 'MinA' => $min, 'Phasen' => $switch]);
     }
 
     // Erzwingt kurze MeterValues-Intervalle (ChargerHub-Empfehlung
@@ -1723,13 +1778,6 @@ class OCPPHubSplitter extends IPSModule
         if (!$this->ReadPropertyBoolean('Active')) {
             return [];
         }
-        $entries = [];
-        foreach ($this->ownLadepunkte() as $childId) {
-            $entry = OHUBL_GetContractEntry($childId);
-            if (is_array($entry)) {
-                $entries[] = $entry;
-            }
-        }
-        return $entries;
+        return array_map(static fn ($k) => $k['eintrag'], $this->kindVertraege());
     }
 }

@@ -12,6 +12,8 @@
     "{6ED0496A-EDD0-4600-9549-04D18B8387F5}"
   ],
   "childRequirements": [],
-  "implemented": [],
+  "implemented": [
+    "{DD617475-D014-4559-BC1C-6A39FCA4EDEE}"
+  ],
   "prefix": "OHUBL"
 }

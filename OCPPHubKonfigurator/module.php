@@ -21,8 +21,10 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.1.19';
+    private const VERSION = '0.2.0';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
+    // Datenfluss (Symcon-Review 30.10.2026), siehe .docs/datenfluss.md
+    private const DATA_ZUM_SPLITTER = '{6ED0496A-EDD0-4600-9549-04D18B8387F5}';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -35,8 +37,9 @@ class OCPPHubKonfigurator extends IPSModule
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.1.13';
+    private const NEWS_VERSION = '0.2.0';
     private const NEWS_ITEMS = [
+        '🔌 Technik: Der Konfigurator ist jetzt ein Gerät unter dem Splitter und fragt die gesehenen Wallboxen über den Symcon-Datenfluss ab. Den Splitter wählst du oben bei der Schnittstelle („Gateway“); das Feld „OCPPHub-Splitter“ entfällt. Bestehende Instanzen werden beim ersten Übernehmen nach dem Update automatisch verbunden.',
         'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
         'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Splitter-Zuordnung jetzt auch manuell wählbar (Auswahlfeld oben), falls die automatische Erkennung über die Instanz-Verschachtelung nicht greift.',
@@ -46,7 +49,8 @@ class OCPPHubKonfigurator extends IPSModule
     public function Create()
     {
         parent::Create();
-        $this->RegisterPropertyInteger('SplitterID', 0);
+        $this->RegisterPropertyInteger('SplitterID', 0);   // nur noch für die einmalige Migration (VerbindungPruefen)
+        $this->RegisterTimer('VerbindenTimer', 0, 'OHUBK_VerbindungPruefen($_IPS[\'TARGET\']);');
         $this->RegisterAttributeBoolean(self::ATTR_REVIEW_HINT_GONE, false);
         $this->RegisterAttributeString('SeenNews', '');
         // „Wozu dieses Modul?" (14.09.2026, EMS-Fund über Dietmar — Store-
@@ -60,61 +64,65 @@ class OCPPHubKonfigurator extends IPSModule
     {
         parent::ApplyChanges();
         $this->SetStatus(102);
+        if ($this->resolveSplitterId() === 0) {
+            $this->SetTimerInterval('VerbindenTimer', 2000);
+        }
     }
 
+    // Der Splitter ist das echte übergeordnete Gerät dieser Instanz (Symcon-Datenfluss, Review
+    // 30.10.2026) — er wird im Formular oben über die Schnittstelle („Gateway“) gewählt.
     private function resolveSplitterId(): int
     {
-        $explicit = $this->ReadPropertyInteger('SplitterID');
-        if ($explicit > 0) {
-            return $explicit;
-        }
-        return $this->autoSplitterId();
+        return (int)(IPS_GetInstance($this->InstanceID)['ConnectionID'] ?? 0);
     }
 
-    // Automatisch erkannt wird nur die übergeordnete Instanz, und nur wenn sie
-    // wirklich ein OCPPHub-Splitter ist (eine Kategorie o. ä. zählt nicht).
-    private function autoSplitterId(): int
+    /**
+     * Einmalig nach dem Übernehmen (Timer): Bestandsinstanzen hingen bisher nur über die Property
+     * SplitterID oder die Objektbaum-Position am Splitter. Jetzt mit ihm verbinden. Wo sich kein
+     * eindeutiger Splitter ergibt, wird nichts geraten (die Statuszeile weist darauf hin).
+     */
+    public function VerbindungPruefen(): void
     {
-        $parent = (int)(@IPS_GetParent($this->InstanceID) ?: 0);
-        if ($parent > 0 && @IPS_InstanceExists($parent) && IPS_GetInstance($parent)['ModuleInfo']['ModuleID'] === self::SPLITTER_GUID) {
-            return $parent;
+        $this->SetTimerInterval('VerbindenTimer', 0);
+        if ($this->resolveSplitterId() !== 0) {
+            return;
         }
-        return 0;
+        $kandidat = $this->ReadPropertyInteger('SplitterID');
+        if ($kandidat <= 0) {
+            $oben = (int)(@IPS_GetParent($this->InstanceID) ?: 0);
+            if ($oben > 0 && @IPS_InstanceExists($oben) && IPS_GetInstance($oben)['ModuleInfo']['ModuleID'] === self::SPLITTER_GUID) {
+                $kandidat = $oben;
+            }
+        }
+        if ($kandidat <= 0) {
+            $alle = @IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [];
+            if (count($alle) === 1) {
+                $kandidat = (int)$alle[0];
+            }
+        }
+        if ($kandidat > 0 && @IPS_InstanceExists($kandidat) && IPS_GetInstance($kandidat)['ModuleInfo']['ModuleID'] === self::SPLITTER_GUID) {
+            if (@IPS_ConnectInstance($this->InstanceID, $kandidat)) {
+                $this->LogMessage('Mit Splitter #' . $kandidat . ' verbunden (Datenfluss).', KL_MESSAGE);
+            }
+        }
     }
 
-    // SUITE.md „Wert kommt automatisch: Eingabefeld ersetzen" (21.09.2026):
-    // liefert die Automatik einen Splitter und das Feld ist leer, wird das
-    // Auswahlfeld nicht als Eingabe gezeigt, sondern eine schreibgeschützte
-    // 🔗-Zeile; das Feld liegt nur in einem eingeklappten Panel für ein
-    // bewusstes Überschreiben. Eigene Auswahl: ✏️, Feld sichtbar. Nichts
-    // automatisch: ℹ️, Feld sichtbar. Nie ein Wert ins Feld schreiben.
-    private function splitterFieldElements(): array
+    // Der Splitter verlangt von allen seinen Kindern die Schnittstelle „Splitter -> Kind“. Der Konfigurator
+    // braucht keine Meldungen des Splitters, nimmt sie nur entgegen und antwortet nie.
+    public function ReceiveData($JSONString)
     {
-        $field = [
-            'type'     => 'SelectInstance',
-            'name'     => 'SplitterID',
-            'caption'  => 'OCPPHub-Splitter',
-            'moduleID' => self::SPLITTER_GUID,
-        ];
-        $explicit = $this->ReadPropertyInteger('SplitterID');
-        if ($explicit > 0) {
-            $name = @IPS_InstanceExists($explicit) ? '„' . IPS_GetName($explicit) . '"' : '(existiert nicht mehr)';
-            return [
-                ['type' => 'Label', 'caption' => '✏️ Splitter: #' . $explicit . ' ' . $name . ' (eigene Auswahl, hat Vorrang vor der automatischen Erkennung)'],
-                $field,
-            ];
+        return '';
+    }
+
+    /** Gesehene, noch nicht angelegte Wallboxen — Anfrage an den Splitter über den Datenfluss. */
+    private function geseheneWallboxen(): array
+    {
+        if ($this->resolveSplitterId() <= 0) {
+            return [];
         }
-        $auto = $this->autoSplitterId();
-        if ($auto > 0) {
-            return [
-                ['type' => 'Label', 'caption' => '🔗 Splitter: #' . $auto . ' „' . IPS_GetName($auto) . '" (automatisch: übergeordnete Instanz)', 'color' => 0x2E8B3D],
-                ['type' => 'ExpansionPanel', 'caption' => '✏️ Eigenen Splitter stattdessen verwenden', 'expanded' => false, 'items' => [$field]],
-            ];
-        }
-        return [
-            ['type' => 'Label', 'caption' => 'ℹ️ Splitter: nichts automatisch erkannt, wird gebraucht. Bitte unten auswählen.'],
-            $field,
-        ];
+        $roh = $this->SendDataToParent((string)json_encode(['DataID' => self::DATA_ZUM_SPLITTER, 'Aktion' => 'GeseheneWallboxen']));
+        $a = json_decode((string)$roh, true);
+        return (is_array($a) && !empty($a['ok'])) ? (array)($a['daten'] ?? []) : [];
     }
 
     // SUITE.md „Verbund-Verbindungen im Formular sichtbar machen" (21.09.2026):
@@ -126,13 +134,13 @@ class OCPPHubKonfigurator extends IPSModule
         $all = @IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [];
         if ($splitterId <= 0) {
             if (count($all) === 0) {
-                return 'ℹ️ Kein OCPPHub-Splitter im System gefunden. Zuerst eine „OCPPHub Splitter"-Instanz anlegen; ohne sie zeigt diese Liste keine Wallboxen.';
+                return 'ℹ️ Kein OCPPHub-Splitter im System gefunden. Zuerst eine „OCPPHub Splitter"-Instanz anlegen und diesen Konfigurator darunter anlegen; ohne Splitter zeigt diese Liste keine Wallboxen.';
             }
             $nennen = implode(', ', array_map(fn ($id) => '#' . $id . ' „' . IPS_GetName($id) . '"', $all));
-            return '⚠️ Kein Splitter zugeordnet, im System gibt es ' . $nennen . '. Bitte oben auswählen, es wird nichts geraten.';
+            return '⚠️ Kein Splitter zugeordnet, im System gibt es ' . $nennen . '. Den Splitter oben bei der Schnittstelle („Gateway“) wählen, es wird nichts geraten.';
         }
         if (!@IPS_InstanceExists($splitterId) || IPS_GetInstance($splitterId)['ModuleInfo']['ModuleID'] !== self::SPLITTER_GUID) {
-            return '⛔ Die gewählte Instanz #' . $splitterId . ' ist kein OCPPHub-Splitter (oder existiert nicht mehr). Bitte oben neu auswählen.';
+            return '⛔ Die gewählte Instanz #' . $splitterId . ' ist kein OCPPHub-Splitter (oder existiert nicht mehr). Bitte die Schnittstelle oben neu wählen.';
         }
         $name = '#' . $splitterId . ' „' . IPS_GetName($splitterId) . '"';
         $lib = @IPS_GetLibrary(IPS_GetInstance($splitterId)['ModuleInfo']['LibraryID'])['Version'] ?? '';
@@ -177,13 +185,16 @@ class OCPPHubKonfigurator extends IPSModule
         // tatsächliche Splitter-Zugehörigkeit, siehe OCPPHubSplitter
         // ownLadepunkte()-Kommentar). Alle Ladepunkt-Instanzen im System
         // durchsuchen und über die SplitterID-Property filtern.
+        // Vorhandene Ladepunkte dieses Splitters: Instanzen, die über den Datenfluss an ihm hängen
+        // (Gerätesuche des Konfigurators, daher die Instanzliste). Bestandsinstanzen, die noch
+        // nicht verbunden wurden, zählen über ihre alte Property SplitterID mit.
         $existing = [];
         if ($splitterId > 0) {
             foreach (@IPS_GetInstanceListByModuleID(self::LADEPUNKT_GUID) ?: [] as $childId) {
-                $explicitSplitterId = (int)@IPS_GetProperty($childId, 'SplitterID');
-                $matches = $explicitSplitterId > 0
-                    ? $explicitSplitterId === $splitterId
-                    : (int)(@IPS_GetParent($childId) ?: 0) === $splitterId;
+                $verbunden = (int)(IPS_GetInstance($childId)['ConnectionID'] ?? 0);
+                $matches = $verbunden > 0
+                    ? $verbunden === $splitterId
+                    : (int)@IPS_GetProperty($childId, 'SplitterID') === $splitterId;
                 if ($matches) {
                     $existing[@IPS_GetProperty($childId, 'CPID')] = $childId;
                 }
@@ -191,8 +202,8 @@ class OCPPHubKonfigurator extends IPSModule
         }
 
         $values = [];
-        if ($splitterId > 0 && function_exists('OHUB_GetSeenChargePoints')) {
-            foreach (OHUB_GetSeenChargePoints($splitterId) as $cpid => $lastSeen) {
+        if ($splitterId > 0) {
+            foreach ($this->geseheneWallboxen() as $cpid => $lastSeen) {
                 $values[] = [
                     'name'       => $cpid,
                     'cpid'       => $cpid,
@@ -221,10 +232,9 @@ class OCPPHubKonfigurator extends IPSModule
                         ['type' => 'Label', 'caption' => 'Was diese Instanz macht: reine Ersteinrichtungs-Hilfe, keine eigene Funktion im laufenden Betrieb. Zeigt Charge-Point-Identities, die sich bereits per OCPP beim ausgewählten Splitter gemeldet haben, aber noch keine eigene „OCPPHub Ladepunkt"-Instanz haben — spart das manuelle Anlegen samt korrekter Splitter-Zuordnung.'],
                         ['type' => 'Label', 'caption' => '1️⃣ Wallbox zuerst in ihrer eigenen OCPP-Konfiguration auf den Splitter-Endpunkt einstellen (Backend-URL, siehe Splitter-Instanz, Panel „Dokumentation & Hilfe" dort). Sobald sie sich einmal gemeldet hat, erscheint ihre Charge-Point-Identity unten in der Liste „Gesehene Wallboxen" — auch wenn die Verbindung danach wieder getrennt wird.'],
                         ['type' => 'Label', 'caption' => '2️⃣ In der Zeile der gewünschten Wallbox auf „Erstellen" klicken. Das legt eine neue „OCPPHub Ladepunkt"-Instanz an, mit Charge-Point-Identity UND Splitter-Zuordnung bereits korrekt vorausgefüllt — im Ladepunkt-Formular ist danach nichts weiter zwingend nötig, es sei denn, Stromgrenzen oder PV-Überschussladen sollen von den Standardwerten abweichen.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Falls oben kein Splitter automatisch erkannt wird (Meldung „Kein OCPPHub-Splitter gefunden"): im Auswahlfeld „OCPPHub-Splitter" die passende Instanz manuell wählen. Das betrifft nur DIESE Konfigurator-Instanz — für jede einzeln erstellte Ladepunkt-Instanz ist die Splitter-Zuordnung dort im eigenen Formular ohnehin Pflicht (siehe deren Dokumentation).'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Den Splitter wählst du oben bei der Schnittstelle („Gateway“) dieser Instanz; sie ist ein Gerät unter dem „OCPPHub Splitter“ (Symcon-Datenfluss). Wird kein Splitter erkannt, zeigt die Statuszeile unten das an. Bestandsinstanzen werden beim ersten Übernehmen nach dem Update automatisch verbunden, wenn sich ein eindeutiger Splitter ergibt.'],
                     ],
                 ],
-                ...$this->splitterFieldElements(),
                 $this->splitterStatusLabel($this->splitterStatusLine($splitterId, $values)),
                 [
                     'type'     => 'Configurator',

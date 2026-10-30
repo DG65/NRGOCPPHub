@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.0 (30.10.2026)
+
+**Datenfluss statt Funktionsaufrufe (Symcon-Store-Review).** Der Reviewer bemängelte, dass die
+Module sich ihr Gegenstück suchen und dort öffentliche Funktionen aufrufen, statt über den
+Datenfluss zu kommunizieren. Seit dieser Version läuft jede Verständigung zwischen Splitter,
+Ladepunkt, Abrechnung und Konfigurator über Nachrichten (`SendDataToChildren`/`SendDataToParent`,
+`ReceiveData`/`ForwardData`), Protokoll siehe `.docs/datenfluss.md`. Splitter 0.3.0 / Ladepunkt
+0.3.0 / Abrechnung 0.4.0 / Konfigurator 0.2.0.
+
+- Der Splitter ist jetzt das echte übergeordnete Gerät von Ladepunkten, Abrechnung und
+  Konfigurator. Das Formularfeld „OCPPHub-Splitter“ entfällt, der Splitter wird wie bei jedem
+  Symcon-Gerät oben bei der Schnittstelle („Gateway“) gewählt.
+- **Bestehende Instanzen werden beim ersten Übernehmen automatisch verbunden** (aus der alten
+  Property `SplitterID`, der Objektbaum-Position oder dem einzigen Splitter im System; bei mehreren
+  Splittern ohne Hinweis wird nicht geraten). Die Abrechnung verbindet der Splitter selbst.
+- Weniger Verkehr: Quell-IP und Lebenszeichen gehen in einer Nachricht, sieben Einzelabfragen des
+  Ladepunkt-Zustands sind eine („Zustand“).
+- Öffentliche Funktionen (`OHUBL_*`, `OHUB_GetFunctions`, …) und der Verbund-Vertrag bleiben
+  unverändert, am Verhalten ändert sich nichts.
+- Neuer Prüfstand `.tools/test-datenfluss.php` (88 Prüfungen, mit Mutationstest gegen die Wege
+  geprüft); `test-form.php` an die neue Verbindung angepasst.
+- Enthält außerdem „Formular: Aufbau“ (vormals 0.6.39, lokal vorbereitet, nie veröffentlicht).
+
+**Vor dem Veröffentlichen live prüfen** (Anstecken, Laden, Stoppen, Stromlimit, Reservieren).
+
 ## 0.6.39 (29.10.2026)
 
 **Formular: Aufbau (SUITE.md 3a, Dietmars Wunsch für alle Module mit mehr als zwei Fachpanels).**

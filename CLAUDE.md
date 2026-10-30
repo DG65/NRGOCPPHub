@@ -91,7 +91,12 @@ führen OCPPHub nicht als Git-Modul, Solarpark war nicht erreichbar).
 
 - Versions-Ritual je Änderung: `library.json` version+build bumpen, Versions-Caption in
   `GetConfigurationForm()` nachziehen, CHANGELOG.md-Eintrag, `php -l` +
-  `php .tools/check-standalone.php` vor jedem Commit.
+  `php .tools/check-standalone.php` + `php .tools/check-logging.php` +
+  `php .tools/test-form.php` + `php .tools/test-datenfluss.php` vor jedem Commit.
+- **Kommunikation zwischen den vier Modulen nur über den Datenfluss** (Symcon-Review 30.10.2026):
+  nie Instanzen eines Geschwistermoduls suchen und deren `OHUB*_`-Funktionen aufrufen, sondern
+  Nachrichten schicken. Protokoll und Regeln: `.docs/datenfluss.md`. Der Prüfstand erkennt
+  Rückfälle.
 - IP-Symcon-Stolpersteine (RequestAction-Kernel-Namen, EnableAction nur auf direkte
   Instanzkinder, RegisterVariableX nur bei Neuanlage, Archive-Control-GUID
   `{43192F0B-135B-4CE7-A0A7-1475603F3060}`): Abschnitt „IP-Symcon-Stolpersteine" in

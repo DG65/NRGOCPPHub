@@ -18,7 +18,7 @@
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.3.14';
+    private const VERSION = '0.4.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -27,10 +27,13 @@ class OCPPHubAbrechnung extends IPSModule
     // gepostet, siehe forum-ankuendigung-ocpphub.md).
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/beta-modul-nrg-stack-ocpphub-wallboxen-per-ocpp-1-6j-anbinden-mit-pv-ueberschussladen-und-kundenverwaltung/144409';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
-    private const NEWS_VERSION = '0.3.14';
+    private const NEWS_VERSION = '0.4.0';
     private const TESSIE_VEHICLE_GUID = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
+    // Datenfluss (Symcon-Review 30.10.2026), siehe .docs/datenfluss.md
+    private const DATA_ZUM_SPLITTER = '{6ED0496A-EDD0-4600-9549-04D18B8387F5}';
     private const NEWS_ITEMS = [
+        '🔌 Technik: Die Abrechnung hängt jetzt als Gerät am Splitter und bekommt ihre Anfragen (Kartenprüfung, Verbrauch) über den Symcon-Datenfluss statt über direkte Funktionsaufrufe, wie es der Store-Review verlangt. Eine bestehende Abrechnung verbindet der Splitter beim ersten Übernehmen nach dem Update von selbst. Am Verhalten ändert sich nichts.',
         '🪟 Neu: „Formular: Aufbau" (eingeklappt unter den vier Reitern) — du legst fest, in welcher Reihenfolge Fahrzeuge, Gruppen, Kunden und Zugänge stehen und welche du ausblendest. Ausgeblendete Reiter arbeiten weiter, ihre Einträge bleiben erhalten. Auf-/Zuklappen gibt es hier nicht: die Reiter sind eine Ziehharmonika, das Modul merkt sich den zuletzt geöffneten selbst. Gilt nach „Übernehmen" beim nächsten Öffnen.',
         'Neu: „👋 Wozu dieses Modul?" und „🧡 Über dieses Modul" (Lizenz/Spenden) ergänzt, Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung, Konsistenz mit den anderen drei OCPPHub-Modulen).',
         'Store-Checkliste 9b: „Gültig bis" bei Zugängen zeigt jetzt TT.MM.JJJJ statt JJJJ-MM-TT (Konsole und Kachel). Bereits gespeicherte alte Einträge bleiben gültig — kein Migrationsschritt nötig, PHP erkennt beide Formate zuverlässig.',
@@ -590,13 +593,7 @@ class OCPPHubAbrechnung extends IPSModule
         $lines = [];
 
         // 1) Splitter, der diese Abrechnung tatsächlich benutzt
-        $bound = 0;
-        foreach (@IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [] as $splitterId) {
-            if (OHUB_GetAbrechnungID($splitterId) === $this->InstanceID) {
-                $bound = (int)$splitterId;
-                break;
-            }
-        }
+        $bound = $this->isRegisteredWithSplitter() ? $this->elternId() : 0;
         if ($bound > 0) {
             $wirkung = (int)@IPS_GetProperty($bound, 'Betriebsart') === 2
                 ? 'Betriebsart ②: jede Kartenauflage wird gegen diese Zugänge geprüft.'
@@ -895,14 +892,29 @@ class OCPPHubAbrechnung extends IPSModule
     // "nicht verbunden" gemeldet, und hätte umgekehrt eine zufällig unter
     // denselben Splitter gehängte ZWEITE (unbenutzte) Instanz fälschlich als
     // verbunden durchgehen lassen. Siehe .docs/architektur.md „Instanzmodell".
+    private function elternId(): int
+    {
+        return (int)(IPS_GetInstance($this->InstanceID)['ConnectionID'] ?? 0);
+    }
+
+    // Anfrage an den Splitter (Datenfluss, Symcon-Review 30.10.2026). Liefert `daten` der
+    // Antwort, null ohne Splitter oder wenn er die Anfrage ablehnt.
+    private function anSplitter(string $aktion, array $parameter = []): ?array
+    {
+        if ($this->elternId() <= 0) {
+            return null;
+        }
+        $parameter['DataID'] = self::DATA_ZUM_SPLITTER;
+        $parameter['Aktion'] = $aktion;
+        $parameter['InstanzID'] = $this->InstanceID;
+        $a = json_decode((string)$this->SendDataToParent((string)json_encode($parameter)), true);
+        return (is_array($a) && !empty($a['ok'])) ? (array)($a['daten'] ?? []) : null;
+    }
+
+    // Der Splitter sagt, ob ER diese Instanz als seine Abrechnung führt (genau eine je Splitter).
     private function isRegisteredWithSplitter(): bool
     {
-        foreach (@IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [] as $splitterId) {
-            if (OHUB_GetAbrechnungID($splitterId) === $this->InstanceID) {
-                return true;
-            }
-        }
-        return false;
+        return !empty($this->anSplitter('AbrechnungGebunden')['gebunden']);
     }
 
     // Vorführmodus (01.09.2026, Anfrage Dashboard-Sitzung, siehe
@@ -912,12 +924,38 @@ class OCPPHubAbrechnung extends IPSModule
     // Zugänge/Limits eines Besuchers dauerhaft übernehmen.
     private function isDemoMode(): bool
     {
-        foreach (@IPS_GetInstanceListByModuleID(self::SPLITTER_GUID) ?: [] as $splitterId) {
-            if (OHUB_GetAbrechnungID($splitterId) === $this->InstanceID && OHUB_IsDemoMode($splitterId)) {
-                return true;
-            }
+        $a = $this->anSplitter('Vorfuehrmodus');
+        return $a !== null && !empty($a['aktiv']) && $this->isRegisteredWithSplitter();
+    }
+
+    // Anfragen des Splitters (Datenfluss). Wir antworten nur auf Nachrichten, die ausdrücklich an
+    // diese Instanz gerichtet sind (Ziel „Abrechnung“, InstanzID = diese Instanz).
+    public function ReceiveData($JSONString)
+    {
+        $a = json_decode((string)$JSONString, true);
+        if (!is_array($a) || (string)($a['Ziel'] ?? '') !== 'Abrechnung' || (int)($a['InstanzID'] ?? 0) !== $this->InstanceID) {
+            return '';
         }
-        return false;
+        try {
+            switch ((string)($a['Aktion'] ?? '')) {
+                case 'Autorisierung':
+                    $daten = $this->CheckAuthorization((string)($a['IdTag'] ?? ''));
+                    break;
+                case 'Verbrauch':
+                    $this->RecordConsumption((string)($a['IdTag'] ?? ''), (float)($a['Kwh'] ?? 0), (int)($a['Zeit'] ?? time()));
+                    $daten = [];
+                    break;
+                case 'IdTagZuFahrzeug':
+                    $daten = ['idTag' => $this->FindIdTagForVehicleName((string)($a['Name'] ?? ''))];
+                    break;
+                default:
+                    return '';
+            }
+        } catch (\Throwable $e) {
+            $this->LogMessage('Anfrage „' . (string)($a['Aktion'] ?? '?') . '" des Splitters konnte nicht verarbeitet werden: ' . $e->getMessage(), KL_WARNING);
+            return '';
+        }
+        return (string)json_encode(['ok' => true, 'daten' => $daten]);
     }
 
     // ---------------------------------------------------------------------

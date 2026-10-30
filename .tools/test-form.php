@@ -15,7 +15,7 @@ if (PHP_SAPI !== 'cli') {
 
 $scenario = $argv[1] ?? null;
 $all = [
-    'k_auto', 'k_eigen', 'k_keins', 'k_mehrere',
+    'k_auto', 'k_falsch', 'k_keins', 'k_mehrere',
     'l_auto', 'l_eigen', 'l_keins',
     's_ok', 's_leer',
     'a_ok', 'a_verwaist', 'a_tessie_frei',
@@ -41,6 +41,8 @@ const METERHUB = '{BAB8E05C-9150-43B9-9F2B-E5215FA54F0A}';
 const TESSIE = '{3F1F7E31-8BA0-4B8F-9B62-47DAD7A0B6C9}';
 const EMS = '{90286A25-E6C9-4A66-BD4E-0CFB707C2C6C}';
 const KR_READY = 10103;
+const KL_MESSAGE = 10201;
+const KL_WARNING = 10204;
 
 // ---- Nachgebildetes IPS ------------------------------------------------------
 $props = [];
@@ -64,7 +66,26 @@ class IPSModule
     public function ReadAttributeBoolean($n) { return (bool) ($GLOBALS['attrs'][$n] ?? false); }
     public function GetValue($ident) { return ''; }
     public function UpdateFormField($f, $p, $v) { $GLOBALS['updates'][] = [$f, $p, $v]; }
+    // Datenfluss: Kinder (Objekte mit ReceiveData) und Eltern-Antwort (callable) legt das Szenario fest.
+    public function SendDataToChildren($json) { return array_map(fn ($k) => $k->ReceiveData($json), $GLOBALS['kinder']); }
+    public function SendDataToParent($json) { return ($GLOBALS['elternHandler'])($json); }
+    public function LogMessage($t, $l) {}
 }
+$kinder = [];
+// Antworten des Splitters an seine Kinder (Datenfluss), soweit ein Szenario nichts Eigenes festlegt
+$elternHandler = function ($json) {
+    $a = json_decode($json, true);
+    switch ($a['Aktion'] ?? '') {
+        case 'AbrechnungGebunden':
+            $splitter = $GLOBALS['modules'][100] ?? [];
+            return json_encode(['ok' => true, 'daten' => ['gebunden' => (int)($a['InstanzID'] ?? 0) === (int)($splitter['abrechnung'] ?? -1)]]);
+        case 'Vorfuehrmodus':
+            return json_encode(['ok' => true, 'daten' => ['aktiv' => false]]);
+        case 'Vertraege':
+            return json_encode(['ok' => true, 'daten' => ['liste' => []]]);
+    }
+    return json_encode(['ok' => false]);
+};
 $updates = [];
 
 function IPS_GetLibrary($g) { return ['Version' => '0.6.34']; }
@@ -73,7 +94,8 @@ function IPS_GetParent($id) { return $GLOBALS['modules'][$id]['parent'] ?? 0; }
 function IPS_InstanceExists($id) { return isset($GLOBALS['modules'][$id]); }
 function IPS_GetInstance($id)
 {
-    return ['ModuleInfo' => ['ModuleID' => $GLOBALS['modules'][$id]['guid'] ?? '', 'LibraryID' => '{L}'], 'InstanceStatus' => 102];
+    return ['ModuleInfo' => ['ModuleID' => $GLOBALS['modules'][$id]['guid'] ?? '', 'LibraryID' => '{L}'], 'InstanceStatus' => 102,
+        'ConnectionID' => $GLOBALS['modules'][$id]['conn'] ?? 0];
 }
 function IPS_GetInstanceListByModuleID($g)
 {
@@ -114,16 +136,16 @@ switch ($scenario) {
     case 'k_auto':
         $module = 'Konfigurator';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
-        add(900, KONFIGURATOR, 'Konfigurator', 100);
-        add(36981, LADEPUNKT, 'WB2', 100, ['props' => ['CPID' => 'WB2', 'SplitterID' => 100]]);
-        $modules[100]['seen'] = ['WB2' => $now, 'WB3' => $now];
+        add(900, KONFIGURATOR, 'Konfigurator', 100, ['conn' => 100]);
+        add(36981, LADEPUNKT, 'WB2', 100, ['props' => ['CPID' => 'WB2'], 'conn' => 100]);
+        $elternHandler = fn ($json) => json_encode(['ok' => true, 'daten' => ['WB2' => $now, 'WB3' => $now]]);
         break;
-    case 'k_eigen':
+    case 'k_falsch':
+        // Als Gateway ist eine Instanz gewählt, die kein OCPPHub-Splitter ist
         $module = 'Konfigurator';
-        add(100, SPLITTER, 'Splitter A', 0, ['props' => ['Active' => true]]);
-        add(101, SPLITTER, 'Splitter B', 0, ['props' => ['Active' => true]]);
-        add(900, KONFIGURATOR, 'Konfigurator', 0);
-        $props['SplitterID'] = 101;
+        add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
+        add(200, LADEPUNKT, 'Irgendwas', 0);
+        add(900, KONFIGURATOR, 'Konfigurator', 0, ['conn' => 200]);
         break;
     case 'k_keins':
         $module = 'Konfigurator';
@@ -138,7 +160,7 @@ switch ($scenario) {
     case 'l_auto':
         $module = 'Ladepunkt';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
-        add(900, LADEPUNKT, 'WB2', 0);
+        add(900, LADEPUNKT, 'WB2', 0, ['conn' => 100]);
         add(500, METERHUB, 'Netz-Zähler', 0);
         $props += ['CPID' => 'WB2', 'SplitterID' => 100, 'EnableSurplusCharging' => true, 'ManagedBy' => 'none'];
         $attrs += ['LastSeenAt' => $now - 5, 'StationMaxCurrentA' => 16, 'StationMinCurrentA' => 6, 'PhaseSwitchSupported' => 1];
@@ -148,7 +170,7 @@ switch ($scenario) {
     case 'l_eigen':
         $module = 'Ladepunkt';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
-        add(900, LADEPUNKT, 'WB2', 0);
+        add(900, LADEPUNKT, 'WB2', 0, ['conn' => 100]);
         add(500, METERHUB, 'Netz-Zähler', 0);
         add(501, METERHUB, 'Anderer Zähler', 0);
         $props += ['CPID' => 'WB2', 'SplitterID' => 100, 'EnableSurplusCharging' => true, 'ManagedBy' => 'none', 'SurplusMeterID' => 501];
@@ -157,14 +179,23 @@ switch ($scenario) {
     case 'l_keins':
         $module = 'Ladepunkt';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
-        add(900, LADEPUNKT, 'WB2', 0);
+        add(900, LADEPUNKT, 'WB2', 0, ['conn' => 100]);
         $props += ['CPID' => 'WB2', 'SplitterID' => 100, 'EnableSurplusCharging' => true, 'ManagedBy' => 'none'];
         break;
     case 's_ok':
         $module = 'Splitter';
         add(900, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 901, 'seen' => ['WB2' => $now, 'WB9' => $now]]);
         add(901, ABRECHNUNG, 'OCPPHub Splitter Abrechnung', 900);
-        add(36981, LADEPUNKT, 'WB2', 900, ['props' => ['CPID' => 'WB2', 'SplitterID' => 900], 'entry' => ['lastSeenAt' => $now - 4, 'deactivated' => false]]);
+        $kinder[] = new class($now) {
+            public function __construct(private int $now) {}
+            public function ReceiveData($json)
+            {
+                $a = json_decode($json, true);
+                return ($a['Aktion'] ?? '') === 'Vertrag'
+                    ? json_encode(['ok' => true, 'daten' => ['cpid' => 'WB2', 'eintrag' => ['instanceID' => 36981, 'lastSeenAt' => $this->now - 4, 'deactivated' => false]]])
+                    : '';
+            }
+        };
         $props += ['Active' => true, 'Betriebsart' => 2];
         $attrs += ['AbrechnungID' => 901];
         $attrs['SeenChargePoints'] = json_encode(['WB2' => $now, 'WB9' => $now]);
@@ -177,14 +208,14 @@ switch ($scenario) {
     case 'a_ok':
         $module = 'Abrechnung';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 900, 'props' => ['Betriebsart' => 2]]);
-        add(900, ABRECHNUNG, 'Abrechnung', 100);
+        add(900, ABRECHNUNG, 'Abrechnung', 100, ['conn' => 100]);
         add(600, TESSIE, 'Kohlekasten', 0);
         $props['Fahrzeuge'] = json_encode([['id' => 1, 'name' => 'Auto', 'kennzeichen' => '', 'tessieInstanceId' => 600]]);
         break;
     case 'a_verwaist':
         $module = 'Abrechnung';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 555]);
-        add(900, ABRECHNUNG, 'Abrechnung', 0);
+        add(900, ABRECHNUNG, 'Abrechnung', 0, ['conn' => 100]);
         $props['Fahrzeuge'] = '[]';
         break;
     // Vierter Tessie-Zustand (EMS-Rückfrage 28.09.2026): Tessie ist im System
@@ -194,7 +225,7 @@ switch ($scenario) {
     case 'a_tessie_frei':
         $module = 'Abrechnung';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 900, 'props' => ['Betriebsart' => 1]]);
-        add(900, ABRECHNUNG, 'Abrechnung', 100);
+        add(900, ABRECHNUNG, 'Abrechnung', 100, ['conn' => 100]);
         add(600, TESSIE, 'Kohlekasten', 0);
         $props['Fahrzeuge'] = json_encode([['id' => 1, 'name' => 'Auto', 'kennzeichen' => '', 'tessieInstanceId' => 0]]);
         break;
@@ -205,7 +236,7 @@ switch ($scenario) {
     case 'l_aufbau_reset':
         $module = 'Ladepunkt';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['props' => ['Active' => true]]);
-        add(900, LADEPUNKT, 'WB2', 0);
+        add(900, LADEPUNKT, 'WB2', 0, ['conn' => 100]);
         $props += ['CPID' => 'WB2', 'SplitterID' => 100, 'ManagedBy' => 'none'];
         if ($scenario === 'l_aufbau_eigen') {
             // PV zuerst und aufgeklappt, Stromgrenzen ausgeblendet, Doppelte Anbindung zugeklappt
@@ -228,7 +259,7 @@ switch ($scenario) {
     case 'a_aufbau_reset':
         $module = 'Abrechnung';
         add(100, SPLITTER, 'OCPPHub Splitter', 0, ['abrechnung' => 900, 'props' => ['Betriebsart' => 2]]);
-        add(900, ABRECHNUNG, 'Abrechnung', 100);
+        add(900, ABRECHNUNG, 'Abrechnung', 100, ['conn' => 100]);
         $props['Fahrzeuge'] = '[]';
         if ($scenario === 'a_aufbau_eigen') {
             $props['FormLayout'] = json_encode([
@@ -333,28 +364,19 @@ $connectionsPanel = find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'C
 
 switch ($scenario) {
     case 'k_auto':
-        $check('🔗-Zeile für den automatischen Splitter fehlt', $has('🔗 Splitter: #100 „OCPPHub Splitter" (automatisch'));
-        $check('🔗-Zeile ist nicht grün', ($labelWith('🔗 Splitter')['node']['color'] ?? null) === $green);
-        $check('Auswahlfeld liegt nicht im eingeklappten Panel', $inCollapsedPanel('SplitterID'));
-        $check('Auswahlfeld darf nicht ungeschützt oben stehen', !$topLevel('SplitterID'));
         $check('Statuszeile ✅ mit Zahlen fehlt', $has('✅ Verbunden mit Splitter #100') && $has('2 Wallbox(en) gemeldet') && $has('WB3'));
+        $check('WB2 muss als schon angelegt gelten, WB3 als noch ohne Ladepunkt', $has('als Ladepunkt angelegt: WB2') && $has('noch ohne Ladepunkt: WB3'));
+        $check('Das alte Auswahlfeld SplitterID darf es nicht mehr geben (Schnittstelle wählt Symcon selbst)', find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'SplitterID') === null);
         $check('alter statischer Satz ist noch da', !$has('Verbunden mit Splitter-Instanz #'));
         break;
-    case 'k_eigen':
-        $check('✏️-Zeile fehlt', $has('✏️ Splitter: #101 „Splitter B"'));
-        $check('✏️-Zeile darf nicht grün sein', !isset($labelWith('✏️ Splitter')['node']['color']));
-        $check('Auswahlfeld muss sichtbar oben stehen', $topLevel('SplitterID'));
-        $check('Statuszeile fehlt', $has('Verbunden mit Splitter #101'));
+    case 'k_falsch':
+        $check('⛔ „kein Splitter“ fehlt', $has('⛔ Die gewählte Instanz #200 ist kein OCPPHub-Splitter'));
         break;
     case 'k_keins':
-        $check('ℹ️-Zeile fehlt', $has('ℹ️ Splitter: nichts automatisch erkannt'));
-        $check('ℹ️-Zeile darf nicht grün sein', !isset($labelWith('ℹ️ Splitter')['node']['color']));
-        $check('Auswahlfeld muss sichtbar sein', $topLevel('SplitterID'));
-        $check('ℹ️ „kein Splitter im System" fehlt', $has('Kein OCPPHub-Splitter im System gefunden'));
+        $check('ℹ️ „kein Splitter im System“ fehlt', $has('Kein OCPPHub-Splitter im System gefunden'));
         break;
     case 'k_mehrere':
         $check('⚠️ mit Auswahlhinweis fehlt (nicht raten)', $has('⚠️ Kein Splitter zugeordnet, im System gibt es #100') && $has('#101'));
-        $check('Auswahlfeld muss sichtbar sein', $topLevel('SplitterID'));
         break;
     case 'l_auto':
         $check('🔗-Zeile für den Netzzähler fehlt', $has('🔗 Netzzähler: MeterHub #500 „Netz-Zähler" (automatisch'));
