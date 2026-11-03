@@ -32,10 +32,11 @@ final class Bus
     public static array $gesendet = [];// an die Wallbox gepushte OCPP-Frames [cpid, frame]
     public static array $log = [];     // LogMessage-Zeilen
     public static array $ereignisse = [];
+    public static array $formfelder = []; // UpdateFormField-Aufrufe [Feld, Eigenschaft, Wert]
 
     public static function reset(): void
     {
-        self::$obj = self::$guid = self::$conn = self::$gesendet = self::$log = self::$ereignisse = [];
+        self::$obj = self::$guid = self::$conn = self::$gesendet = self::$log = self::$ereignisse = self::$formfelder = [];
     }
 
     public static function add(int $id, object $o, string $guid, int $conn = 0): object
@@ -81,7 +82,7 @@ class IPSModule
     public function GetValue($i) { return $this->werte[$i] ?? 0; }
     public function SetValue($i, $v) { $this->werte[$i] = $v; }
     public function SetTimerInterval($n, $ms) { Bus::$ereignisse[] = ['timer', $this->InstanceID, $n, $ms]; }
-    public function UpdateFormField($f, $p, $v) {}
+    public function UpdateFormField($f, $p, $v) { Bus::$formfelder[] = [$f, $p, $v]; }
     public function SetStatus($s) {}
     public function RegisterMessage($a, $b) {}
     public function SendDataToChildren($json)
@@ -376,6 +377,36 @@ $lp->props['ManagedBy'] = 'other';
 $lp->RequestAction('ctl_enable', true);
 pruefe('Extern geregelt: der Ladepunkt sendet selbst nichts', $rec->rec === []);
 $lp->props['ManagedBy'] = 'none';
+
+// Bedienpanel im Formular (analog ChargerHub): gleicher Weg wie die Steuervariablen, plus Rückmeldung
+$lp->werte['block_reason'] = '';
+$rec->rec = [];
+Bus::$formfelder = [];
+$feld = function (string $name, string $eig = 'caption') {
+    foreach (array_reverse(Bus::$formfelder) as $f) {
+        if ($f[0] === $name && $f[1] === $eig) {
+            return $f[2];
+        }
+    }
+    return null;
+};
+$lp->RequestAction('FormCtlEnable', true);
+pruefe('Bedienpanel Ladefreigabe: Splitter bekommt „ManuellStart“, Rückmeldung ✅', in_array(['ManuellStart', 'WB2'], $rec->rec, true) && str_contains((string)$feld('ControlPanelFeedback'), '✅ Ladefreigabe: An'));
+$lp->RequestAction('FormCtlCurrent', 99);
+pruefe('Bedienpanel Stromlimit über Maximum: wird begrenzt und als gesetzt gemeldet', in_array(['Stromlimit', 'WB2', 16.0], $rec->rec, true) && str_contains((string)$feld('ControlPanelFeedback'), '✅ Stromlimit: 16 A'));
+$lp->props['ManagedBy'] = 'other';
+$rec->rec = [];
+$lp->RequestAction('FormCtlEnable', false);
+pruefe('Bedienpanel bei fremdem Regler: nichts gesendet, Rückmeldung ⚠️, Schalter springt zurück', $rec->rec === [] && str_contains((string)$feld('ControlPanelFeedback'), 'nicht ausgeführt') && $feld('FormCtlEnable', 'value') === true);
+pruefe('Bedienpanel nennt den Regler im Hinweis', str_contains((string)$feld('ControlPanelHint'), '⛔ Gerade regelt'));
+$lp->props['ManagedBy'] = 'none';
+$rec->demo = true;
+$rec->rec = [];
+$lp->RequestAction('FormCtlEnable', false);
+pruefe('Bedienpanel im Vorführmodus: nichts gesendet, Rückmeldung ⚠️', $rec->rec === [] && str_contains((string)$feld('ControlPanelFeedback'), 'nicht ausgeführt'));
+$rec->demo = false;
+$panel = privat($lp, 'controlPanel');
+pruefe('Bedienpanel hat Schalter und Regler mit Grenzen aus den Einstellungen', ($panel['items'][2]['name'] ?? '') === 'FormCtlEnable' && ($panel['items'][4]['maximum'] ?? 0) === 16 && ($panel['items'][4]['minimum'] ?? 0) === 6);
 
 pruefe('Reservieren: Splitter bekommt Karte und Zeitpunkt, die Reservierungs-ID kommt zurück', $lp->Reserve('KARTE-1', date('c', time() + 3600)) === true && $lp->attrs['ReservationId'] === 77 && in_array('Reservieren', array_column($rec->rec, 0), true));
 $lp->CancelReservation();

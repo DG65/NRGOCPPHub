@@ -47,8 +47,9 @@ class OCPPHubLadepunkt extends IPSModule
     // NICHT bei jedem library.json-Build (sonst nervt es).
     private const NEWS_VERSION = '0.3.0';
     private const NEWS_ITEMS = [
+        '🎛️ Neu: Bereich „Bedienung" im Formular (wie beim ChargerHub) — Ladefreigabe und Stromlimit direkt hier setzen, mit Rückmeldung (✅/⚠️) und der Anzeige, wer gerade regelt. Wirkt sofort, über denselben Weg wie die Steuervariablen. Bei fremdem Regler, Deaktivierung oder Vorführmodus wird nichts gesendet und das sagt das Formular.',
         '🔌 Technik: Dieser Ladepunkt redet jetzt mit dem Splitter über den Symcon-Datenfluss (Nachrichten statt direkter Funktionsaufrufe), wie es der Store-Review verlangt. Den Splitter wählst du oben bei der Schnittstelle („Gateway“); das Feld „OCPPHub-Splitter“ im Formular entfällt. Bestehende Instanzen werden beim ersten Übernehmen nach dem Update automatisch verbunden. Am Verhalten ändert sich nichts.',
-        '🪟 Neu: „Formular: Aufbau" (eingeklappt unter den Fachpanels) — du legst je Bereich (Stromgrenzen & Steuerungshoheit, Doppelte Anbindung, PV-Überschussladen) fest, ob er beim Öffnen aufgeklappt, zugeklappt oder ausgeblendet ist, und an welcher Position er steht. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt. Gilt nach „Übernehmen" beim nächsten Öffnen; „Auf Standard zurücksetzen" stellt alles zurück.',
+        '🪟 Neu: „Formular: Aufbau" (eingeklappt unter den Fachpanels) — du legst je Bereich (Bedienung, Stromgrenzen & Steuerungshoheit, Doppelte Anbindung, PV-Überschussladen) fest, ob er beim Öffnen aufgeklappt, zugeklappt oder ausgeblendet ist, und an welcher Position er steht. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt. Gilt nach „Übernehmen" beim nächsten Öffnen; „Auf Standard zurücksetzen" stellt alles zurück.',
         'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
         'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
         'Kritischer Fix (Live-Fund, Dietmar wollte nur WB1 abschalten): es gab keinen sichtbaren Schalter, um EINEN einzelnen Ladepunkt zu deaktivieren — nur der ganze Splitter ließ sich abschalten, was gleich alle anderen Ladepunkte mit lahmlegte. Neuer Schalter „🔌 Diesen Ladepunkt deaktivieren" oben im Formular, identisch zu `OHUBL_SetActive(false)` (ein gemeinsamer Zustand für Konsole UND externe Aufrufe wie MeterHubVirtual).',
@@ -325,10 +326,10 @@ class OCPPHubLadepunkt extends IPSModule
                     'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => 'Was diese Instanz macht: eine „OCPPHub Ladepunkt"-Instanz je Wallbox/Connector — sie hält die sichtbaren Messwerte und Steuervariablen (Ladeleistung, Energiezähler, Status, Ladefreigabe, Stromlimit) und trägt optional das eigenständige PV-Überschussladen. Die eigentliche OCPP-Kommunikation läuft komplett über den zugeordneten Splitter; diese Instanz selbst hält keine WebSocket-Verbindung.'],
+                        ['type' => 'Label', 'caption' => 'Was diese Instanz macht: eine „OCPPHub Ladepunkt"-Instanz je Wallbox/Connector — sie hält die sichtbaren Messwerte und Steuervariablen (Ladeleistung, Energiezähler, Status, Ladefreigabe, Stromlimit), lässt sich im Bereich „Bedienung“ direkt vom Formular aus steuern und trägt optional das eigenständige PV-Überschussladen. Die eigentliche OCPP-Kommunikation läuft komplett über den zugeordneten Splitter; diese Instanz selbst hält keine WebSocket-Verbindung.'],
                         ['type' => 'Label', 'caption' => '🆔 Charge-Point-Identity: muss exakt zu dem Namen passen, den die Wallbox selbst in ihrer eigenen OCPP-Konfiguration als letztes Pfadstück der Backend-URL mitschickt (Groß-/Kleinschreibung zählt). Am einfachsten über „OCPPHub Konfigurator" anlegen — der zeigt bereits verbundene Wallboxen an und füllt dieses Feld beim Erstellen automatisch korrekt aus, inklusive der Splitter-Zuordnung unten.'],
                         ['type' => 'Label', 'caption' => '🔌 Splitter: Dieser Ladepunkt ist ein Gerät unter dem „OCPPHub Splitter“ und redet nur mit ihm über den Symcon-Datenfluss (Nachrichten statt direkter Funktionsaufrufe). Den Splitter wählst du oben im Formular bei der Schnittstelle („Gateway“); beim Anlegen über den Konfigurator geschieht das von selbst, Bestandsinstanzen werden beim ersten Übernehmen nach dem Update automatisch verbunden. Die Objektbaum-Position spielt dafür keine Rolle, du kannst die Instanz frei in andere Kategorien verschieben.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`ocpp_connected`, `power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum, NICHT hier im Konfigurationsformular — dort auch der Ladefreigabe-Schalter zum manuellen Testen.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang: die eigentlichen Messwert- und Steuervariablen (`ocpp_connected`, `power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) erscheinen als Kind-Objekte dieser Instanz im Objektbaum. Ladefreigabe und Stromlimit lassen sich auch direkt hier im Formular im Bereich „Bedienung“ setzen.'],
                         ['type' => 'Label', 'caption' => '🩺 Ladeablehnung erklären (`block_reason`): lehnt die Wallbox einen Ladestart/eine Stromlimit-Änderung eindeutig ab, wird — falls das Fahrzeug per Tessie verknüpft ist (siehe „OCPPHub Abrechnung"-Instanz) — automatisch nachgefragt, ob eine eigene Ladeplanung im Fahrzeug aktiv ist, das Ladelimit schon erreicht ist, oder das Fahrzeug gerade schläft (dann wird automatisch ein Aufwecken angestoßen). Zusätzlich, aber ausdrücklich nur als unsicherer Hinweis: ein Namensabgleich gegen aktive Tibber-Grid-Rewards-Steuerungen. Ohne Tessie-Verknüpfung oder ohne eindeutige Ablehnung bleibt `block_reason` leer.'],
                         ['type' => 'Label', 'caption' => '🔓 Automatische Ladefreigabe für erkannte Fahrzeuge: erkennt Dashboard per eigener Zeitkorrelation (nicht wir selbst — bewusst EIN Korrelationsmechanismus im Verbund) ein Fahrzeug an diesem Ladepunkt, das einem aktiven Zugang in der Abrechnung-Instanz zugeordnet ist, wird bei Betriebsart ② automatisch dessen Karte „aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch) — praktisch das Ergebnis von „Autocharge", ohne dass die Wallbox das selbst können muss. Kein Zwang zum sofortigen Losladen, nur zur Freigabe; wirkt erst, sobald das Ladepunkt-Modul der Dashboard-Sitzung diese Zuordnung meldet.'],
                         ['type' => 'Label', 'caption' => '🎫 RFID-Autorisierung/Verbrauchslimits: wird zentral in der „OCPPHub Abrechnung"-Instanz gepflegt, gilt aber nur, wenn am Splitter „② Mehrere Nutzer" ausgewählt ist — bei „① Einzelnutzer" wird jede Karte angenommen, unabhängig davon, was dort hinterlegt ist.'],
@@ -403,6 +404,67 @@ class OCPPHubLadepunkt extends IPSModule
         return json_encode($form);
     }
 
+    // „Bedienung“ direkt im Formular (analog ChargerHub, Panel „🎛️ Bedienung“): Ladefreigabe und
+    // Stromlimit wirken sofort, über denselben Weg wie die Steuervariablen im WebFront (RequestAction),
+    // ohne Eigenschaft und ohne „Übernehmen“. Gezeigt wird immer, wer gerade regelt, damit eine
+    // Handbedienung nicht blind gegen EMS/Tibber/Überschussladen arbeitet.
+    private function controlPanel(): array
+    {
+        $min = $this->ReadPropertyInteger('MinCurrent');
+        $max = max($min, $this->ReadPropertyInteger('MaxCurrent'));
+        $stationMax = $this->ReadAttributeInteger('StationMaxCurrentA');
+        if ($stationMax >= $min && $stationMax < $max) {
+            $max = $stationMax;
+        }
+        $aktuell = (int)$this->GetValue('ctl_curr_limit');
+        return [
+            'type'     => 'ExpansionPanel',
+            'name'     => 'ControlPanel',
+            'caption'  => '🎛️ Bedienung',
+            'expanded' => true,
+            'items'    => [
+                ['type' => 'Label', 'name' => 'ControlPanelHint', 'caption' => $this->controlPanelHint()],
+                ['type' => 'Label', 'name' => 'ControlPanelFeedback', 'caption' => ' '],
+                [
+                    'type' => 'CheckBox', 'name' => 'FormCtlEnable', 'caption' => 'Ladefreigabe (wirkt sofort)',
+                    'value' => (bool)$this->GetValue('ctl_enable'),
+                    'onChange' => 'IPS_RequestAction($id, "FormCtlEnable", $FormCtlEnable);',
+                ],
+                ['type' => 'Label', 'caption' => 'Stromlimit in Ampere (wirkt sofort, ' . $min . ' bis ' . $max . ' A)'],
+                [
+                    'type' => 'HorizontalSlider', 'name' => 'FormCtlCurrent', 'minimum' => $min, 'maximum' => $max,
+                    'value' => min($max, max($min, $aktuell)),
+                    'onChange' => 'IPS_RequestAction($id, "FormCtlCurrent", $FormCtlCurrent);',
+                ],
+            ],
+        ];
+    }
+
+    // Hinweiszeile im Bedienpanel: wer regelt gerade.
+    private function controlPanelHint(): string
+    {
+        $managedBy = $this->ReadPropertyString('ManagedBy');
+        if ($this->demoModus()) {
+            return 'ℹ️ Vorführmodus: Änderungen hier werden nicht an die Wallbox gesendet.';
+        }
+        if ($this->IsDeactivated()) {
+            return '⛔ Dieser Ladepunkt ist deaktiviert: Änderungen hier werden nicht ausgeführt.';
+        }
+        if ($managedBy !== 'none' && $managedBy !== 'ems') {
+            return '⛔ Gerade regelt ' . (self::MANAGEDBY_LABELS[$managedBy] ?? $managedBy) . ': Änderungen hier werden nicht ausgeführt (Schreibsperre). Wer regelt, steht unter „Stromgrenzen & Steuerungshoheit“.';
+        }
+        if ($managedBy === 'ems') {
+            return '⚠️ Gerade regelt das EMS: eine Handbedienung hier kann beim nächsten Regelschritt wieder überschrieben werden.';
+        }
+        if ($this->ReadPropertyBoolean('EnableSurplusCharging')) {
+            if ($this->IsEmsActive()) {
+                return '⚠️ Das EMS ist aktiv und hat Vorrang: eine Handbedienung hier kann beim nächsten Regelschritt wieder überschrieben werden.';
+            }
+            return '⚠️ Das eigenständige Überschussladen regelt (Status: ' . (string)$this->GetValue('surplus_status') . '). Ein manueller Stopp hier bleibt bis zum nächsten manuellen Start bzw. bis zum Abstecken bestehen; das Stromlimit kann beim nächsten Regelschritt wieder angepasst werden.';
+        }
+        return 'ℹ️ Gerade regelt niemand: Änderungen hier bleiben bestehen.';
+    }
+
     private function limitsPanel(): array
     {
         return
@@ -474,13 +536,14 @@ class OCPPHubLadepunkt extends IPSModule
     }
 
     // SUITE.md 3a „Formular: Aufbau“ (29.10.2026): die drei Fachpanels (Stromgrenzen,
-    // Doppelte Anbindung, PV-Überschussladen) sind in Reihenfolge und Aufklapp-Zustand
+    // Doppelte Anbindung, PV-Überschussladen, Bedienung) sind in Reihenfolge und Aufklapp-Zustand
     // wählbar. „Verbindungen im Verbund“ ist eine Statuszeilen-Gruppe und bleibt fest.
-    private const LAYOUT_KEYS = ['limits', 'duplicate', 'surplus'];
+    private const LAYOUT_KEYS = ['control', 'limits', 'duplicate', 'surplus'];
 
     private function freePanels(): array
     {
         return [
+            'control'   => $this->controlPanel(),
             'limits'    => $this->limitsPanel(),
             'duplicate' => $this->duplicatePanel(),
             'surplus'   => $this->surplusPanel(),
@@ -827,6 +890,13 @@ class OCPPHubLadepunkt extends IPSModule
 
     public function RequestAction($Ident, $Value)
     {
+        // Bedienpanel im Formular: dieselbe Wirkung wie die Steuervariablen, plus Rückmeldung im Formular.
+        $formCtl = ['FormCtlEnable' => 'ctl_enable', 'FormCtlCurrent' => 'ctl_curr_limit'];
+        if (isset($formCtl[$Ident])) {
+            $this->formularBedienung($formCtl[$Ident], $Value);
+            return;
+        }
+
         $cpid = $this->ReadPropertyString('CPID');
 
         // Vorführmodus (01.09.2026, siehe OCPPHubSplitter::IsDemoMode()):
@@ -893,6 +963,39 @@ class OCPPHubLadepunkt extends IPSModule
                     $this->anSplitter('Stromlimit', ['Ampere' => (float)$clamped]);
                 }
                 break;
+        }
+    }
+
+    // Ausführung einer Bedienung aus dem Formular. Lehnt RequestAction() sie ab (Vorführmodus,
+    // Schreibsperre), bleibt die Steuervariable unverändert: der Abgleich danach ist die Rückmeldung.
+    private function formularBedienung(string $ziel, $wert): void
+    {
+        $wert = ($ziel === 'ctl_enable') ? (bool)$wert : (int)$wert;
+        $namen = ['ctl_enable' => 'Ladefreigabe', 'ctl_curr_limit' => 'Stromlimit'];
+        $vorher = $this->GetValue($ziel);
+        $this->RequestAction($ziel, $wert);
+        $nachher = $this->GetValue($ziel);
+        $gezeigt = ($ziel === 'ctl_enable') ? ($wert ? 'An' : 'Aus') : $nachher . ' A';
+        if ($ziel === 'ctl_curr_limit') {
+            $erwartet = max($this->ReadPropertyInteger('MinCurrent'), min($this->ReadPropertyInteger('MaxCurrent'), $wert));
+            $ok = ((int)$nachher === $erwartet);
+        } else {
+            $ok = ((bool)$nachher === $wert);
+        }
+        if ($ok) {
+            $text = '✅ ' . $namen[$ziel] . ': ' . $gezeigt . ' gesetzt.' . (($ziel === 'ctl_enable' && $wert) ? ' Ob die Wallbox wirklich startet, zeigt der Status.' : '');
+        } elseif ($this->demoModus() || $this->IsDeactivated() || !in_array($this->ReadPropertyString('ManagedBy'), ['none', 'ems'], true)) {
+            $text = '⚠️ ' . $namen[$ziel] . ' nicht ausgeführt (Vorführmodus, deaktiviert oder Schreibsperre durch einen anderen Regler).';
+        } else {
+            $grund = ($ziel === 'ctl_enable') ? (string)$this->GetValue('block_reason') : '';
+            $text = '⚠️ ' . $namen[$ziel] . ' konnte nicht gesetzt werden' . ($grund !== '' ? ': ' . $grund : ', Einzelheiten im Meldungen-Log') . '.';
+        }
+        $this->UpdateFormField('ControlPanelFeedback', 'caption', $text);
+        $this->UpdateFormField('ControlPanelHint', 'caption', $this->controlPanelHint());
+        if (!$ok) {
+            // Schalter/Regler im offenen Formular auf den tatsächlichen Wert zurücksetzen.
+            $feld = ($ziel === 'ctl_enable') ? 'FormCtlEnable' : 'FormCtlCurrent';
+            $this->UpdateFormField($feld, 'value', $nachher);
         }
     }
 

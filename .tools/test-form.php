@@ -470,7 +470,7 @@ switch ($scenario) {
         $check('Reset muss Klartext zurückgeben', str_contains($msg, 'Übernehmen'));
         $check('Reset muss genau ein UpdateFormField auf FormLayout/values senden', count($updates) === 1 && $updates[0][0] === 'FormLayout' && $updates[0][1] === 'values');
         $rows = json_decode($updates[0][2] ?? '[]', true) ?: [];
-        $check('Reset-Zeilen: drei Bereiche in Standardreihenfolge ohne Haken', array_map(fn ($r) => $r['Key'], $rows) === ['limits', 'duplicate', 'surplus'] && !array_filter($rows, fn ($r) => $r['Opened'] || $r['Closed'] || $r['Hidden']) && array_map(fn ($r) => $r['Pos'], $rows) === [1, 2, 3]);
+        $check('Reset-Zeilen: vier Bereiche in Standardreihenfolge ohne Haken', array_map(fn ($r) => $r['Key'], $rows) === ['control', 'limits', 'duplicate', 'surplus'] && !array_filter($rows, fn ($r) => $r['Opened'] || $r['Closed'] || $r['Hidden']) && array_map(fn ($r) => $r['Pos'], $rows) === [1, 2, 3, 4]);
         break;
     case 'a_aufbau_std':
     case 'a_aufbau_eigen':

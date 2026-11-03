@@ -21,6 +21,11 @@ Ladepunkt, Abrechnung und Konfigurator über Nachrichten (`SendDataToChildren`/`
   unverändert, am Verhalten ändert sich nichts.
 - Neuer Prüfstand `.tools/test-datenfluss.php` (88 Prüfungen, mit Mutationstest gegen die Wege
   geprüft); `test-form.php` an die neue Verbindung angepasst.
+- **Bedienung im Formular (Ladepunkt, analog ChargerHub):** neuer Bereich „🎛️ Bedienung“ ganz oben mit
+  Ladefreigabe-Schalter und Stromlimit-Regler. Wirkt sofort über denselben Weg wie die Steuervariablen
+  (Ablehnung bei Vorführmodus, Deaktivierung oder fremdem Regler), meldet das Ergebnis (✅/⚠️, bei
+  abgelehntem Start mit dem Grund) und zeigt, wer gerade regelt (Niemand, EMS, Überschussladen, fremder
+  Regler). Der Bereich ist Teil von „Formular: Aufbau“ und lässt sich dort verschieben oder ausblenden.
 - Enthält außerdem „Formular: Aufbau“ (vormals 0.6.39, lokal vorbereitet, nie veröffentlicht).
 
 **Vor dem Veröffentlichen live prüfen** (Anstecken, Laden, Stoppen, Stromlimit, Reservieren).
