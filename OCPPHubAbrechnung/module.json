@@ -5,7 +5,9 @@
   "vendor": "",
   "aliases": [
     "NRG-Stack OCPPHub Abrechnung",
-    "OCPP-Kundenverwaltung"
+    "OCPP-Kundenverwaltung",
+    "OCPPHub Billing",
+    "OCPP customer management"
   ],
   "url": "https://github.com/DG65/NRGOCPPHub",
   "parentRequirements": [

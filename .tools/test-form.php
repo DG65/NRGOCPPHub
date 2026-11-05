@@ -52,10 +52,14 @@ $values = [];    // id => Wert
 $mhub = null;    // Rückgabe von MHUB_GetFunctions (JSON) oder null = nicht installiert
 $self = 900;
 
+// Sprache des Prüfstands: Standard Deutsch (libs/locale.json), mit OHUB_SPRACHE=en die englischen Quelltexte.
+$locale = getenv('OHUB_SPRACHE') === 'en' ? [] : json_decode((string)file_get_contents(dirname(__DIR__) . '/libs/locale.json'), true)['translations']['de'];
+
 class IPSModule
 {
     public $InstanceID = 900;
-    public function __construct() {}
+    public function __construct($InstanceID = 0) {}
+    public function Translate($text) { return $GLOBALS['locale'][$text] ?? $text; }
     public function SendDebug(...$a) {}
     public function ReadPropertyInteger($n) { return (int) ($GLOBALS['props'][$n] ?? 0); }
     public function ReadPropertyString($n) { return (string) ($GLOBALS['props'][$n] ?? ''); }
@@ -275,9 +279,44 @@ switch ($scenario) {
 
 require dirname(__DIR__) . '/OCPPHub' . $module . '/module.php';
 $class = 'OCPPHub' . $module;
-$m = new $class();
+$m = new $class(0);
 $json = $m->GetConfigurationForm();
 $form = json_decode($json, true);
+
+// Englischer Lauf (OHUB_SPRACHE=en): kein Inhaltsvergleich, sondern Prüfstand „keine deutschen Reste im
+// Formular". Jedes Szenario erzeugt das Formular mit den englischen Quelltexten und sucht Umlaute,
+// ß und typische deutsche Wörter (SUITE.md Konvention 9).
+if (getenv('OHUB_SPRACHE') === 'en') {
+    $alle = '';
+    $sammle = function ($knoten) use (&$sammle, &$alle) {
+        foreach ((array)$knoten as $k => $v) {
+            if (is_array($v)) {
+                $sammle($v);
+            } elseif (is_string($v) && in_array($k, ['caption', 'label', 'confirm'], true)) {
+                $alle .= $v . "\n";
+            }
+        }
+    };
+    $sammle($form);
+    // Namen von Instanzen aus dem Szenario (in Anführungszeichen) sind Prüfdaten, kein Text des Moduls.
+    $alle = preg_replace('/“[^”]*”/u', '“…”', $alle);
+    $treffer = [];
+    if (preg_match_all('/[äöüÄÖÜß]/u', $alle, $mm)) {
+        $treffer[] = 'Umlaut/ß: ' . implode('', array_unique($mm[0]));
+    }
+    $woerter = '(und|oder|nicht|keine?|ist|sind|wird|werden|der|die|das|dem|den|für|mit|bei|von|zum|zur|eine?|einen|diese[rnms]?|Wallbox(?:en)? zuerst|Ladepunkt|Zugang|Zugänge|Kunde|Kunden|Fahrzeug|Fahrzeuge|Gruppe|Gruppen|Abrechnung|Betriebsart|Übernehmen|aktiv|gesperrt|Wer regelt)';
+    foreach (preg_split('/\R/u', $alle) as $zeile) {
+        if (preg_match('/\b' . $woerter . '\b/u', $zeile, $m1)) {
+            $treffer[] = 'Wort „' . $m1[1] . '“ in: ' . mb_substr($zeile, 0, 90);
+        }
+    }
+    if ($treffer !== []) {
+        echo '❌ ' . $scenario . " (englisch)\n   - " . implode("\n   - ", array_slice($treffer, 0, 8)) . "\n";
+        exit(1);
+    }
+    echo '✅ ' . $scenario . " (englisch)\n";
+    exit(0);
+}
 
 // ---- Hilfen ------------------------------------------------------------------
 function find(array $nodes, callable $pred, array $trail = []): ?array
@@ -379,16 +418,16 @@ switch ($scenario) {
         $check('⚠️ mit Auswahlhinweis fehlt (nicht raten)', $has('⚠️ Kein Splitter zugeordnet, im System gibt es #100') && $has('#101'));
         break;
     case 'l_auto':
-        $check('🔗-Zeile für den Netzzähler fehlt', $has('🔗 Netzzähler: MeterHub #500 „Netz-Zähler" (automatisch'));
+        $check('🔗-Zeile für den Netzzähler fehlt', $has('🔗 Netzzähler: MeterHub #500 „Netz-Zähler“ (automatisch'));
         $check('🔗-Zeile ist nicht grün', ($labelWith('🔗 Netzzähler')['node']['color'] ?? null) === $green);
         $check('Netzzähler-Feld liegt nicht im eingeklappten Panel', $inCollapsedPanel('SurplusMeterID'));
         $check('Verbindungs-Panel fehlt', $connectionsPanel !== null);
-        $check('✅ Wallbox-Zeile fehlt', $has('✅ Splitter #100') && $has('Wallbox „WB2"'));
+        $check('✅ Wallbox-Zeile fehlt', $has('✅ Splitter #100') && $has('Wallbox „WB2“'));
         $check('gemeldete Stromgrenzen fehlen', $has('max. 16 A') && $has('min. 6 A') && $has('Phasenumschaltung unterstützt'));
         $check('✅ Netzzähler mit Wert fehlt', $has('✅ Netzzähler: MeterHub #500') && $has('-1234 W'));
         break;
     case 'l_eigen':
-        $check('✏️-Zeile fehlt', $has('✏️ Netzzähler: MeterHub #501 „Anderer Zähler"'));
+        $check('✏️-Zeile fehlt', $has('✏️ Netzzähler: MeterHub #501 „Anderer Zähler“'));
         $check('Feld muss sichtbar sein', find($form['elements'], fn ($n) => ($n['name'] ?? '') === 'SurplusMeterID') !== null && !$inCollapsedPanel('SurplusMeterID'));
         break;
     case 'l_keins':

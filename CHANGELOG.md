@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.0 (05.11.2026)
+
+**Zweisprachig Deutsch/Englisch (Auftrag Dietmar 05.11.2026).** Splitter 0.4.0 / Ladepunkt 0.4.0 /
+Abrechnung 0.5.0 / Konfigurator 0.3.0.
+
+- Alle sichtbaren Texte (Formulare, Meldungen im Log und in der Debug-Ausgabe, Variablen- und
+  Profilnamen, Statuszeilen, Konfigurationskachel der Abrechnung, „Was ist neu“-Texte) haben englische
+  Quelltexte im Code; die deutsche Fassung steht in `libs/locale.json` (Schlüssel = englischer Text).
+  `php .tools/locale-bauen.php` kopiert sie in die vier Modulordner (Symcon liest `locale.json` nur
+  dort). Die Dateien in den Modulordnern nie von Hand ändern.
+- `libs/OHUB_Text.php`: Symcon wird je Text höchstens einmal je Prozess gefragt (SUITE.md
+  Stolperstein 24); fällt die Instanz weg, deren `Translate()` gerade zuständig war, springt die nächste ein.
+- Kennungen unverändert: Idents, Property-/Attribut-/Funktionsnamen, Datenfluss-Nachrichten und
+  Vertragsschlüssel bleiben, wie sie waren; bestehende Instanzen verlieren nichts. Variablen, die schon
+  existieren, behalten ihre Namen. Die Bezeichnungen der modul-eigenen Profile (`OHUB.ChargePointStatus`,
+  `OHUB.Connected`) werden beim Übernehmen in der aktuellen Sprache gesetzt.
+- Abrechnung-Kachel: Texte kommen aus einer Tabelle (`window.OHUB_TEXTS`), die das PHP-Modul liefert.
+- Neuer Prüfstand `.tools/test-sprache.php` (jeder Text im Code steht in der Tabelle, Platzhalter
+  stimmen, kein deutscher Rest im Code, Kachel vollständig); `OHUB_SPRACHE=en php .tools/test-form.php`
+  erzeugt die Formulare englisch und sucht deutsche Reste.
+- README.en.md; englische Suchbegriffe (Aliasse) in den vier `module.json`.
+
 ## 0.7.0 (30.10.2026)
 
 **Datenfluss statt Funktionsaufrufe (Symcon-Store-Review).** Der Reviewer bemängelte, dass die

@@ -26,6 +26,8 @@
 // Ladepunkte hinweg — siehe .docs/pflichtenheft.md „Ausbaustufen".
 // ===========================================================================
 
+require_once __DIR__ . '/../libs/OHUB_Text.php';
+
 class OCPPHubSplitter extends IPSModule
 {
     // Eingebaute Symcon-Kern-Instanz "WebHook Control" — verwaltet alle
@@ -49,7 +51,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.3.0';
+    private const VERSION = '0.4.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — seit dem Stable-Start (27.10.2026) liegt LICENSE auf `main`, dorthin
@@ -64,29 +66,37 @@ class OCPPHubSplitter extends IPSModule
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.3.0';
+    private const NEWS_VERSION = '0.4.0';
     private const NEWS_ITEMS = [
-        '🔌 Technik: Splitter, Ladepunkte, Abrechnung und Konfigurator reden jetzt über den Symcon-Datenfluss miteinander (Nachrichten statt direkter Funktionsaufrufe auf fremden Instanzen), wie es der Store-Review verlangt. Die Ladepunkte, die Abrechnung und der Konfigurator hängen dafür am Splitter als echtem übergeordneten Gerät. Bestehende Instanzen werden beim ersten Übernehmen nach dem Update automatisch verbunden. Am Verhalten ändert sich nichts.',
-        'Neu: „🧡 Über dieses Modul" ganz unten im Formular (Lizenz/Spenden), Feedback-Hinweis jetzt als eigenes ausblendbares Panel statt einer Textzeile (Store-Konventions-Ergänzung).',
-        'Neu: „👋 Wozu dieses Modul?" — ein neues Panel ganz oben im Formular erklärt kurz, was diese Instanz macht und wofür sie gut ist (Store-Konventions-Ergänzung, gleiches Muster wie das „Was ist neu"-Panel darunter).',
-        'Neu: 🎪 Vorführmodus (Formularfeld am Splitter) — für Dietmars geplante öffentliche Demo-Instanz des ganzen NRG-Stack-Verbunds. Aktiviert, lehnt OCPPHub jeden echten Ladesteuerbefehl (RemoteStartTransaction/SetChargingProfile/Reset) serverseitig ab, egal ob manuell, per PV-Überschussladen oder automatischer Fahrzeug-Autorisierung ausgelöst — ein Besucher der Demo kann Dietmars echte Wallbox damit nicht schalten. Auch die Kundenverwaltungs-Kachel wird dabei automatisch schreibgeschützt.',
-        'Kritischer Fix (Live-Fund, direkt nach Einführung des Reset-/frc-Ausweichwegs entdeckt): schlug RemoteStartTransaction fehl, WEIL die Wallbox schon eine andere Sitzung fuhr (z. B. go-e nach einem Reset selbst lokal gestartet), löste unser Ausweichweg trotzdem einen Reset aus und unterbrach damit eine bereits laufende, funktionierende Ladung — sichtbar als kurze Ladeimpulse statt einer stabilen Sitzung. Der Ausweichweg prüft jetzt zuerst, ob am Ladepunkt schon tatsächlich geladen wird, und greift nur noch ein, wenn nicht.',
-        'go-e-Ausweichweg für hängende Ladefreigabe: schlägt RemoteStartTransaction bei einer go-e-Wallbox fehl, versucht OCPPHub jetzt automatisch, deren privates FORCE_STATE-Register zurückzusetzen — zuerst über ChargerHub (CHUB_ClearForceLock(), falls installiert, auch wenn dessen Instanz deaktiviert ist), sonst per eigenem, bewusst minimalem Modbus-Schreibzugriff, damit das auch OHNE installiertes ChargerHub funktioniert. Bei jedem anderen Hersteller wirkungslos, kein Risiko.',
-        'Neuer, herstellerneutraler Ausweichweg bei abgelehntem Ladestart: schlägt `RemoteStartTransaction` fehl, schickt OCPPHub jetzt automatisch einen OCPP-Standard-`Reset` (Soft) hinterher — ein Pflichtbestandteil von OCPP 1.6, den jeder konforme Hersteller unterstützen muss, kein Sonderweg für eine einzelne Marke.',
-        'Kritischer Fix (Live-Fund): go-e lehnte `RemoteStopTransaction` bei einer laufenden Ladung wiederholt ab, obwohl die Sitzung nachweislich lief — Ladefreigabe „aus" hatte damit keine Wirkung. Automatischer Ausweichweg: wird der reguläre Stopp abgelehnt, schickt OCPPHub jetzt selbstständig ein Stromlimit von 0 A hinterher, das go-e zuverlässig annimmt und die Ladung tatsächlich beendet.',
-        'Kritischer Fix (Live-Fund, erster echter Ladeversuch): jede Ablehnung einer Karte/eines Zugangs (nicht registriert, gesperrt, abgelaufen, Zeitfenster, Verbrauchslimit, Reservierung) zeigt jetzt sofort den genauen Grund am Ladepunkt (`block_reason`) — vorher landete das nur unsichtbar im Systemlog. Der manuelle „Ladefreigabe"-Schalter versucht außerdem zuerst den echten, registrierten Zugang eines bereits erkannten Fahrzeugs (neue Funktion OHUB_ManualStart()) statt eines internen Platzhalters, der unter Betriebsart ② ohnehin nie funktionieren konnte.',
-        'Neue Diagnosefunktion OHUB_GetConfigurationKeys() — fragt beliebige OCPP-Konfigurationsschlüssel einer Wallbox ab, Antwort landet jetzt IMMER dauerhaft im Systemlog (nicht nur bei Ablehnung), da eine erfolgreiche GetConfiguration-Antwort kein "status"-Feld hat und darum bisher nur flüchtig im Debug-Fenster sichtbar war.',
-        'Neu: automatische Ladefreigabe für erkannte Fahrzeuge ("so etwas wie Autocharge") — erkennt Dashboard per Zeitkorrelation ein Fahrzeug mit aktivem Zugang, wird bei Betriebsart ② automatisch dessen Karte "aufgelegt" (dieselbe Prüfung wie eine echte Kartenauflage, alle Limits/Zeitfenster gelten identisch). Design mit Dashboard abgestimmt.',
-        'Neue Diagnose bei eindeutiger Ladeablehnung (RemoteStartTransaction/SetChargingProfile): fragt automatisch beim verknüpften Tessie-Fahrzeug und optional Tibber Grid Rewards nach einer möglichen Erklärung — sichtbar am Ladepunkt in der neuen Variable `block_reason`.',
-        'Kritischer Fix (Dashboard-Fund, Live-Test): go-e lehnte jeden manuellen Ladestart mit "Rejected" ab, ohne dass das irgendwo sichtbar war. Ursache: RemoteStartTransaction fehlte das Feld connectorId — go-e wusste nicht, welchen Connector es starten soll. Jetzt fest auf 1 gesetzt (der tatsächlich ladende Connector, live an WB2 bestätigt). Außerdem: jede erkennbare Ablehnung (CALLERROR oder ein "status" ungleich "Accepted") auf einen von uns gesendeten Aufruf wird jetzt zusätzlich dauerhaft ins Systemlog geschrieben, nicht mehr nur ins flüchtige Debug-Fenster.',
-        'Kritischer Fix (Dashboard-Fund, Live-Test): manueller Ladestart über Dashboard/ctl_enable schlug mit einem PHP-Fatal-Error ab. Ursache: Symcons generierte globale Funktion für RemoteStart() ignoriert PHP-Standardwerte auf Parametern — ein Aufruf mit nur 2 statt 3 Argumenten löste einen ArgumentCountError aus. Standardwert aus dem Quellcode entfernt, damit das nicht wieder passiert.',
-        'Warnhinweis ergänzt: „OCPPHub Abrechnung" wird automatisch als Kind DIESER Splitter-Instanz angelegt — niemals selbst zusätzlich eine solche Instanz anlegen, eine zweite wird nie verwendet (live gefunden: Karten/Kunden in einer manuell angelegten zweiten Instanz blieben wirkungslos).',
-        'Jede Kartenauflage (Authorize) wird jetzt zusätzlich ins dauerhafte Symcon-Systemlog geschrieben — vorher nur per SendDebug sichtbar, also unwiederbringlich weg, sobald das Debug-Fenster geschlossen war. Praktisch z. B. um den idTag einer neuen Karte nachträglich fürs Anlegen in der Abrechnung-Instanz nachzuschlagen.',
-        'Kritischer Fix: jede MeterValues-Nachricht (Leistung/Energie/SoC) ließ den Splitter mit einem Fatal Error abstürzen — dadurch kamen power/energy_total NIE an, unabhängig von der Wallbox. Ursache: json_decode() ohne Assoziativ-Modus bei verschachtelten OCPP-Nachrichten. Betraf jede Wallbox, live an WB2 gefunden.',
-        'Stufe 2: neues Betriebsart-Auswahlfeld (① Einzelnutzer / ② Mehrere Nutzer). Bei ② wird jede Kartenauflage zentral gegen die neue „OCPPHub Abrechnung"-Instanz geprüft (Kunden, Zugänge, Verbrauchslimits) — die legt sich automatisch selbst an.',
-        'Reservierung (ReserveNow/CancelReservation) hinzugekommen, unabhängig von der Betriebsart nutzbar — Backend-Funktionen liegen am Ladepunkt (OHUBL_Reserve/CancelReservation).',
-        'idTag-Direktzuordnung: ist eine Karte bereits einem Fahrzeug zugeordnet, wird der Fahrzeugname bei Betriebsart ② jetzt sofort gesetzt, ohne auf Dashboards Zeitkorrelation zu warten.',
+        '🌐 New: German and English. The form, the messages in the log and the debug output follow the Symcon language setting.',
+        '🔌 Technical: splitter, charge points, Billing and configurator now talk to each other through the Symcon data flow (messages instead of direct function calls on foreign instances), as the store review requires. For this, the charge points, Billing and the configurator hang below the splitter as their real parent device. Existing instances are connected automatically the first time you apply changes after the update. Behavior does not change.',
+        'New: “🧡 About this module” at the very bottom of the form (license/donations); the feedback notice is now a panel of its own that you can hide, instead of a line of text (store convention addition).',
+        'New: “👋 What is this module for?” — a new panel at the very top of the form briefly explains what this instance does and what it is good for (store convention addition, same pattern as the “What’s new” panel below it).',
+        'New: 🎪 Demo mode (form field on the splitter) — for Dietmar’s planned public demo instance of the whole NRG-Stack. When enabled, OCPPHub rejects every real charging control command (RemoteStartTransaction/SetChargingProfile/Reset) on the server side, whether triggered manually, by PV surplus charging or by automatic vehicle authorization — a visitor to the demo cannot switch Dietmar’s real wallbox with it. The customer management tile is also made read-only automatically.',
+        'Critical fix (live finding, discovered right after the reset/frc fallback was introduced): if RemoteStartTransaction failed BECAUSE the wallbox was already running another session (e.g. a go-e that had started locally by itself after a reset), our fallback still triggered a reset and thereby interrupted a charge that was already running fine — visible as short charging pulses instead of one stable session. The fallback now first checks whether the charge point is actually charging and only steps in if it is not.',
+        'go-e fallback for a stuck charge enable: if RemoteStartTransaction fails on a go-e wallbox, OCPPHub now automatically tries to reset its private FORCE_STATE register — first through ChargerHub (CHUB_ClearForceLock(), if installed, even if its instance is deactivated), otherwise through its own deliberately minimal Modbus write, so that this also works WITHOUT ChargerHub installed. Without effect on any other manufacturer, no risk.',
+        'New manufacturer-neutral fallback when a charge start is rejected: if `RemoteStartTransaction` fails, OCPPHub now automatically follows up with a standard OCPP `Reset` (soft) — a mandatory part of OCPP 1.6 that every conforming manufacturer must support, not a special route for a single brand.',
+        'Critical fix (live finding): go-e repeatedly rejected `RemoteStopTransaction` during a running charge although the session demonstrably was running — so charge enable “off” had no effect. Automatic fallback: if the regular stop is rejected, OCPPHub now sends a current limit of 0 A by itself, which go-e accepts reliably and which actually ends the charge.',
+        'Critical fix (live finding, first real charging attempt): every rejection of a card/access entry (not registered, blocked, expired, time window, consumption limit, reservation) now immediately shows the exact reason at the charge point (`block_reason`) — before, it ended up only invisibly in the system log. The manual “charge enable” switch also first tries the real, registered access entry of an already detected vehicle (new function OHUB_ManualStart()) instead of an internal placeholder that could never have worked under operating mode ② anyway.',
+        'New diagnostic function OHUB_GetConfigurationKeys() — queries any OCPP configuration keys of a wallbox; the answer is now ALWAYS written permanently to the system log (not only on rejection), because a successful GetConfiguration response has no “status” field and was therefore only visible briefly in the debug window.',
+        'New: automatic charge enable for detected vehicles (“something like autocharge”) — if the dashboard detects a vehicle with an active access entry by time correlation, its card is automatically “presented” in operating mode ② (same check as a real card presentation, all limits/time windows apply identically). Design agreed with the dashboard.',
+        'New diagnostic for an unambiguous charge rejection (RemoteStartTransaction/SetChargingProfile): automatically asks the linked Tessie vehicle and optionally Tibber Grid Rewards for a possible explanation — visible at the charge point in the new variable `block_reason`.',
+        'Critical fix (dashboard finding, live test): go-e rejected every manual charge start with “Rejected” without that being visible anywhere. Cause: RemoteStartTransaction lacked the connectorId field — go-e did not know which connector to start. Now hard-set to 1 (the connector that actually charges, confirmed live on WB2). In addition: every recognizable rejection (CALLERROR or a “status” other than “Accepted”) of a call we sent is now also written permanently to the system log, no longer only to the transient debug window.',
+        'Critical fix (dashboard finding, live test): manual charge start via dashboard/ctl_enable failed with a PHP fatal error. Cause: the global function Symcon generates for RemoteStart() ignores PHP default values on parameters — a call with only 2 instead of 3 arguments triggered an ArgumentCountError. Default value removed from the source code so this cannot happen again.',
+        'Warning added: “OCPPHub Billing” is created automatically as a child of THIS splitter instance — never create such an instance yourself in addition, a second one is never used (found live: cards/customers in a manually created second instance stayed without effect).',
+        'Every card presentation (Authorize) is now additionally written to the permanent Symcon system log — before, it was only visible via SendDebug and thus irretrievably gone once the debug window was closed. Handy e.g. for looking up the idTag of a new card afterwards in order to create it in the Billing instance.',
+        'Critical fix: every MeterValues message (power/energy/SoC) made the splitter crash with a fatal error — so power/energy_total NEVER arrived, regardless of the wallbox. Cause: json_decode() without associative mode for nested OCPP messages. Affected every wallbox, found live on WB2.',
+        'Stage 2: new operating mode selection field (① Single user / ② Multiple users). With ②, every card presentation is checked centrally against the new “OCPPHub Billing” instance (customers, access entries, consumption limits) — it creates itself automatically.',
+        'Reservation (ReserveNow/CancelReservation) added, usable regardless of the operating mode — backend functions are on the charge point (OHUBL_Reserve/CancelReservation).',
+        'idTag direct assignment: if a card is already assigned to a vehicle, the vehicle name is now set immediately in operating mode ②, without waiting for the dashboard’s time correlation.',
     ];
+
+    public function __construct($InstanceID)
+    {
+        parent::__construct($InstanceID);
+        // Quelltexte sind englisch, Deutsch steht in locale.json; je Text fragt Symcon nur einmal je Prozess.
+        OHUB_Text::setzen(fn (string $text): string => $this->Translate($text));
+    }
 
     public function Create()
     {
@@ -220,7 +230,7 @@ class OCPPHubSplitter extends IPSModule
             return 0;
         }
         @IPS_SetParent($newId, $this->InstanceID);
-        @IPS_SetName($newId, IPS_GetName($this->InstanceID) . ' Abrechnung');
+        @IPS_SetName($newId, IPS_GetName($this->InstanceID) . OHUB_Text::t(' Billing'));
         $this->abrechnungVerbinden($newId);
         @IPS_ApplyChanges($newId);
         $this->WriteAttributeInteger('AbrechnungID', $newId);
@@ -295,76 +305,76 @@ class OCPPHubSplitter extends IPSModule
             'elements' => [
                 [
                     'type'     => 'ExpansionPanel',
-                    'caption'  => '📖 Dokumentation & Hilfe (Version ' . self::VERSION . ')',
+                    'caption'  => OHUB_Text::t('📖 Documentation & help (version %s)', self::VERSION),
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => 'Was diese Instanz macht: Der Splitter ist das OCPP-„Central System" — die Gegenstelle, zu der sich Wallboxen per WebSocket verbinden. Er nimmt beliebig viele gleichzeitige Wallbox-Verbindungen entgegen, unterscheidet sie anhand ihrer Charge-Point-Identity (dem letzten Pfadstück der URL) und leitet jede eingehende OCPP-Nachricht an die passende „OCPPHub Ladepunkt"-Instanz weiter. Diese Splitter-Instanz selbst zeigt keine einzelne Wallbox und keine Ladeleistung — dafür ist ausschließlich die Ladepunkt-Instanz zuständig.'],
-                        ['type' => 'Label', 'caption' => '📦 Instanzmodell im Überblick: Splitter (diese Instanz, genau einmal) → mehrere „OCPPHub Ladepunkt"-Instanzen (eine je Wallbox/Connector) → optional „OCPPHub Konfigurator" (praktisch fürs Ersteinrichten, zeigt bereits verbundene, aber noch nicht angelegte Wallboxen zum Ein-Klick-Anlegen). Jede Ladepunkt-Instanz muss im eigenen Formular explizit auf DIESEN Splitter zeigen (Feld „OCPPHub-Splitter") — das ist Pflicht und wird NICHT automatisch aus der Objektbaum-Position abgeleitet, weil sich Instanzen in der Konsole frei in andere Kategorien verschieben lassen, ohne dass sich an der eigentlichen Zuordnung etwas ändert.'],
-                        ['type' => 'Label', 'caption' => '🔌 Wallbox einrichten: in deren eigener OCPP-Konfiguration als Backend-/Server-URL eintragen: ' . $this->hookPath() . '/<Charge-Point-Identity>. <Charge-Point-Identity> ist ein frei wählbarer Name, den die Wallbox selbst bei jeder Nachricht mitschickt (z. B. „WB1") — er muss NICHT vorher hier angelegt werden, sondern taucht nach dem ersten Verbindungsversuch automatisch im „OCPPHub Konfigurator" auf. Subprotokoll ist „ocpp1.6", Nachrichtenformat OCPP-J (JSON über WebSocket) — kein separater Port, kein externer Prozess, Symcon übernimmt den WebSocket-Handshake komplett selbst über seinen eingebauten Hook-Mechanismus.'],
-                        ['type' => 'Label', 'caption' => 'ℹ️ Funktionsumfang (aktueller Stand): vollständiges OCPP-1.6J-Kernprotokoll, eigenständiges PV-Überschussladen als Fallback ohne EMS, Reservierung, sowie ab Betriebsart ② zentrale RFID-Autorisierung mit Kundenverwaltung/Verbrauchslimits (siehe „OCPPHub Abrechnung"-Instanz). Bewusst NOCH NICHT enthalten: Tarife/Kostenberechnung, Berichte/CSV-Export, Reservierungsgebühr, Lastverteilung über mehrere eigene Ladepunkte hinweg — das ist Stufe 3 (siehe `.docs/pflichtenheft.md`).'],
-                        ['type' => 'Label', 'caption' => '🔎 Fehlersuche: Meldet sich eine Wallbox nicht, zuerst die Debug-Ausgabe dieser Instanz aktivieren (Konsole → diese Instanz → Debug-Meldungen) und einen Verbindungsversuch der Wallbox abwarten — jede eingehende Anfrage wird dort mit Methode und Pfad protokolliert, bevor irgendetwas geprüft wird. Kommt gar nichts an: URL/Pfad an der Wallbox prüfen. Kommt etwas an, wird aber abgelehnt: meist Basic-Auth (siehe unten) oder ein noch nicht verstandenes OCPP-Detail dieser Wallbox — dann bitte über GitHub melden.'],
-                        ['type' => 'Label', 'caption' => '⚠️ Ungetestet gegen die meisten OCPP-1.6J-Wallboxen außer go-e — bei anderen Herstellern bitte Rückmeldung über GitHub geben, falls etwas nicht passt (Measurand-Namen/Einheiten in MeterValues, ChargingRateUnit bei SetChargingProfile).'],
-                        ['type' => 'Label', 'caption' => '• go-e Gemini/HOME+: OCPP 1.6J ab Firmware 56.1 (besser ≥56.8), Aktivierung per App, WSS + HTTP-Basic-Auth empfohlen. Referenz-/Testhardware dieses Moduls, siehe „Was ist neu" oben für den aktuellen Live-Test-Stand.'],
-                        ['type' => 'Label', 'caption' => '• KEBA P30: OCPP 1.6 nur bei der x-series — die c-series kann kein OCPP (dort ChargerHub per Modbus/UDP nutzen).'],
-                        ['type' => 'Label', 'caption' => '• Alfen Eve (Single/Double Pro-line): OCPP ist dort das native Primärprotokoll, sollte gut funktionieren — noch nicht selbst getestet.'],
-                        ['type' => 'Label', 'caption' => '• Heidelberg Energy Control: kann KEIN OCPP (nur Modbus RTU) — dafür ChargerHub verwenden, nicht OCPPHub.'],
-                        ['type' => 'Label', 'caption' => '🧩 Verbund: OCPPHub ist das OCPP-Geschwistermodul zu ChargerHub (Modbus TCP) — beide melden Wallboxen über einen feldgleichen Vertrag (`OHUB_GetFunctions`/`CHUB_GetFunctions`) an EMS und Dashboard, sodass es für die konsumierenden Module keinen Unterschied macht, ob eine Wallbox per Modbus oder OCPP angebunden ist.'],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('What this instance does: the splitter is the OCPP “Central System” — the counterpart that wallboxes connect to via WebSocket. It accepts any number of simultaneous wallbox connections, tells them apart by their charge point identity (the last path segment of the URL) and forwards every incoming OCPP message to the matching “OCPPHub Charge Point” instance. This splitter instance itself shows no individual wallbox and no charging power — that is the sole responsibility of the charge point instance.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('📦 Instance model at a glance: splitter (this instance, exactly once) → several “OCPPHub Charge Point” instances (one per wallbox/connector) → optionally “OCPPHub Configurator” (handy for the first setup, shows wallboxes that are already connected but not yet created, for one-click creation). Each charge point instance must be connected to THIS splitter (you select it at the top of the charge point form, under the interface “Gateway”) — this is NOT derived automatically from the object tree position, because instances can be moved freely to other categories in the console without anything changing in the actual assignment.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('🔌 Set up a wallbox: enter the following as the backend/server URL in the wallbox’s own OCPP configuration: %s/<Charge-Point-Identity>. <Charge-Point-Identity> is a freely selectable name that the wallbox itself sends with every message (e.g. “WB1”) — it does NOT have to be created here beforehand, it appears automatically in the “OCPPHub Configurator” after the first connection attempt. The subprotocol is “ocpp1.6”, the message format is OCPP-J (JSON over WebSocket) — no separate port, no external process, Symcon handles the WebSocket handshake completely itself through its built-in hook mechanism.', $this->hookPath())],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ Scope (current state): complete OCPP 1.6J core protocol, standalone PV surplus charging as a fallback without EMS, reservation, and — from operating mode ② — central RFID authorization with customer management/consumption limits (see the “OCPPHub Billing” instance). Deliberately NOT included YET: tariffs/cost calculation, reports/CSV export, reservation fee, load balancing across several of your own charge points — that is stage 3 (see `.docs/pflichtenheft.md`).')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('🔎 Troubleshooting: if a wallbox does not report in, first enable the debug output of this instance (console → this instance → debug messages) and wait for a connection attempt by the wallbox — every incoming request is logged there with method and path before anything is checked. If nothing arrives at all: check the URL/path on the wallbox. If something arrives but is rejected: usually Basic Auth (see below) or an OCPP detail of this wallbox that is not yet understood — please report it on GitHub.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('⚠️ Untested against most OCPP 1.6J wallboxes except go-e — for other manufacturers, please give feedback via GitHub if something does not fit (measurand names/units in MeterValues, ChargingRateUnit in SetChargingProfile).')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('• go-e Gemini/HOME+: OCPP 1.6J from firmware 56.1 (ideally 56.8 or later), activation via app, WSS + HTTP Basic Auth recommended. Reference/test hardware of this module, see “What’s new” above for the current live test status.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('• KEBA P30: OCPP 1.6 only on the x-series — the c-series cannot do OCPP (use ChargerHub via Modbus/UDP there).')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('• Alfen Eve (Single/Double Pro-line): OCPP is the native primary protocol there, should work well — not tested myself yet.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('• Heidelberg Energy Control: can NOT do OCPP (Modbus RTU only) — use ChargerHub for it, not OCPPHub.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('🧩 Stack: OCPPHub is the OCPP sibling module of ChargerHub (Modbus TCP) — both report wallboxes to the EMS and the dashboard through a contract with identical fields (`OHUB_GetFunctions`/`CHUB_GetFunctions`), so it makes no difference to the consuming modules whether a wallbox is connected via Modbus or OCPP.')],
                     ],
                 ],
                 $this->connectionsPanel(),
                 [
                     'type'    => 'CheckBox',
                     'name'    => 'Active',
-                    'caption' => 'Aktiv',
+                    'caption' => OHUB_Text::t('Active'),
                 ],
                 [
                     'type'    => 'CheckBox',
                     'name'    => 'Vorfuehrmodus',
-                    'caption' => '🎪 Vorführmodus — echte Ladesteuerung deaktiviert',
+                    'caption' => OHUB_Text::t('🎪 Demo mode — real charging control disabled'),
                 ],
-                ['type' => 'Label', 'caption' => '⚠️ NUR für eine öffentlich zugängliche Demo-/Vorführ-Instanz gedacht: lehnt „Ladefreigabe"/Stromlimit sowie Änderungen in der Kundenverwaltung serverseitig ab (nicht nur ausgeblendet) — Dietmars echte Wallbox lässt sich dann über diese Instanz nicht mehr schalten, auch nicht durch das eigenständige PV-Überschussladen. Für den normalen Betrieb AUS lassen.'],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('⚠️ ONLY intended for a publicly accessible demo instance: rejects “charge enable”/current limit as well as changes in the customer management on the server side (not just hidden) — Dietmar’s real wallbox can then no longer be switched through this instance, not even by the standalone PV surplus charging. Leave OFF for normal operation.')],
                 [
                     'type'    => 'Label',
-                    'caption' => 'WebSocket-Endpunkt für Wallboxen: ' . $this->hookPath() . '/<Charge-Point-Identity>',
+                    'caption' => OHUB_Text::t('WebSocket endpoint for wallboxes: %s/<Charge-Point-Identity>', $this->hookPath()),
                 ],
                 [
                     'type'    => 'Select',
                     'name'    => 'Betriebsart',
-                    'caption' => 'Betriebsart',
+                    'caption' => OHUB_Text::t('Operating mode'),
                     'width'   => '560px',
                     'options' => [
-                        ['caption' => '① Einzelnutzer — kein RFID-Zwang, jede Karte wird angenommen', 'value' => 1],
-                        ['caption' => '② Mehrere Nutzer — zentrale Autorisierung über die Abrechnung-Instanz', 'value' => 2],
+                        ['caption' => OHUB_Text::t('① Single user — no RFID required, every card is accepted'), 'value' => 1],
+                        ['caption' => OHUB_Text::t('② Multiple users — central authorization via the Billing instance'), 'value' => 2],
                     ],
                 ],
-                ['type' => 'Label', 'caption' => 'ℹ️ Bei ① werden Kundenverwaltung/Verbrauchslimits in der „OCPPHub Abrechnung"-Instanz zwar schon angelegt (sie existiert immer), aber NICHT ausgewertet — jede Karte lädt ungeprüft. Bei ② wird jede Kartenauflage gegen die dort gepflegten Zugänge geprüft. Reservierungen (siehe Ladepunkt-Instanz) werden unabhängig von der Betriebsart durchgesetzt, sobald eine aktiv ist.'],
-                ['type' => 'Label', 'caption' => '⚠️ „OCPPHub Abrechnung" wird automatisch als DIREKTES KIND DIESER Splitter-Instanz angelegt (im Objektbaum darunter zu finden) — ein bewusst ungewöhnliches Muster (sonst legt bei uns keine Instanz von sich aus eine Konfigurationsinstanz unter sich selbst an), aber Standard in OCPPHub. Lege NIEMALS selbst zusätzlich eine „OCPPHub Abrechnung"-Instanz an (z. B. über die Modulverwaltung) — eine solche zweite Instanz wird von diesem Splitter nie verwendet, egal wo im Baum sie liegt, und jede darin gepflegte Karte/jeder Kunde bleibt wirkungslos.'],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ With ①, the customer management/consumption limits can already be set up in the “OCPPHub Billing” instance (it always exists) but are NOT evaluated — every card charges unchecked. With ②, every card presentation is checked against the access entries maintained there. Reservations (see the charge point instance) are enforced regardless of the operating mode as soon as one is active.')],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('⚠️ “OCPPHub Billing” is created automatically as a DIRECT CHILD OF THIS splitter instance (found below it in the object tree) — a deliberately unusual pattern (no other instance in this stack creates a configuration instance below itself on its own), but standard in OCPPHub. NEVER create an “OCPPHub Billing” instance yourself in addition (e.g. via the module management) — such a second instance is never used by this splitter, no matter where in the tree it sits, and every card/customer maintained in it stays without effect.')],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => '🔐 Basic-Auth (optional)',
+                    'caption' => OHUB_Text::t('🔐 Basic Auth (optional)'),
                     'items'   => [
-                        ['type' => 'Label', 'caption' => 'Nur nötig, falls Symcon aus einem nicht vollständig vertrauenswürdigen Netz erreichbar ist (z. B. wenn der WebSocket-Endpunkt über eine Portweiterleitung von außerhalb erreichbar gemacht wird) — im reinen Heimnetz meist verzichtbar. Leerer Benutzername = kein Basic-Auth, jede Wallbox darf sich verbinden.'],
-                        ['type' => 'Label', 'caption' => 'Ist ein Benutzername gesetzt, muss die Wallbox in ihrer eigenen OCPP-Konfiguration genau denselben Benutzernamen und dasselbe Passwort für HTTP-Basic-Auth hinterlegen — sonst wird jede Verbindung mit HTTP 401 abgewiesen (sichtbar in der Debug-Ausgabe als „Basic-Auth abgelehnt").'],
-                        ['type' => 'Label', 'caption' => 'Zugangsdaten-Konvention (Verbund-Regel 7): das Passwort wird nach der Übernahme sofort gehasht gespeichert und dieses Feld hier automatisch geleert — beim erneuten Öffnen steht hier also nie das bestehende Passwort im Klartext, auch nicht für Dich selbst. Zum Ändern einfach ein neues eintragen; leer lassen behält das bisherige Passwort bei.'],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('Only needed if Symcon is reachable from a network that is not fully trustworthy (e.g. if the WebSocket endpoint is made reachable from outside through a port forward) — usually unnecessary on a plain home network. An empty user name = no Basic Auth, every wallbox may connect.')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('If a user name is set, the wallbox must store exactly the same user name and password for HTTP Basic Auth in its own OCPP configuration — otherwise every connection is rejected with HTTP 401 (visible in the debug output as “Basic Auth rejected”).')],
+                        ['type' => 'Label', 'caption' => OHUB_Text::t('Credentials convention (stack rule 7): after applying, the password is stored hashed immediately and this field is cleared automatically — so when you open it again, the existing password is never in plain text here, not even for you. To change it, just enter a new one; leaving it empty keeps the existing password.')],
                         [
                             'type'    => 'ValidationTextBox',
                             'name'    => 'BasicAuthUsername',
-                            'caption' => 'Benutzername',
+                            'caption' => OHUB_Text::t('User name'),
                         ],
                         [
                             'type'    => 'PasswordTextBox',
                             'name'    => 'BasicAuthPassword',
-                            'caption' => 'Neues Passwort (leer lassen, um das bestehende zu behalten)',
+                            'caption' => OHUB_Text::t('New password (leave empty to keep the existing one)'),
                         ],
                     ],
                 ],
             ],
             'actions' => [
-                ['type' => 'Button', 'caption' => '🔄 Übernehmen erzwingen (ohne Formularänderung)', 'onClick' => "IPS_ApplyChanges(\$id); echo '✅ ApplyChanges() ausgeführt.';"],
+                ['type' => 'Button', 'caption' => OHUB_Text::t('🔄 Force apply (without changing the form)'), 'onClick' => "IPS_ApplyChanges(\$id); echo '" . OHUB_Text::t('✅ ApplyChanges() executed.') . "';"],
             ],
             'status' => [
-                ['code' => 102, 'icon' => 'active', 'caption' => 'Aktiv'],
-                ['code' => 104, 'icon' => 'inactive', 'caption' => 'Deaktiviert'],
+                ['code' => 102, 'icon' => 'active', 'caption' => OHUB_Text::t('Active')],
+                ['code' => 104, 'icon' => 'inactive', 'caption' => OHUB_Text::t('Deactivated')],
             ],
         ];
 
@@ -377,11 +387,11 @@ class OCPPHubSplitter extends IPSModule
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
                 'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
-                'caption' => '💬 Feedback',
+                'caption' => OHUB_Text::t('💬 Feedback'),
                 'items' => [
-                    ['type' => 'Label', 'caption' => '🧪 OCPPHub ist früher Beta-Stand — Rückmeldungen willkommen im Symcon-Forum.'],
-                    ['type' => 'Button', 'caption' => 'Zum Forum-Thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
-                    ['type' => 'Button', 'caption' => 'Nicht mehr anzeigen', 'onClick' => 'OHUB_DismissReviewHint($id);'],
+                    ['type' => 'Label', 'caption' => OHUB_Text::t('🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.')],
+                    ['type' => 'Button', 'caption' => OHUB_Text::t('Go to forum thread'), 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
+                    ['type' => 'Button', 'caption' => OHUB_Text::t('Do not show again'), 'onClick' => 'OHUB_DismissReviewHint($id);'],
                 ],
             ];
         }
@@ -414,14 +424,14 @@ class OCPPHubSplitter extends IPSModule
     {
         return [
             'type' => 'ExpansionPanel', 'expanded' => false,
-            'caption' => '🧡  Über dieses Modul',
+            'caption' => OHUB_Text::t('🧡  About this module'),
             'items' => [
-                ['type' => 'Label', 'caption' => 'Entstanden aus echter Begeisterung für die eigene Anlage — und ein paar durchgetippten Abenden. Trotzdem: Software-Hobby hin oder her, das hier ist geistiges Eigentum und echte Arbeit steckt drin.'],
-                ['type' => 'Label', 'caption' => 'Lizenz: PolyForm Noncommercial 1.0.0 — privat und nicht-kommerziell frei nutzbar, für den gewerblichen Einsatz braucht es eine gesonderte Lizenz vom Rechteinhaber.'],
-                ['type' => 'Button', 'caption' => 'Lizenztext ansehen', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
-                ['type' => 'Label', 'caption' => 'Gewerbliche Nutzung oder Fragen zur Lizenz? Einfach melden: dietmar@gureth.eu'],
-                ['type' => 'Label', 'caption' => 'Gefällt dir das Modul und du möchtest trotzdem etwas dalassen? Über eine kleine Spende freue ich mich — völlig freiwillig, keine Gegenleistung nötig.'],
-                ['type' => 'Button', 'caption' => '☕  Spenden via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.')],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.')],
+                ['type' => 'Button', 'caption' => OHUB_Text::t('View license text'), 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu')],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.')],
+                ['type' => 'Button', 'caption' => OHUB_Text::t('☕  Donate via PayPal'), 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
             ],
         ];
     }
@@ -433,12 +443,12 @@ class OCPPHubSplitter extends IPSModule
         }
         return [
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
-            'caption' => '👋 Wozu dieses Modul?',
+            'caption' => OHUB_Text::t('👋 What is this module for?'),
             'items' => [
-                ['type' => 'Label', 'caption' => 'OCPPHub bindet Wallboxen über das Herstellerstandard-Protokoll OCPP 1.6J an — die Wallbox verbindet sich per WebSocket zu Symcon, nicht umgekehrt. Diese Splitter-Instanz ist die Gegenstelle („Central System"): sie nimmt beliebig viele Wallbox-Verbindungen entgegen und verteilt eingehende Nachrichten an die passende „OCPPHub Ladepunkt"-Instanz.'],
-                ['type' => 'Label', 'caption' => 'Der Nutzen: Ladefreigabe/Stromlimit setzen, Ladeleistung/Energie als normale Symcon-Variablen, eigenständiges PV-Überschussladen auch ohne EMS, sowie optional zentrale RFID-Autorisierung mit Kundenverwaltung/Verbrauchslimits — als Grundlage für Dashboards, ein Energiemanagement-System (EMS) oder einfach, um eine Wallbox aus Symcon heraus zu steuern.'],
-                ['type' => 'Label', 'caption' => 'Praktischer Einstieg: „OCPPHub Konfigurator" zeigt bereits verbundene, aber noch nicht angelegte Wallboxen zum Ein-Klick-Anlegen. Kann eine Wallbox kein OCPP (z. B. Heidelberg Energy Control), ist ChargerHub (Modbus TCP) das passende Geschwistermodul.'],
-                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUB_AckPurposeIntro($id);'],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('OCPPHub connects wallboxes through the manufacturer-independent standard protocol OCPP 1.6J — the wallbox connects to Symcon via WebSocket, not the other way round. This splitter instance is the counterpart (“Central System”): it accepts any number of wallbox connections and distributes incoming messages to the matching “OCPPHub Charge Point” instance.')],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('The benefit: set charge enable/current limit, charging power/energy as ordinary Symcon variables, standalone PV surplus charging even without an EMS, and optionally central RFID authorization with customer management/consumption limits — as a basis for dashboards, an energy management system (EMS) or simply to control a wallbox from within Symcon.')],
+                ['type' => 'Label', 'caption' => OHUB_Text::t('Easy way to get started: “OCPPHub Configurator” shows wallboxes that are already connected but not yet created, for one-click creation. If a wallbox cannot do OCPP (e.g. Heidelberg Energy Control), ChargerHub (Modbus TCP) is the matching sibling module.')],
+                ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUB_AckPurposeIntro($id);'],
             ],
         ];
     }
@@ -463,12 +473,12 @@ class OCPPHubSplitter extends IPSModule
         if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
             return null;
         }
-        $items = [['type' => 'Label', 'caption' => '🆕 Neu in diesem Modul — bitte kurz ansehen und ggf. die Einstellungen prüfen:']];
+        $items = [['type' => 'Label', 'caption' => OHUB_Text::t('🆕 New in this module — please take a quick look and check your settings if needed:')]];
         foreach (self::NEWS_ITEMS as $line) {
-            $items[] = ['type' => 'Label', 'caption' => '• ' . $line];
+            $items[] = ['type' => 'Label', 'caption' => '• ' . OHUB_Text::t($line)];
         }
-        $items[] = ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'OHUB_AckNews($id);'];
-        return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => '🆕 Neu in Version ' . self::NEWS_VERSION, 'expanded' => true, 'items' => $items];
+        $items[] = ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUB_AckNews($id);'];
+        return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => OHUB_Text::t('🆕 New in version %s', self::NEWS_VERSION), 'expanded' => true, 'items' => $items];
     }
 
     public function AckNews(): void
@@ -486,7 +496,7 @@ class OCPPHubSplitter extends IPSModule
         $lines = [];
 
         if (!$this->ReadPropertyBoolean('Active')) {
-            $lines[] = '⚠️ Dieser Splitter ist deaktiviert: eingehende Wallbox-Nachrichten werden ignoriert, und er meldet dem Verbund keine Ladepunkte.';
+            $lines[] = OHUB_Text::t('⚠️ This splitter is deactivated: incoming wallbox messages are ignored, and it reports no charge points to the stack.');
         }
 
         // Abrechnung (Betriebsart-abhängig)
@@ -494,11 +504,11 @@ class OCPPHubSplitter extends IPSModule
         $betriebsart = $this->ReadPropertyInteger('Betriebsart');
         if ($abrId > 0 && @IPS_InstanceExists($abrId)) {
             $wirkung = $betriebsart === 2
-                ? 'Betriebsart ②: jede Kartenauflage wird gegen die dort gepflegten Zugänge geprüft.'
-                : 'Betriebsart ①: dort gepflegte Zugänge werden NICHT ausgewertet, jede Karte lädt.';
-            $lines[] = '✅ Abrechnung #' . $abrId . ' „' . IPS_GetName($abrId) . '" verbunden. ' . $wirkung;
+                ? OHUB_Text::t('Operating mode ②: every card presentation is checked against the access entries maintained there.')
+                : OHUB_Text::t('Operating mode ①: access entries maintained there are NOT evaluated, every card charges.');
+            $lines[] = OHUB_Text::t('✅ Billing #%d “%s” connected. %s', $abrId, IPS_GetName($abrId), $wirkung);
         } else {
-            $lines[] = '⚠️ Keine Abrechnung-Instanz hinterlegt. Sie wird beim nächsten „Übernehmen" automatisch angelegt; bis dahin gibt es weder Kundenverwaltung noch Kartenprüfung.';
+            $lines[] = OHUB_Text::t('⚠️ No Billing instance stored. It will be created automatically at the next “Apply changes”; until then there is neither customer management nor card checking.');
         }
 
         // Ladepunkte dieses Splitters
@@ -512,18 +522,18 @@ class OCPPHubSplitter extends IPSModule
             $ownCpids[] = $cpid;
             $ts = (int)($entry['lastSeenAt'] ?? 0);
             $frisch = $ts > 0 && (time() - $ts) < 900;
-            $zustand = !empty($entry['deactivated']) ? 'deaktiviert' : ($frisch ? 'verbunden' : 'nicht verbunden');
-            $rows[] = ($cpid !== '' ? $cpid : '(ohne Identity)') . ' #' . $lpId . ' (' . $zustand . ', zuletzt ' . $this->agoText($ts) . ')';
+            $zustand = !empty($entry['deactivated']) ? OHUB_Text::t('deactivated') : ($frisch ? OHUB_Text::t('connected') : OHUB_Text::t('not connected'));
+            $rows[] = OHUB_Text::t('%s #%d (%s, last seen %s)', $cpid !== '' ? $cpid : OHUB_Text::t('(without identity)'), $lpId, $zustand, $this->agoText($ts));
         }
         if (count($rows) > 0) {
-            $lines[] = '✅ ' . count($rows) . ' Ladepunkt(e) zugeordnet: ' . implode('; ', $rows) . '.';
+            $lines[] = OHUB_Text::t('✅ %d charge point(s) assigned: %s.', count($rows), implode('; ', $rows));
         }
         $ohne = array_values(array_diff(array_keys($seen), $ownCpids));
         if (count($ohne) > 0) {
-            $lines[] = '⚠️ Gemeldet, aber ohne Ladepunkt-Instanz: ' . implode(', ', $ohne) . '. Im „OCPPHub Konfigurator" mit einem Klick anlegen.';
+            $lines[] = OHUB_Text::t('⚠️ Reported, but without a charge point instance: %s. Create them with one click in the “OCPPHub Configurator”.', implode(', ', $ohne));
         }
         if (count($rows) === 0 && count($ohne) === 0) {
-            $lines[] = 'ℹ️ Noch keine Wallbox hat sich hier gemeldet und kein Ladepunkt ist zugeordnet. Endpunkt (siehe unten) in der Wallbox eintragen.';
+            $lines[] = OHUB_Text::t('ℹ️ No wallbox has reported here yet and no charge point is assigned. Enter the endpoint (see below) on the wallbox.');
         }
 
         $items = [];
@@ -534,25 +544,25 @@ class OCPPHubSplitter extends IPSModule
             }
             $items[] = $label;
         }
-        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Verbindungen im Verbund', 'expanded' => true, 'items' => $items];
+        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => OHUB_Text::t('🔗 Connections in the stack'), 'expanded' => true, 'items' => $items];
     }
 
     private function agoText(int $ts): string
     {
         if ($ts <= 0) {
-            return 'nie';
+            return OHUB_Text::t('never');
         }
         $d = max(0, time() - $ts);
         if ($d < 90) {
-            return 'vor ' . $d . ' s';
+            return OHUB_Text::t('%d s ago', $d);
         }
         if ($d < 5400) {
-            return 'vor ' . (int)round($d / 60) . ' Min';
+            return OHUB_Text::t('%d min ago', (int)round($d / 60));
         }
         if ($d < 172800) {
-            return 'vor ' . (int)round($d / 3600) . ' Std';
+            return OHUB_Text::t('%d h ago', (int)round($d / 3600));
         }
-        return 'vor ' . (int)round($d / 86400) . ' Tagen';
+        return OHUB_Text::t('%d days ago', (int)round($d / 86400));
     }
 
     private function hookPath(): string
@@ -573,13 +583,13 @@ class OCPPHubSplitter extends IPSModule
         $this->SendDebug('OCPPHub Hook', ($_SERVER['REQUEST_METHOD'] ?? '?') . ' ' . ($_SERVER['REQUEST_URI'] ?? '?'), 0);
 
         if (!$this->ReadPropertyBoolean('Active')) {
-            $this->SendDebug('OCPPHub', 'Instanz inaktiv — Anfrage ignoriert.', 0);
+            $this->SendDebug('OCPPHub', OHUB_Text::t('Instance inactive — request ignored.'), 0);
             return;
         }
 
         $raw = file_get_contents('php://input');
         if ($raw === '' || $raw === false) {
-            $this->SendDebug('OCPPHub', 'Leerer Anfrage-Body (evtl. reiner WebSocket-Handshake ohne Daten-Frame).', 0);
+            $this->SendDebug('OCPPHub', OHUB_Text::t('Empty request body (possibly a pure WebSocket handshake without a data frame).'), 0);
             return;
         }
 
@@ -587,7 +597,7 @@ class OCPPHubSplitter extends IPSModule
         $uri = $_SERVER['REQUEST_URI'] ?? '';
         $pos = strpos($uri, $prefix);
         if ($pos === false) {
-            $this->SendDebug('OCPPHub', 'Hook ohne Charge-Point-Identity: ' . $uri, 0);
+            $this->SendDebug('OCPPHub', OHUB_Text::t('Hook without charge point identity: %s', $uri), 0);
             return;
         }
         $cpid = rawurldecode(trim(strtok(substr($uri, $pos + strlen($prefix)), '?')));
@@ -617,7 +627,7 @@ class OCPPHubSplitter extends IPSModule
         // liefen deshalb unbemerkt weiter.
         $message = json_decode($raw, true);
         if (!is_array($message) || count($message) < 3) {
-            $this->SendDebug('OCPPHub', 'Ungültiges OCPP-J-Frame: ' . $raw, 0);
+            $this->SendDebug('OCPPHub', OHUB_Text::t('Invalid OCPP-J frame: %s', $raw), 0);
             return;
         }
 
@@ -638,7 +648,7 @@ class OCPPHubSplitter extends IPSModule
                 $isFailure = (int)$message[0] === self::OCPP_CALLERROR || $this->responseIndicatesFailure($message[2] ?? null);
                 $action = $this->resolvePendingCall((string)($message[1] ?? ''));
                 if ($isFailure) {
-                    $this->LogMessage('Ablehnung/Fehler auf gesendeten Aufruf [' . $cpid . ']: ' . $raw, KL_WARNING);
+                    $this->LogMessage(OHUB_Text::t('Rejection/error on a call that was sent [%s]: %s', $cpid, $raw), KL_WARNING);
                 } elseif ($action === 'GetConfiguration') {
                     // Live-Fund 31.08.2026 (Dietmar, am eigenen Leib erlebt): eine
                     // ERFOLGREICHE Antwort ohne "status"-Feld (z. B. GetConfiguration.conf
@@ -648,7 +658,7 @@ class OCPPHubSplitter extends IPSModule
                     // GetConfiguration wird nur gezielt/selten manuell zur Fehlersuche
                     // gesendet (nicht im Normalbetrieb) — darum hier bewusst IMMER
                     // dauerhaft geloggt, nicht nur bei Ablehnung, kein Spam-Risiko.
-                    $this->LogMessage('Antwort auf GetConfiguration [' . $cpid . ']: ' . $raw, KL_MESSAGE);
+                    $this->LogMessage(OHUB_Text::t('Response to GetConfiguration [%s]: %s', $cpid, $raw), KL_MESSAGE);
                     $this->forwardStationCapabilities($cpid, $message[2] ?? null);
                 }
                 // Ladeablehnung erklären (Diagnose-Feature 31.08.2026, siehe
@@ -676,7 +686,7 @@ class OCPPHubSplitter extends IPSModule
                 // berechtigter Einwand: "es kann doch nicht sein, dass man
                 // solche Tricks und Unfähigkeiten leben soll".
                 if ($action === 'RemoteStopTransaction' && $isFailure) {
-                    $this->LogMessage('RemoteStopTransaction abgelehnt [' . $cpid . '] — versuche Stromlimit 0 A als Ausweichweg.', KL_WARNING);
+                    $this->LogMessage(OHUB_Text::t('RemoteStopTransaction rejected [%s] — trying a current limit of 0 A as a fallback.', $cpid), KL_WARNING);
                     $this->SetCurrentLimit($cpid, 0.0);
                 }
                 // Herstellerneutraler Ausweichweg (01.09.2026): schlägt
@@ -706,9 +716,9 @@ class OCPPHubSplitter extends IPSModule
                     // ansteht, und den Ausweichweg nur auslösen, wenn nicht.
                     $alreadyCharging = (int)(($this->kindZustand($cpid)['state'] ?? 0)) === 2;
                     if ($alreadyCharging) {
-                        $this->LogMessage('RemoteStartTransaction abgelehnt [' . $cpid . '] — Ladepunkt lädt aber bereits (vermutlich andere Sitzung), Reset/frc-Ausweichweg übersprungen.', KL_WARNING);
+                        $this->LogMessage(OHUB_Text::t('RemoteStartTransaction rejected [%s] — but the charge point is already charging (probably another session), reset/frc fallback skipped.', $cpid), KL_WARNING);
                     } else {
-                        $this->LogMessage('RemoteStartTransaction abgelehnt [' . $cpid . '] — sende Soft-Reset als herstellerneutralen Ausweichweg.', KL_WARNING);
+                        $this->LogMessage(OHUB_Text::t('RemoteStartTransaction rejected [%s] — sending a soft reset as a manufacturer-neutral fallback.', $cpid), KL_WARNING);
                         $this->Reset($cpid, 'Soft');
                         // go-e-spezifisch, additiv zum Reset oben (siehe
                         // tryClearGoeForceLock()-Docblock) — bei jedem
@@ -751,7 +761,7 @@ class OCPPHubSplitter extends IPSModule
             // stillschweigend jede Verbindung sperren (das wäre ein Total-
             // Lockout ohne jede sichtbare Fehlermeldung), sondern vorerst
             // durchlassen und sichtbar loggen.
-            $this->SendDebug('OCPPHub', 'Basic-Auth-Nutzername gesetzt, aber kein Passwort hinterlegt — Zugriff vorerst ungeprüft erlaubt.', 0);
+            $this->SendDebug('OCPPHub', OHUB_Text::t('Basic Auth user name set, but no password stored — access temporarily allowed unchecked.'), 0);
             return true;
         }
         [$gotUser, $gotPass] = $this->getBasicAuthCredentials();
@@ -760,8 +770,7 @@ class OCPPHubSplitter extends IPSModule
             $headerPresent = ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '') !== '';
             $this->SendDebug(
                 'OCPPHub',
-                'Basic-Auth abgelehnt (erhaltener Nutzername: "' . $gotUser . '", '
-                    . 'Authorization-Header überhaupt vorhanden: ' . ($headerPresent ? 'ja' : 'nein') . ').',
+                OHUB_Text::t('Basic Auth rejected (user name received: “%s”, Authorization header present at all: %s).', $gotUser, $headerPresent ? OHUB_Text::t('yes') : OHUB_Text::t('no')),
                 0
             );
         }
@@ -910,12 +919,12 @@ class OCPPHubSplitter extends IPSModule
     {
         $a = json_decode((string)$JSONString, true);
         if (!is_array($a)) {
-            return (string)json_encode(['ok' => false, 'fehler' => 'Ungültige Anfrage.']);
+            return (string)json_encode(['ok' => false, 'fehler' => OHUB_Text::t('Invalid request.')]);
         }
         try {
             return (string)json_encode(['ok' => true, 'daten' => $this->bearbeiteAnfrage($a)]);
         } catch (\Throwable $e) {
-            $this->LogMessage('Anfrage „' . (string)($a['Aktion'] ?? '?') . '" eines Kindes fehlgeschlagen: ' . $e->getMessage(), KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Request “%s” of a child failed: %s', (string)($a['Aktion'] ?? '?'), $e->getMessage()), KL_WARNING);
             return (string)json_encode(['ok' => false, 'fehler' => $e->getMessage()]);
         }
     }
@@ -953,7 +962,7 @@ class OCPPHubSplitter extends IPSModule
             case 'AbrechnungGebunden':
                 return ['gebunden' => (int)($a['InstanzID'] ?? 0) > 0 && (int)($a['InstanzID'] ?? 0) === $this->ReadAttributeInteger('AbrechnungID')];
         }
-        throw new \RuntimeException('Unbekannte Aktion.');
+        throw new \RuntimeException(OHUB_Text::t('Unknown action.'));
     }
 
     // Für den Konfigurator: gesehene, aber noch nicht angelegte Charge-Point-
@@ -1089,7 +1098,7 @@ class OCPPHubSplitter extends IPSModule
         // keine neue Ladung autorisieren, unabhängig von Betriebsart/
         // Reservierung/Kundenverwaltung.
         if ($hatLadepunkt && $this->zustandGesperrt($zustand)) {
-            $this->anKind($cpid, 'Blockiert', ['Grund' => 'Dieser Ladepunkt ist deaktiviert oder als Duplikat markiert — eine andere Instanz ist zuständig.']);
+            $this->anKind($cpid, 'Blockiert', ['Grund' => OHUB_Text::t('This charge point is deactivated or marked as a duplicate — another instance is responsible.')]);
             return 'Blocked';
         }
 
@@ -1191,7 +1200,7 @@ class OCPPHubSplitter extends IPSModule
         }
         $idTag = (string)($this->anAbrechnung('IdTagZuFahrzeug', ['Name' => $vehicleName])['idTag'] ?? '');
         if ($idTag === '') {
-            $this->anKind($cpid, 'Blockiert', ['Grund' => 'Kein Zugang für „' . $vehicleName . '" registriert — bitte Karte anlernen oder Zugang anlegen.']);
+            $this->anKind($cpid, 'Blockiert', ['Grund' => OHUB_Text::t('No access entry registered for “%s” — please teach in the card or create an access entry.', $vehicleName)]);
             return;
         }
         if ($this->checkIdTag($cpid, $idTag) !== 'Accepted') {
@@ -1240,27 +1249,27 @@ class OCPPHubSplitter extends IPSModule
     private function explainAuthStatus(string $status, string $reason): string
     {
         if ($status === 'Invalid') {
-            return 'Karte/Zugang ist nicht registriert.';
+            return OHUB_Text::t('Card/access entry is not registered.');
         }
         if ($status === 'Expired') {
-            return 'Zugang ist abgelaufen.';
+            return OHUB_Text::t('Access entry has expired.');
         }
         if ($status === 'Blocked') {
             switch ($reason) {
                 case 'zugang-gesperrt':
-                    return 'Zugang ist gesperrt.';
+                    return OHUB_Text::t('Access entry is blocked.');
                 case 'ausserhalb-zeitfenster':
-                    return 'Außerhalb des erlaubten Zeitfensters für diesen Zugang.';
+                    return OHUB_Text::t('Outside the permitted time window for this access entry.');
                 case 'kein-kunde-zugeordnet':
-                    return 'Zugang ist keinem aktiven Kunden zugeordnet.';
+                    return OHUB_Text::t('Access entry is not assigned to an active customer.');
                 case 'kunde-gesperrt':
-                    return 'Kunde ist gesperrt.';
+                    return OHUB_Text::t('Customer is blocked.');
                 case 'limit-erreicht':
-                    return 'Verbrauchslimit ist erreicht.';
+                    return OHUB_Text::t('Consumption limit has been reached.');
                 case 'reserviert':
-                    return 'Für diesen Zeitraum ist die Wallbox reserviert.';
+                    return OHUB_Text::t('The wallbox is reserved for this period.');
                 default:
-                    return 'Zugang ist gesperrt.';
+                    return OHUB_Text::t('Access entry is blocked.');
             }
         }
         return '';
@@ -1424,11 +1433,11 @@ class OCPPHubSplitter extends IPSModule
         // direkt aufruft, ohne über OCPPHubLadepunkt::RequestAction() zu
         // laufen. Siehe IsDemoMode().
         if ($this->IsDemoMode()) {
-            $this->LogMessage('Vorführmodus aktiv — RemoteStartTransaction [' . $cpid . '] unterdrückt, keine echte Ladesteuerung gesendet.', KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Demo mode is active — RemoteStartTransaction [%s] suppressed, no real charging control sent.', $cpid), KL_WARNING);
             return;
         }
         if ($this->isWriteBlocked($cpid)) {
-            $this->LogMessage('Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — RemoteStartTransaction unterdrückt.', KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Charge point [%s] is blocked (duplicate or deactivated) — RemoteStartTransaction suppressed.', $cpid), KL_WARNING);
             return;
         }
         $this->sendCall($cpid, 'RemoteStartTransaction', ['connectorId' => 1, 'idTag' => $idTag]);
@@ -1449,11 +1458,11 @@ class OCPPHubSplitter extends IPSModule
     public function Reset(string $cpid, string $Type): void
     {
         if ($this->IsDemoMode()) {
-            $this->LogMessage('Vorführmodus aktiv — Reset [' . $cpid . '] unterdrückt.', KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Demo mode is active — Reset [%s] suppressed.', $cpid), KL_WARNING);
             return;
         }
         if ($this->isWriteBlocked($cpid)) {
-            $this->LogMessage('Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — Reset unterdrückt.', KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Charge point [%s] is blocked (duplicate or deactivated) — Reset suppressed.', $cpid), KL_WARNING);
             return;
         }
         $this->sendCall($cpid, 'Reset', ['type' => $Type]);
@@ -1508,7 +1517,7 @@ class OCPPHubSplitter extends IPSModule
         $chargerHubId = $this->findChargerHubInstanceForCurrentIp();
         if ($chargerHubId !== 0 && function_exists('CHUB_ClearForceLock')) {
             $cleared = CHUB_ClearForceLock($chargerHubId);
-            $this->LogMessage('ChargerHub-Kooperation [' . $cpid . ']: ClearForceLock() -> ' . ($cleared ? 'erfolgreich' : 'kein Effekt') . '.', KL_MESSAGE);
+            $this->LogMessage(OHUB_Text::t('ChargerHub cooperation [%s]: ClearForceLock() -> %s.', $cpid, $cleared ? OHUB_Text::t('successful') : OHUB_Text::t('no effect')), KL_MESSAGE);
             if ($cleared) {
                 return;
             }
@@ -1518,7 +1527,7 @@ class OCPPHubSplitter extends IPSModule
             return;
         }
         $ok = $this->writeModbusRegister($ip, 502, 1, 337, 0);
-        $this->LogMessage('go-e-Ausweichweg [' . $cpid . ']: FORCE_STATE per Modbus auf 0 setzen -> ' . ($ok ? 'erfolgreich' : 'fehlgeschlagen') . '.', KL_MESSAGE);
+        $this->LogMessage(OHUB_Text::t('go-e fallback [%s]: setting FORCE_STATE to 0 via Modbus -> %s.', $cpid, $ok ? OHUB_Text::t('successful') : OHUB_Text::t('failed')), KL_MESSAGE);
     }
 
     // Findet eine ChargerHub-Instanz mit derselben IP wie die aktuelle
@@ -1581,11 +1590,11 @@ class OCPPHubSplitter extends IPSModule
     public function SetCurrentLimit(string $cpid, float $ampere): void
     {
         if ($this->IsDemoMode()) {
-            $this->LogMessage('Vorführmodus aktiv — SetChargingProfile [' . $cpid . '] unterdrückt.', KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Demo mode is active — SetChargingProfile [%s] suppressed.', $cpid), KL_WARNING);
             return;
         }
         if ($this->isWriteBlocked($cpid)) {
-            $this->LogMessage('Ladepunkt [' . $cpid . '] ist gesperrt (Duplikat oder deaktiviert) — SetChargingProfile unterdrückt.', KL_WARNING);
+            $this->LogMessage(OHUB_Text::t('Charge point [%s] is blocked (duplicate or deactivated) — SetChargingProfile suppressed.', $cpid), KL_WARNING);
             return;
         }
         // TxDefaultProfile mit einer einzigen Periode — reicht für ein
@@ -1750,7 +1759,7 @@ class OCPPHubSplitter extends IPSModule
     {
         $wsInstances = @IPS_GetInstanceListByModuleID(self::WEBHOOK_CONTROL_GUID);
         if (!$wsInstances) {
-            $this->SendDebug('OCPPHub', 'Keine WebSocket-Server-Instanz gefunden — Nachricht nicht gesendet.', 0);
+            $this->SendDebug('OCPPHub', OHUB_Text::t('No WebSocket server instance found — message not sent.'), 0);
             return;
         }
         $json = json_encode($frame);

@@ -5,7 +5,9 @@
   "vendor": "",
   "aliases": [
     "NRG-Stack OCPPHub Konfigurator",
-    "OCPP-Wallbox Suche"
+    "OCPP-Wallbox Suche",
+    "OCPPHub Configurator",
+    "OCPP wallbox search"
   ],
   "url": "https://github.com/DG65/NRGOCPPHub",
   "parentRequirements": [

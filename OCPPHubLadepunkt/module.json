@@ -5,7 +5,9 @@
   "vendor": "",
   "aliases": [
     "NRG-Stack OCPPHub Ladepunkt",
-    "OCPP-Wallbox"
+    "OCPP-Wallbox",
+    "OCPPHub Charge Point",
+    "OCPP wallbox"
   ],
   "url": "https://github.com/DG65/NRGOCPPHub",
   "parentRequirements": [

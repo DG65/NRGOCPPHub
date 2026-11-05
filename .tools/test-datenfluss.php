@@ -60,13 +60,17 @@ final class Bus
     }
 }
 
+// Sprache des Prüfstands: Standard Deutsch (libs/locale.json), mit OHUB_SPRACHE=en die englischen Quelltexte.
+$locale = getenv('OHUB_SPRACHE') === 'en' ? [] : json_decode((string)file_get_contents(dirname(__DIR__) . '/libs/locale.json'), true)['translations']['de'];
+
 class IPSModule
 {
     public $InstanceID = 0;
     public array $props = [];
     public array $attrs = [];
     public array $werte = [];
-    public function __construct() {}
+    public function __construct($InstanceID = 0) {}
+    public function Translate($text) { return $GLOBALS['locale'][$text] ?? $text; }
     public function SendDebug(...$a) {}
     public function LogMessage($t, $l) { Bus::$log[] = [$this->InstanceID, $l, $t]; }
     public function ReadPropertyInteger($n) { return (int)($this->props[$n] ?? 0); }
@@ -225,17 +229,17 @@ function aufbau(int $betriebsart = 1): array
 {
     Bus::reset();
     $_SERVER['REMOTE_ADDR'] = '192.168.2.50';
-    $sp = Bus::add(100, new TSplitterRec(), G_SPLITTER);
+    $sp = Bus::add(100, new TSplitterRec(0), G_SPLITTER);
     $sp->props = ['Active' => true, 'Betriebsart' => $betriebsart];
     $sp->attrs['AbrechnungID'] = 300;
-    $l1 = Bus::add(201, new TLadepunkt(), G_LADEPUNKT, 100);
+    $l1 = Bus::add(201, new TLadepunkt(0), G_LADEPUNKT, 100);
     $l1->props = ['CPID' => 'WB1'];
-    $l2 = Bus::add(202, new TLadepunkt(), G_LADEPUNKT, 100);
+    $l2 = Bus::add(202, new TLadepunkt(0), G_LADEPUNKT, 100);
     $l2->props = ['CPID' => 'WB2'];
-    $ab = Bus::add(300, new TAbrechnung(), G_ABRECHNUNG, 100);
-    Bus::add(301, new TAbrechnung(), G_ABRECHNUNG, 100);   // zweite, vom Splitter nicht geführte Abrechnung
+    $ab = Bus::add(300, new TAbrechnung(0), G_ABRECHNUNG, 100);
+    Bus::add(301, new TAbrechnung(0), G_ABRECHNUNG, 100);   // zweite, vom Splitter nicht geführte Abrechnung
     // Splitter für Tests der Splitter-Seite ohne aufgezeichnete Kind-Befehle: eigene Instanz, gleiche Kinder
-    $echt = new OCPPHubSplitter();
+    $echt = new OCPPHubSplitter(0);
     $echt->props = $sp->props;
     $echt->attrs = $sp->attrs;
     Bus::add(101, $echt, G_SPLITTER);
@@ -346,15 +350,15 @@ pruefe('Inaktiver Splitter liefert keine Einträge', $sp->GetFunctions() === [])
 
 // Ohne Ladepunkte darf nichts passieren
 Bus::reset();
-$leer = Bus::add(100, new OCPPHubSplitter(), G_SPLITTER);
+$leer = Bus::add(100, new OCPPHubSplitter(0), G_SPLITTER);
 $leer->props = ['Active' => true, 'Betriebsart' => 1];
 privat($leer, 'handleCall', 'WB1', [2, 'u11', 'MeterValues', ['meterValue' => []]]);
 pruefe('Splitter ohne Kinder: Nachricht wird beantwortet, nichts bricht', antwortFrame('u11') !== null && $leer->GetFunctions() === []);
 
 // ---- 3) Kinder -> Splitter: Befehle gehen als Nachricht an den Elternteil -------------------
 Bus::reset();
-$rec = Bus::add(100, new TSplitterRec(), G_SPLITTER);
-$lp = Bus::add(201, new OCPPHubLadepunkt(), G_LADEPUNKT, 100);
+$rec = Bus::add(100, new TSplitterRec(0), G_SPLITTER);
+$lp = Bus::add(201, new OCPPHubLadepunkt(0), G_LADEPUNKT, 100);
 $lp->props = ['CPID' => 'WB2', 'ManagedBy' => 'none', 'MinCurrent' => 6, 'MaxCurrent' => 16];
 $lp->RequestAction('ctl_enable', true);
 pruefe('Ladefreigabe an: Splitter bekommt „ManuellStart“ mit der Kennung', in_array(['ManuellStart', 'WB2'], $rec->rec, true));
@@ -416,7 +420,7 @@ pruefe('Ladepunkt abschalten: Splitter löst ein go-e-Force-Lock', in_array(['Fo
 
 // Ohne Elternteil
 Bus::reset();
-$allein = Bus::add(201, new OCPPHubLadepunkt(), G_LADEPUNKT, 0);
+$allein = Bus::add(201, new OCPPHubLadepunkt(0), G_LADEPUNKT, 0);
 $allein->props = ['CPID' => 'WB2', 'ManagedBy' => 'none', 'MinCurrent' => 6, 'MaxCurrent' => 16];
 $allein->RequestAction('ctl_enable', true);
 pruefe('Ohne Splitter: Ladefreigabe bricht nicht ab', true);
@@ -424,23 +428,23 @@ pruefe('Ohne Splitter: Reservieren liefert false statt eines Fehlers', $allein->
 
 // ---- 4) Abrechnung und Konfigurator ---------------------------------------------------------
 Bus::reset();
-$sp = Bus::add(100, new TSplitterRec(), G_SPLITTER);
+$sp = Bus::add(100, new TSplitterRec(0), G_SPLITTER);
 $sp->attrs['AbrechnungID'] = 300;
-$ab = Bus::add(300, new OCPPHubAbrechnung(), G_ABRECHNUNG, 100);
-$zweite = Bus::add(301, new OCPPHubAbrechnung(), G_ABRECHNUNG, 100);
+$ab = Bus::add(300, new OCPPHubAbrechnung(0), G_ABRECHNUNG, 100);
+$zweite = Bus::add(301, new OCPPHubAbrechnung(0), G_ABRECHNUNG, 100);
 pruefe('Abrechnung: der Splitter bestätigt, dass er SIE als seine Abrechnung führt', privat($ab, 'isRegisteredWithSplitter') === true);
 pruefe('Eine zweite, vom Splitter nicht geführte Abrechnung erkennt das (wirkungslose Eingaben)', privat($zweite, 'isRegisteredWithSplitter') === false);
 $sp->demo = true;
 pruefe('Vorführmodus: nur die geführte Abrechnung ist im Vorführmodus', privat($ab, 'isDemoMode') === true && privat($zweite, 'isDemoMode') === false);
 $sp->demo = false;
 pruefe('Abrechnung ohne Splitter: nicht gebunden, kein Fehler', (function () {
-    $a = Bus::add(400, new OCPPHubAbrechnung(), G_ABRECHNUNG, 0);
+    $a = Bus::add(400, new OCPPHubAbrechnung(0), G_ABRECHNUNG, 0);
     return privat($a, 'isRegisteredWithSplitter') === false && privat($a, 'isDemoMode') === false;
 })());
 
-$k = Bus::add(500, new OCPPHubKonfigurator(), G_KONFIGURATOR, 100);
+$k = Bus::add(500, new OCPPHubKonfigurator(0), G_KONFIGURATOR, 100);
 pruefe('Konfigurator: gesehene Wallboxen kommen vom Splitter über den Datenfluss', privat($k, 'geseheneWallboxen') === ['WB7' => 1700000000]);
-$k2 = Bus::add(501, new OCPPHubKonfigurator(), G_KONFIGURATOR, 0);
+$k2 = Bus::add(501, new OCPPHubKonfigurator(0), G_KONFIGURATOR, 0);
 pruefe('Konfigurator ohne Splitter: leere Liste statt Fehler', privat($k2, 'geseheneWallboxen') === []);
 
 // Splitter-Anfragen: unbekannte Aktion, kaputtes JSON
@@ -453,9 +457,9 @@ pruefe('ForwardData: unbekannte Aktion wird sauber abgelehnt', ($r['ok'] ?? null
 $verbinde = function (array $instanzen, int $zielId, string $klasse, string $guid, array $props = [], int $conn = 0) {
     Bus::reset();
     foreach ($instanzen as $id => $g) {
-        Bus::add($id, new OCPPHubSplitter(), $g);
+        Bus::add($id, new OCPPHubSplitter(0), $g);
     }
-    $o = Bus::add($zielId, new $klasse(), $guid, $conn);
+    $o = Bus::add($zielId, new $klasse(0), $guid, $conn);
     $o->props = $props;
     $o->VerbindungPruefen();
     return Bus::$conn[$zielId];
@@ -469,12 +473,12 @@ pruefe('Migration Konfigurator: Property SplitterID wird zur echten Verbindung',
 pruefe('Migration Konfigurator: bei zwei Splittern ohne Hinweis wird NICHT geraten', $verbinde([100 => G_SPLITTER, 101 => G_SPLITTER], 500, 'OCPPHubKonfigurator', G_KONFIGURATOR) === 0);
 
 Bus::reset();
-$sp = Bus::add(100, new OCPPHubSplitter(), G_SPLITTER);
-Bus::add(300, new OCPPHubAbrechnung(), G_ABRECHNUNG, 0);
+$sp = Bus::add(100, new OCPPHubSplitter(0), G_SPLITTER);
+Bus::add(300, new OCPPHubAbrechnung(0), G_ABRECHNUNG, 0);
 $sp->attrs['AbrechnungID'] = 300;
 privat($sp, 'ensureAbrechnung');
 pruefe('Migration Abrechnung: der Splitter verbindet seine Bestands-Abrechnung beim Übernehmen', Bus::$conn[300] === 100);
-Bus::add(301, new OCPPHubAbrechnung(), G_ABRECHNUNG, 55);
+Bus::add(301, new OCPPHubAbrechnung(0), G_ABRECHNUNG, 55);
 $sp->attrs['AbrechnungID'] = 301;
 privat($sp, 'ensureAbrechnung');
 pruefe('Migration Abrechnung: eine anderswo verbundene Abrechnung bleibt unberührt', Bus::$conn[301] === 55);

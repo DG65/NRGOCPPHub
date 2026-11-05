@@ -104,73 +104,67 @@
        Kachel-Überschrift selbst an, ein eigener Titel überlagert diesen nur
        (Live-Fund 31.08.2026, siehe [[ips-kachel-kein-eigener-titel]]). -->
 
-  <div class="orphan-banner" id="orphanBanner">
-    ⚠️ Kein Splitter führt diese Instanz als seine Abrechnung. Jeder OCPPHub-Splitter
-    benutzt genau EINE, fest bei ihm hinterlegte Abrechnung-Instanz — diese hier ist
-    es nicht (unabhängig davon, wo sie im Objektbaum liegt) und wird darum von KEINEM
-    Splitter abgefragt. Alle Bereiche unten sind deshalb leer, auch wenn an anderer
-    Stelle bereits Daten gepflegt wurden. Bitte die Kachel stattdessen auf der vom
-    Splitter selbst angelegten Instanz einrichten (Name endet auf „… Abrechnung")
-    und diese hier ggf. löschen.
-  </div>
+  <div class="orphan-banner" id="orphanBanner" data-t="orphan"></div>
 
-  <div class="demo-banner" id="demoBanner">
-    🎪 Vorführmodus aktiv — nur Anzeige. Änderungen werden hier nicht gespeichert.
-  </div>
+  <div class="demo-banner" id="demoBanner" data-t="demo"></div>
 
   <div class="unknown-banner" id="unknownBanner">
-    <span>🆕 Unbekannte Karte erkannt: <b id="unknownTag"></b> (<span id="unknownAt"></span>)</span>
-    <button class="primary" onclick="adoptUnknown()" id="adoptUnknownBtn">Als neuen Zugang übernehmen</button>
+    <span><span data-t="unknown"></span> <b id="unknownTag"></b> (<span id="unknownAt"></span>)</span>
+    <button class="primary" onclick="adoptUnknown()" id="adoptUnknownBtn" data-t="adopt"></button>
   </div>
 
   <div id="areas"></div>
 
+<!--OHUB_TEXTS-->
 <script>
 let PAYLOAD = null;
+
+// Texte: PHP liefert die Uebersetzungen (window.OHUB_TEXTS), englische Quelltexte als Schluessel.
+function tr(s) { return (window.OHUB_TEXTS && window.OHUB_TEXTS[s]) || s; }
 let HOOK_PATH = '';
 let DRAFTS = {};
 let TOUCHED = {};
 
 const AREAS = {
   Fahrzeuge: {
-    icon: '🚙', title: 'Fahrzeuge', open: false,
+    icon: '🚙', title: 'Vehicles', open: false,
     columns: [
-      { key: 'tessieInstanceId', label: 'Tessie-Fahrzeug', type: 'select', options: 'tessieOptions', zero: '— keins —', def: 0 },
-      { key: 'name', label: 'Anzeigename', type: 'text', def: '' },
-      { key: 'kennzeichen', label: 'Kennzeichen', type: 'text', def: '' }
+      { key: 'tessieInstanceId', label: 'Tessie vehicle', type: 'select', options: 'tessieOptions', zero: '— no vehicle —', def: 0 },
+      { key: 'name', label: 'Display name', type: 'text', def: '' },
+      { key: 'kennzeichen', label: 'License plate', type: 'text', def: '' }
     ]
   },
   Gruppen: {
-    icon: '👥', title: 'Gruppen', open: false,
+    icon: '👥', title: 'Groups', open: false,
     columns: [
       { key: 'name', label: 'Name', type: 'text', def: '' },
-      { key: 'maxKwhWeek', label: 'Limit/Woche (kWh)', type: 'number', def: 0 },
-      { key: 'maxKwhMonth', label: 'Limit/Monat (kWh)', type: 'number', def: 0 },
-      { key: 'maxKwhYear', label: 'Limit/Jahr (kWh)', type: 'number', def: 0 }
+      { key: 'maxKwhWeek', label: 'Limit/week (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhMonth', label: 'Limit/month (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhYear', label: 'Limit/year (kWh)', type: 'number', def: 0 }
     ]
   },
   Kunden: {
-    icon: '🙋', title: 'Kunden', open: false,
+    icon: '🙋', title: 'Customers', open: false,
     columns: [
       { key: 'name', label: 'Name', type: 'text', def: '' },
-      { key: 'active', label: 'Aktiv', type: 'checkbox', def: true },
-      { key: 'groupId', label: 'Gruppe', type: 'select', options: 'gruppenOptions', zero: '— keine —', def: 0 },
-      { key: 'maxKwhWeek', label: 'Limit/Woche (kWh)', type: 'number', def: 0 },
-      { key: 'maxKwhMonth', label: 'Limit/Monat (kWh)', type: 'number', def: 0 },
-      { key: 'maxKwhYear', label: 'Limit/Jahr (kWh)', type: 'number', def: 0 }
+      { key: 'active', label: 'Active', type: 'checkbox', def: true },
+      { key: 'groupId', label: 'Group', type: 'select', options: 'gruppenOptions', zero: '— no group —', def: 0 },
+      { key: 'maxKwhWeek', label: 'Limit/week (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhMonth', label: 'Limit/month (kWh)', type: 'number', def: 0 },
+      { key: 'maxKwhYear', label: 'Limit/year (kWh)', type: 'number', def: 0 }
     ]
   },
   Zugaenge: {
-    icon: '🪪', title: 'Zugänge (Karten)', open: true,
+    icon: '🪪', title: 'Access (cards)', open: true,
     columns: [
       { key: 'idTag', label: 'idTag', type: 'text', def: '' },
-      { key: 'name', label: 'Anzeigename', type: 'text', def: '' },
-      { key: 'customerId', label: 'Kunde', type: 'select', options: 'kundenOptions', zero: '— keiner —', def: 0 },
-      { key: 'vehicleId', label: 'Fahrzeug', type: 'select', options: 'fahrzeugOptions', zero: '— keins —', def: 0 },
-      { key: 'active', label: 'Aktiv', type: 'checkbox', def: true },
-      { key: 'validUntil', label: 'Gültig bis', type: 'text', def: '', placeholder: 'TT.MM.JJJJ' },
-      { key: 'allowedFrom', label: 'Ab', type: 'text', def: '', placeholder: 'HH:MM' },
-      { key: 'allowedTo', label: 'Bis', type: 'text', def: '', placeholder: 'HH:MM' }
+      { key: 'name', label: 'Display name', type: 'text', def: '' },
+      { key: 'customerId', label: 'Customer', type: 'select', options: 'kundenOptions', zero: '— no customer —', def: 0 },
+      { key: 'vehicleId', label: 'Vehicle', type: 'select', options: 'fahrzeugOptions', zero: '— no vehicle —', def: 0 },
+      { key: 'active', label: 'Active', type: 'checkbox', def: true },
+      { key: 'validUntil', label: 'Valid until', type: 'text', def: '', placeholder: 'YYYY-MM-DD' },
+      { key: 'allowedFrom', label: 'From', type: 'text', def: '', placeholder: 'HH:MM' },
+      { key: 'allowedTo', label: 'To', type: 'text', def: '', placeholder: 'HH:MM' }
     ]
   }
 };
@@ -198,12 +192,12 @@ function ensureShell() {
   Object.keys(AREAS).forEach(function (area) {
     const def = AREAS[area];
     html += '<details id="details-' + area + '"' + (def.open ? ' open' : '') + '>'
-          + '<summary>' + def.icon + ' ' + def.title + '</summary>'
+          + '<summary>' + def.icon + ' ' + tr(def.title) + '</summary>'
           + '<div class="panel-body">'
           + '<div id="tbl-' + area + '"></div>'
           + '<div class="toolbar">'
-          + '<button onclick="addRow(\'' + area + '\')"' + (isDemoMode() ? ' disabled' : '') + '>➕ Zeile</button>'
-          + '<button class="primary" onclick="saveArea(\'' + area + '\')"' + (isDemoMode() ? ' disabled' : '') + '>💾 Speichern</button>'
+          + '<button onclick="addRow(\'' + area + '\')"' + (isDemoMode() ? ' disabled' : '') + '>' + tr('➕ Row') + '</button>'
+          + '<button class="primary" onclick="saveArea(\'' + area + '\')"' + (isDemoMode() ? ' disabled' : '') + '>' + tr('💾 Save') + '</button>'
           + '<span class="status-msg" id="status-' + area + '"></span>'
           + '</div></div></details>';
   });
@@ -218,7 +212,7 @@ function fieldHtml(area, col, row, idx) {
   if (col.type === 'select') {
     const options = (PAYLOAD && PAYLOAD[col.options]) || [];
     let html = '<select onchange="' + onchange + '"' + disabled + '>';
-    html += '<option value="0"' + (Number(value) === 0 ? ' selected' : '') + '>' + col.zero + '</option>';
+    html += '<option value="0"' + (Number(value) === 0 ? ' selected' : '') + '>' + tr(col.zero) + '</option>';
     options.forEach(function (o) {
       html += '<option value="' + o.id + '"' + (Number(value) === Number(o.id) ? ' selected' : '') + '>' + escapeHtml(o.label) + '</option>';
     });
@@ -231,7 +225,7 @@ function fieldHtml(area, col, row, idx) {
   if (col.type === 'number') {
     return '<input type="number" step="0.1" value="' + Number(value) + '" onchange="' + onchange + '"' + disabled + '>';
   }
-  const placeholder = col.placeholder ? ' placeholder="' + col.placeholder + '"' : '';
+  const placeholder = col.placeholder ? ' placeholder="' + tr(col.placeholder) + '"' : '';
   return '<input type="text" value="' + escapeHtml(String(value ?? '')) + '"' + placeholder + ' onchange="' + onchange + '"' + disabled + '>';
 }
 
@@ -241,11 +235,11 @@ function renderTable(area) {
   const box = document.getElementById('tbl-' + area);
   if (!box) return;
   if (rows.length === 0) {
-    box.innerHTML = '<div class="empty-hint">Noch keine Einträge — auf „➕ Zeile" klicken.</div>';
+    box.innerHTML = '<div class="empty-hint">' + tr('No entries yet — click “➕ Row”.') + '</div>';
     return;
   }
   let html = '<table><thead><tr>';
-  def.columns.forEach(function (col) { html += '<th>' + col.label + '</th>'; });
+  def.columns.forEach(function (col) { html += '<th>' + tr(col.label) + '</th>'; });
   html += '<th></th></tr></thead><tbody>';
   rows.forEach(function (row, idx) {
     html += '<tr>';
@@ -297,7 +291,7 @@ function setStatus(area, text, isError) {
 
 function saveArea(area) {
   if (!HOOK_PATH) return;
-  setStatus(area, 'Speichere …');
+  setStatus(area, tr('Saving …'));
   fetch(HOOK_PATH + '?area=' + area, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -307,9 +301,9 @@ function saveArea(area) {
     .then(function (data) {
       TOUCHED[area] = false;
       handleMessage(data);
-      setStatus(area, 'Gespeichert.');
+      setStatus(area, tr('Saved.'));
     })
-    .catch(function () { setStatus(area, 'Fehler beim Speichern — bitte erneut versuchen.', true); });
+    .catch(function () { setStatus(area, tr('Error while saving — please try again.'), true); });
 }
 
 function adoptUnknown() {
@@ -318,6 +312,19 @@ function adoptUnknown() {
     .then(function (r) { return r.json(); })
     .then(function (data) { handleMessage(data); })
     .catch(function () {});
+}
+
+const STATIC_TEXTS = {
+  orphan: '⚠️ No splitter uses this instance as its Billing instance. Every OCPPHub splitter uses exactly ONE Billing instance, stored with it — this one is not it (regardless of where it sits in the object tree) and is therefore queried by NO splitter. All areas below are therefore empty, even if data has been maintained elsewhere. Please set the tile up on the instance the splitter created itself (name ends in “… Billing”) and delete this one if necessary.',
+  demo: '🎪 Demo mode is active — display only. Changes are not saved here.',
+  unknown: '🆕 Unknown card detected:',
+  adopt: 'Adopt as new access entry'
+};
+
+function applyTexts() {
+  document.querySelectorAll('[data-t]').forEach(function (el) {
+    el.textContent = tr(STATIC_TEXTS[el.getAttribute('data-t')]);
+  });
 }
 
 function renderOrphanBanner() {
@@ -334,7 +341,7 @@ function renderUnknownBanner() {
   }
   document.getElementById('unknownTag').textContent = tag;
   const at = PAYLOAD.unknownIdTagAt ? new Date(PAYLOAD.unknownIdTagAt * 1000) : null;
-  document.getElementById('unknownAt').textContent = at ? at.toLocaleString('de-DE') : '';
+  document.getElementById('unknownAt').textContent = at ? at.toLocaleString(tr('en-GB')) : '';
   banner.classList.add('show');
   document.getElementById('adoptUnknownBtn').disabled = isDemoMode();
 }
@@ -362,6 +369,7 @@ function handleMessage(payload) {
       DRAFTS[area] = (payload[area] || []).map(cloneRow);
     }
   });
+  applyTexts();
   renderOrphanBanner();
   renderDemoBanner();
   renderUnknownBanner();

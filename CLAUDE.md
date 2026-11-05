@@ -48,9 +48,14 @@ Sitzungen** gearbeitet:
    `vehicleNameID`/`contractVersion`), damit EMS/Dashboard transportunabhängig
    konsumieren. Abweichungen nur additiv und mit der EMS-Sitzung abgestimmt.
 4. **Ein veröffentlichter Vertrag wird nicht umbenannt.** Gilt auch für Idents.
-5. **Sprachregel: alles Nutzersichtbare auf Deutsch.** Details/Stolperfallen: SUITE.md.
-   Bezeichner im Code und Fachbegriffe (OCPP, WebSocket, ChargingProfile, idTag …)
-   bleiben englisch.
+5. **Sprachregel: alles Nutzersichtbare zweisprachig (seit 0.8.0, 05.11.2026).** Quelltexte im
+   Code sind ENGLISCH, die deutsche Fassung steht in `libs/locale.json` (Schlüssel = englischer Text),
+   `php .tools/locale-bauen.php` kopiert sie in die vier Modulordner (nie dort von Hand ändern).
+   Neue Texte immer über `OHUB_Text::t('English text %s', $arg)`, nie deutsch im Code; Idents,
+   Datenfluss-Nachrichten und Vertragsschlüssel bleiben unverändert. Prüfstand:
+   `php .tools/test-sprache.php` und `OHUB_SPRACHE=en php .tools/test-form.php`.
+   Details/Stolperfallen: SUITE.md (Konvention 9). Fachbegriffe (OCPP, WebSocket,
+   ChargingProfile, idTag …) bleiben unübersetzt.
 6. **Emojis erwünscht, wo sie Nutzen stiften** (Panel-Icons, Status-Symbole).
 7. **Zugangsdaten-Konvention**: OCPP-Basic-Auth-Passwörter der Ladepunkte in
    `RegisterAttributeString` (nicht Property), Eingabe per `PasswordTextBox`, nach
@@ -92,7 +97,7 @@ führen OCPPHub nicht als Git-Modul, Solarpark war nicht erreichbar).
 - Versions-Ritual je Änderung: `library.json` version+build bumpen, Versions-Caption in
   `GetConfigurationForm()` nachziehen, CHANGELOG.md-Eintrag, `php -l` +
   `php .tools/check-standalone.php` + `php .tools/check-logging.php` +
-  `php .tools/test-form.php` + `php .tools/test-datenfluss.php` vor jedem Commit.
+  `php .tools/test-form.php` + `php .tools/test-datenfluss.php` + `php .tools/test-sprache.php` vor jedem Commit.
 - **Kommunikation zwischen den vier Modulen nur über den Datenfluss** (Symcon-Review 30.10.2026):
   nie Instanzen eines Geschwistermoduls suchen und deren `OHUB*_`-Funktionen aufrufen, sondern
   Nachrichten schicken. Protokoll und Regeln: `.docs/datenfluss.md`. Der Prüfstand erkennt
