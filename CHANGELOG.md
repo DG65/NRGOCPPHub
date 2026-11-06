@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.1 (06.11.2026)
+
+Splitter 0.4.1 / Ladepunkt 0.4.1 / Abrechnung 0.5.1 / Konfigurator 0.3.1. Store-Checkliste Punkt 25
+(Reviewer: die Konsole übersetzt Formulare selbst):
+
+- Feste Formular-Beschriftungen (`caption`/`label`/`confirm`, auch in `UpdateFormField`) stehen jetzt nur noch
+  auf Englisch im Code; die Konsole übersetzt sie über `locale.json`. Rund 215 eigene `OHUB_Text::t()`-Aufrufe
+  entfallen. Selbst übersetzt wird weiterhin, was die Konsole nicht kennt: zusammengesetzte Zeilen mit Werten
+  (Statuszeilen), Meldungen/Log, Variablen- und Profilnamen, Popups und die Abrechnung-Kachel.
+- Prüfstand: `test-sprache.php` verlangt jetzt auch für feste Formular-Beschriftungen einen Tabelleneintrag
+  (Mutationstest bestätigt); `test-form.php` bildet die Konsolen-Übersetzung nach.
+- Am Verhalten und an den Texten ändert sich nichts.
+
 ## 0.8.0 (05.11.2026)
 
 **Zweisprachig Deutsch/Englisch (Auftrag Dietmar 05.11.2026).** Splitter 0.4.0 / Ladepunkt 0.4.0 /

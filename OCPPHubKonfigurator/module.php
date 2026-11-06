@@ -23,7 +23,7 @@ class OCPPHubKonfigurator extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.3.0';
+    private const VERSION = '0.3.1';
     private const SPLITTER_GUID = '{81D3E328-9E12-43A9-825A-F7888530868C}';
     // Datenfluss (Symcon-Review 30.10.2026), siehe .docs/datenfluss.md
     private const DATA_ZUM_SPLITTER = '{6ED0496A-EDD0-4600-9549-04D18B8387F5}';
@@ -239,40 +239,40 @@ class OCPPHubKonfigurator extends IPSModule
                     'caption'  => OHUB_Text::t('📖 Documentation & help (version %s)', self::VERSION),
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('What this instance does: setup aid only, no function of its own during normal operation. Shows the charge point identities that have already reported to the selected splitter via OCPP but do not yet have an “OCPPHub Charge Point” instance of their own — saves creating them by hand, including the correct splitter assignment.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('1️⃣ First set the wallbox to the splitter endpoint in its own OCPP configuration (backend URL, see the splitter instance, “Documentation & help” panel there). Once it has reported in, its charge point identity appears in the “Wallboxes seen” list below — even if the connection is closed again afterwards.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('2️⃣ Click “Create” in the row of the wallbox you want. This creates a new “OCPPHub Charge Point” instance with the charge point identity AND the splitter assignment already filled in correctly — nothing else is required in the charge point form afterwards, unless you want current limits or PV surplus charging to differ from the defaults.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ You select the splitter at the top, under the interface (“Gateway”) of this instance; it is a device below the “OCPPHub Splitter” (Symcon data flow). If no splitter is detected, the status line below says so. Existing instances are connected automatically the first time you apply changes after the update, provided there is exactly one splitter.')],
+                        ['type' => 'Label', 'caption' => 'What this instance does: setup aid only, no function of its own during normal operation. Shows the charge point identities that have already reported to the selected splitter via OCPP but do not yet have an “OCPPHub Charge Point” instance of their own — saves creating them by hand, including the correct splitter assignment.'],
+                        ['type' => 'Label', 'caption' => '1️⃣ First set the wallbox to the splitter endpoint in its own OCPP configuration (backend URL, see the splitter instance, “Documentation & help” panel there). Once it has reported in, its charge point identity appears in the “Wallboxes seen” list below — even if the connection is closed again afterwards.'],
+                        ['type' => 'Label', 'caption' => '2️⃣ Click “Create” in the row of the wallbox you want. This creates a new “OCPPHub Charge Point” instance with the charge point identity AND the splitter assignment already filled in correctly — nothing else is required in the charge point form afterwards, unless you want current limits or PV surplus charging to differ from the defaults.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ You select the splitter at the top, under the interface (“Gateway”) of this instance; it is a device below the “OCPPHub Splitter” (Symcon data flow). If no splitter is detected, the status line below says so. Existing instances are connected automatically the first time you apply changes after the update, provided there is exactly one splitter.'],
                     ],
                 ],
                 $this->splitterStatusLabel($this->splitterStatusLine($splitterId, $values)),
                 [
                     'type'     => 'Configurator',
                     'name'     => 'ChargePointList',
-                    'caption'  => OHUB_Text::t('Wallboxes seen'),
+                    'caption'  => 'Wallboxes seen',
                     'rowCount' => 10,
                     'delete'   => false,
                     'sort'     => ['column' => 'lastSeen', 'direction' => 'descending'],
                     'columns'  => [
-                        ['caption' => OHUB_Text::t('Charge point identity'), 'name' => 'cpid', 'width' => '300px'],
-                        ['caption' => OHUB_Text::t('Last seen'), 'name' => 'lastSeen', 'width' => '200px'],
+                        ['caption' => 'Charge point identity', 'name' => 'cpid', 'width' => '300px'],
+                        ['caption' => 'Last seen', 'name' => 'lastSeen', 'width' => '200px'],
                     ],
                     'values' => $values,
                 ],
             ],
             'status' => [
-                ['code' => 102, 'icon' => 'active', 'caption' => OHUB_Text::t('Active')],
+                ['code' => 102, 'icon' => 'active', 'caption' => 'Active'],
             ],
         ];
 
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
                 'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
-                'caption' => OHUB_Text::t('💬 Feedback'),
+                'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => OHUB_Text::t('🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.')],
-                    ['type' => 'Button', 'caption' => OHUB_Text::t('Go to forum thread'), 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
-                    ['type' => 'Button', 'caption' => OHUB_Text::t('Do not show again'), 'onClick' => 'OHUBK_DismissReviewHint($id);'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.'],
+                    ['type' => 'Button', 'caption' => 'Go to forum thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
+                    ['type' => 'Button', 'caption' => 'Do not show again', 'onClick' => 'OHUBK_DismissReviewHint($id);'],
                 ],
             ];
         }
@@ -300,14 +300,14 @@ class OCPPHubKonfigurator extends IPSModule
     {
         return [
             'type' => 'ExpansionPanel', 'expanded' => false,
-            'caption' => OHUB_Text::t('🧡  About this module'),
+            'caption' => '🧡  About this module',
             'items' => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('View license text'), 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('☕  Donate via PayPal'), 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.'],
+                ['type' => 'Label', 'caption' => 'License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.'],
+                ['type' => 'Button', 'caption' => 'View license text', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu'],
+                ['type' => 'Label', 'caption' => 'Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.'],
+                ['type' => 'Button', 'caption' => '☕  Donate via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
             ],
         ];
     }
@@ -319,11 +319,11 @@ class OCPPHubKonfigurator extends IPSModule
         }
         return [
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
-            'caption' => OHUB_Text::t('👋 What is this module for?'),
+            'caption' => '👋 What is this module for?',
             'items' => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('The configurator is purely a setup aid: it shows wallboxes that have already reported to an “OCPPHub Splitter” instance via OCPP but do not yet have an “OCPPHub Charge Point” instance of their own — create them with one click instead of typing the charge point identity and the splitter assignment by hand.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('The benefit: especially when setting up several wallboxes for the first time, this saves repeated manual creation. In day-to-day operation the configurator is no longer needed — control and display run entirely through the charge point instances themselves.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUBK_AckPurposeIntro($id);'],
+                ['type' => 'Label', 'caption' => 'The configurator is purely a setup aid: it shows wallboxes that have already reported to an “OCPPHub Splitter” instance via OCPP but do not yet have an “OCPPHub Charge Point” instance of their own — create them with one click instead of typing the charge point identity and the splitter assignment by hand.'],
+                ['type' => 'Label', 'caption' => 'The benefit: especially when setting up several wallboxes for the first time, this saves repeated manual creation. In day-to-day operation the configurator is no longer needed — control and display run entirely through the charge point instances themselves.'],
+                ['type' => 'Button', 'caption' => 'Understood – do not show again', 'onClick' => 'OHUBK_AckPurposeIntro($id);'],
             ],
         ];
     }
@@ -345,11 +345,11 @@ class OCPPHubKonfigurator extends IPSModule
         if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
             return null;
         }
-        $items = [['type' => 'Label', 'caption' => OHUB_Text::t('🆕 New in this module — please take a quick look and check your settings if needed:')]];
+        $items = [['type' => 'Label', 'caption' => '🆕 New in this module — please take a quick look and check your settings if needed:']];
         foreach (self::NEWS_ITEMS as $line) {
             $items[] = ['type' => 'Label', 'caption' => '• ' . OHUB_Text::t($line)];
         }
-        $items[] = ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUBK_AckNews($id);'];
+        $items[] = ['type' => 'Button', 'caption' => 'Understood – do not show again', 'onClick' => 'OHUBK_AckNews($id);'];
         return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => OHUB_Text::t('🆕 New in version %s', self::NEWS_VERSION), 'expanded' => true, 'items' => $items];
     }
 

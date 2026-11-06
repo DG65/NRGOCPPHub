@@ -51,7 +51,9 @@ Sitzungen** gearbeitet:
 5. **Sprachregel: alles Nutzersichtbare zweisprachig (seit 0.8.0, 05.11.2026).** Quelltexte im
    Code sind ENGLISCH, die deutsche Fassung steht in `libs/locale.json` (Schlüssel = englischer Text),
    `php .tools/locale-bauen.php` kopiert sie in die vier Modulordner (nie dort von Hand ändern).
-   Neue Texte immer über `OHUB_Text::t('English text %s', $arg)`, nie deutsch im Code; Idents,
+   Feste Formular-Beschriftungen (`caption`/`label`/`confirm`) bleiben als englischer Klartext im Code: die
+   Konsole übersetzt sie selbst (Store-Checkliste 25), sie MÜSSEN aber in `libs/locale.json` stehen. Alles andere
+   (Zeilen mit Werten, Meldungen, Variablennamen, Popups, Kachel) über `OHUB_Text::t('English text %s', $arg)`, nie deutsch im Code; Idents,
    Datenfluss-Nachrichten und Vertragsschlüssel bleiben unverändert. Prüfstand:
    `php .tools/test-sprache.php` und `OHUB_SPRACHE=en php .tools/test-form.php`.
    Details/Stolperfallen: SUITE.md (Konvention 9). Fachbegriffe (OCPP, WebSocket,

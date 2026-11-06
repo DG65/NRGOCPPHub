@@ -34,7 +34,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.4.0';
+    private const VERSION = '0.4.1';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -336,52 +336,52 @@ class OCPPHubLadepunkt extends IPSModule
                     'caption'  => OHUB_Text::t('📖 Documentation & help (version %s)', self::VERSION),
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('What this instance does: one “OCPPHub Charge Point” instance per wallbox/connector — it holds the visible readings and control variables (charging power, energy meter, status, charge enable, current limit), can be controlled directly from the form in the “Control” area, and optionally carries the standalone PV surplus charging. The actual OCPP communication runs entirely through the assigned splitter; this instance itself holds no WebSocket connection.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🆔 Charge point identity: must match exactly the name that the wallbox itself sends in its own OCPP configuration as the last path segment of the backend URL (case matters). The easiest way is to create it via “OCPPHub Configurator” — it shows wallboxes that are already connected and fills in this field correctly when creating, including the splitter assignment below.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🔌 Splitter: this charge point is a device below the “OCPPHub Splitter” and talks only to it through the Symcon data flow (messages instead of direct function calls). You select the splitter at the top of the form, under the interface (“Gateway”); when created via the configurator this happens by itself, existing instances are connected automatically the first time you apply changes after the update. The object tree position plays no role in this, you can move the instance freely to other categories.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ Scope: the measurement and control variables themselves (`ocpp_connected`, `power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) appear as child objects of this instance in the object tree. Charge enable and current limit can also be set right here in the form, in the “Control” area.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🩺 Explain charge rejection (`block_reason`): if the wallbox unambiguously rejects a charge start/a current limit change, then — if the vehicle is linked through Tessie (see the “OCPPHub Billing” instance) — it is automatically asked whether a charge schedule of its own is active in the vehicle, the charge limit has already been reached, or the vehicle is currently asleep (in which case waking it up is triggered automatically). In addition, but explicitly only as an uncertain hint: a name comparison against active Tibber Grid Rewards controls. Without a Tessie link or without an unambiguous rejection, `block_reason` stays empty.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🔓 Automatic charge enable for detected vehicles: if the dashboard detects, by its own time correlation (not by us — deliberately ONE correlation mechanism in the stack), a vehicle at this charge point that is assigned to an active access entry in the Billing instance, its card is automatically “presented” in operating mode ② (same check as a real card presentation, all limits/time windows apply identically) — practically the result of “autocharge”, without the wallbox having to support that itself. This does not force charging to start right away, it only grants the enable; it takes effect as soon as the dashboard session’s charge point module reports this assignment.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🎫 RFID authorization/consumption limits: maintained centrally in the “OCPPHub Billing” instance, but only applies if “② Multiple users” is selected on the splitter — with “① Single user” every card is accepted, regardless of what is stored there.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🔒 Reservation: usable regardless of the splitter’s operating mode (backend functions `OHUBL_Reserve`/`OHUBL_CancelReservation`, the dashboard builds the user interface). As long as a reservation is active, every card presentation with a DIFFERENT idTag is rejected — visible in `reserved_by`/`reserved_until`. We check this block ourselves (regardless of whether the wallbox itself supports the OCPP core command `ReserveNow`) — some models (e.g. go-e) reject `ReserveNow` with “NotImplemented”, which only affects whatever display the wallbox itself may have, not our enforcement.')],
+                        ['type' => 'Label', 'caption' => 'What this instance does: one “OCPPHub Charge Point” instance per wallbox/connector — it holds the visible readings and control variables (charging power, energy meter, status, charge enable, current limit), can be controlled directly from the form in the “Control” area, and optionally carries the standalone PV surplus charging. The actual OCPP communication runs entirely through the assigned splitter; this instance itself holds no WebSocket connection.'],
+                        ['type' => 'Label', 'caption' => '🆔 Charge point identity: must match exactly the name that the wallbox itself sends in its own OCPP configuration as the last path segment of the backend URL (case matters). The easiest way is to create it via “OCPPHub Configurator” — it shows wallboxes that are already connected and fills in this field correctly when creating, including the splitter assignment below.'],
+                        ['type' => 'Label', 'caption' => '🔌 Splitter: this charge point is a device below the “OCPPHub Splitter” and talks only to it through the Symcon data flow (messages instead of direct function calls). You select the splitter at the top of the form, under the interface (“Gateway”); when created via the configurator this happens by itself, existing instances are connected automatically the first time you apply changes after the update. The object tree position plays no role in this, you can move the instance freely to other categories.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ Scope: the measurement and control variables themselves (`ocpp_connected`, `power`, `energy_total`, `energy_session`, `state`, `vehicle_plugged`, `vehicle_name`, `vehicle_soc`, `ctl_enable`, `ctl_curr_limit`, `surplus_status`, `reserved_by`, `reserved_until`, `block_reason`) appear as child objects of this instance in the object tree. Charge enable and current limit can also be set right here in the form, in the “Control” area.'],
+                        ['type' => 'Label', 'caption' => '🩺 Explain charge rejection (`block_reason`): if the wallbox unambiguously rejects a charge start/a current limit change, then — if the vehicle is linked through Tessie (see the “OCPPHub Billing” instance) — it is automatically asked whether a charge schedule of its own is active in the vehicle, the charge limit has already been reached, or the vehicle is currently asleep (in which case waking it up is triggered automatically). In addition, but explicitly only as an uncertain hint: a name comparison against active Tibber Grid Rewards controls. Without a Tessie link or without an unambiguous rejection, `block_reason` stays empty.'],
+                        ['type' => 'Label', 'caption' => '🔓 Automatic charge enable for detected vehicles: if the dashboard detects, by its own time correlation (not by us — deliberately ONE correlation mechanism in the stack), a vehicle at this charge point that is assigned to an active access entry in the Billing instance, its card is automatically “presented” in operating mode ② (same check as a real card presentation, all limits/time windows apply identically) — practically the result of “autocharge”, without the wallbox having to support that itself. This does not force charging to start right away, it only grants the enable; it takes effect as soon as the dashboard session’s charge point module reports this assignment.'],
+                        ['type' => 'Label', 'caption' => '🎫 RFID authorization/consumption limits: maintained centrally in the “OCPPHub Billing” instance, but only applies if “② Multiple users” is selected on the splitter — with “① Single user” every card is accepted, regardless of what is stored there.'],
+                        ['type' => 'Label', 'caption' => '🔒 Reservation: usable regardless of the splitter’s operating mode (backend functions `OHUBL_Reserve`/`OHUBL_CancelReservation`, the dashboard builds the user interface). As long as a reservation is active, every card presentation with a DIFFERENT idTag is rejected — visible in `reserved_by`/`reserved_until`. We check this block ourselves (regardless of whether the wallbox itself supports the OCPP core command `ReserveNow`) — some models (e.g. go-e) reject `ReserveNow` with “NotImplemented”, which only affects whatever display the wallbox itself may have, not our enforcement.'],
                     ],
                 ],
                 $this->connectionsPanel(),
                 [
                     'type'    => 'ValidationTextBox',
                     'name'    => 'CPID',
-                    'caption' => OHUB_Text::t('Charge point identity (from the wallbox OCPP configuration)'),
+                    'caption' => 'Charge point identity (from the wallbox OCPP configuration)',
                 ],
                 [
                     'type'    => 'ValidationTextBox',
                     'name'    => 'Label',
-                    'caption' => OHUB_Text::t('Display name (empty = instance name)'),
+                    'caption' => 'Display name (empty = instance name)',
                 ],
                 [
                     'type'    => 'CheckBox',
                     'name'    => 'Deaktiviert',
-                    'caption' => OHUB_Text::t('🔌 Deactivate this charge point'),
+                    'caption' => '🔌 Deactivate this charge point',
                 ],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Live finding 13.09.2026: the need to switch off only THIS charge point without deactivating the whole splitter (that would paralyze all the other charge points too). When enabled: the OCPP protocol is still answered normally, but Authorize/RemoteStart/current limit/Reset are refused. A charge currently in progress is NOT interrupted, only from then on there is no new authorization/control. The instance status then shows “Inactive” (deliberate, not an error) and the entry in the stack contract carries `deactivated: true`. Corresponds exactly to `OHUBL_SetActive(false)` — the same value, whether set here or from outside (e.g. MeterHubVirtual). Differs from “Who is in control?” further below: that is ONLY about the write permission, an externally controlled charge point stays “in operation” (status 102) — only this switch here means “really switched off”.')],
+                ['type' => 'Label', 'caption' => 'Live finding 13.09.2026: the need to switch off only THIS charge point without deactivating the whole splitter (that would paralyze all the other charge points too). When enabled: the OCPP protocol is still answered normally, but Authorize/RemoteStart/current limit/Reset are refused. A charge currently in progress is NOT interrupted, only from then on there is no new authorization/control. The instance status then shows “Inactive” (deliberate, not an error) and the entry in the stack contract carries `deactivated: true`. Corresponds exactly to `OHUBL_SetActive(false)` — the same value, whether set here or from outside (e.g. MeterHubVirtual). Differs from “Who is in control?” further below: that is ONLY about the write permission, an externally controlled charge point stays “in operation” (status 102) — only this switch here means “really switched off”.'],
                 ...$this->layoutedPanels(),
             ],
             'actions' => [
-                ['type' => 'Button', 'caption' => OHUB_Text::t('🔄 Force apply (without changing the form)'), 'onClick' => "IPS_ApplyChanges(\$id); echo '" . OHUB_Text::t('✅ ApplyChanges() executed.') . "';"],
+                ['type' => 'Button', 'caption' => '🔄 Force apply (without changing the form)', 'onClick' => "IPS_ApplyChanges(\$id); echo '" . OHUB_Text::t('✅ ApplyChanges() executed.') . "';"],
             ],
             'status' => [
-                ['code' => 102, 'icon' => 'active', 'caption' => OHUB_Text::t('Active')],
-                ['code' => 104, 'icon' => 'inactive', 'caption' => OHUB_Text::t('Charge point identity missing')],
+                ['code' => 102, 'icon' => 'active', 'caption' => 'Active'],
+                ['code' => 104, 'icon' => 'inactive', 'caption' => 'Charge point identity missing'],
             ],
         ];
 
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
                 'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
-                'caption' => OHUB_Text::t('💬 Feedback'),
+                'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => OHUB_Text::t('🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.')],
-                    ['type' => 'Button', 'caption' => OHUB_Text::t('Go to forum thread'), 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
-                    ['type' => 'Button', 'caption' => OHUB_Text::t('Do not show again'), 'onClick' => 'OHUBL_DismissReviewHint($id);'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.'],
+                    ['type' => 'Button', 'caption' => 'Go to forum thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
+                    ['type' => 'Button', 'caption' => 'Do not show again', 'onClick' => 'OHUBL_DismissReviewHint($id);'],
                 ],
             ];
         }
@@ -430,13 +430,13 @@ class OCPPHubLadepunkt extends IPSModule
         return [
             'type'     => 'ExpansionPanel',
             'name'     => 'ControlPanel',
-            'caption'  => OHUB_Text::t('🎛️ Control'),
+            'caption'  => '🎛️ Control',
             'expanded' => true,
             'items'    => [
                 ['type' => 'Label', 'name' => 'ControlPanelHint', 'caption' => $this->controlPanelHint()],
                 ['type' => 'Label', 'name' => 'ControlPanelFeedback', 'caption' => ' '],
                 [
-                    'type' => 'CheckBox', 'name' => 'FormCtlEnable', 'caption' => OHUB_Text::t('Charge enable (takes effect immediately)'),
+                    'type' => 'CheckBox', 'name' => 'FormCtlEnable', 'caption' => 'Charge enable (takes effect immediately)',
                     'value' => (bool)$this->GetValue('ctl_enable'),
                     'onChange' => 'IPS_RequestAction($id, "FormCtlEnable", $FormCtlEnable);',
                 ],
@@ -480,22 +480,22 @@ class OCPPHubLadepunkt extends IPSModule
         return
         [
             'type'    => 'ExpansionPanel',
-            'caption' => OHUB_Text::t('⚡ Current range & control authority'),
+            'caption' => '⚡ Current range & control authority',
             'items'   => [
-                ['type' => 'NumberSpinner', 'name' => 'MinCurrent', 'caption' => OHUB_Text::t('Minimum charging current (A)'), 'minimum' => 6, 'maximum' => 32, 'suffix' => 'A'],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Smallest charging current that the wallbox/vehicle accepts (IEC 61851: 6 A). Below this threshold, surplus charging pauses the charge completely instead of continuing with too little current.')],
-                ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => OHUB_Text::t('Maximum charging current (A)'), 'minimum' => 6, 'maximum' => 63, 'suffix' => 'A'],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Supply cable/fuse rating of this charge point — hard upper limit for every current limit that OCPPHub sets (in addition to the wallbox’s hardware limit), regardless of what an EMS requests.')],
+                ['type' => 'NumberSpinner', 'name' => 'MinCurrent', 'caption' => 'Minimum charging current (A)', 'minimum' => 6, 'maximum' => 32, 'suffix' => 'A'],
+                ['type' => 'Label', 'caption' => 'Smallest charging current that the wallbox/vehicle accepts (IEC 61851: 6 A). Below this threshold, surplus charging pauses the charge completely instead of continuing with too little current.'],
+                ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => 'Maximum charging current (A)', 'minimum' => 6, 'maximum' => 63, 'suffix' => 'A'],
+                ['type' => 'Label', 'caption' => 'Supply cable/fuse rating of this charge point — hard upper limit for every current limit that OCPPHub sets (in addition to the wallbox’s hardware limit), regardless of what an EMS requests.'],
                 [
                     'type'    => 'Select',
                     'name'    => 'ManagedBy',
-                    'caption' => OHUB_Text::t('Who is in control of this charge point?'),
+                    'caption' => 'Who is in control of this charge point?',
                     'options' => array_map(
                         fn ($key) => ['value' => $key, 'caption' => $this->managedByLabel($key)],
                         self::MANAGEDBY_ALL
                     ),
                 ],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('⚠️ Two-controller warning: if something else already controls this wallbox — go-e controller, load management, Tibber Grid Rewards or a §14a control — OCPPHub must not write charge enable/current limit in parallel (otherwise both controllers overwrite each other). Enter here who has the authority: for everything except “Nobody”, the standalone surplus charging below automatically stays passive.')],
+                ['type' => 'Label', 'caption' => '⚠️ Two-controller warning: if something else already controls this wallbox — go-e controller, load management, Tibber Grid Rewards or a §14a control — OCPPHub must not write charge enable/current limit in parallel (otherwise both controllers overwrite each other). Enter here who has the authority: for everything except “Nobody”, the standalone surplus charging below automatically stays passive.'],
             ],
         ];
     }
@@ -511,22 +511,22 @@ class OCPPHubLadepunkt extends IPSModule
         return
         [
             'type'    => 'ExpansionPanel',
-            'caption' => OHUB_Text::t('🔀 Duplicate connection (dual-writer counting)'),
+            'caption' => '🔀 Duplicate connection (dual-writer counting)',
             'items'   => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Only fill in if the SAME wallbox is also connected through another stack module (e.g. the same box both here as an OCPPHub charge point and as a ChargerHub instance of its own). Determines which of the two entries counts as authoritative for consumption counting for EMS/MeterHub/Dashboard — deliberately NEVER detected automatically, ALWAYS a user decision.')],
+                ['type' => 'Label', 'caption' => 'Only fill in if the SAME wallbox is also connected through another stack module (e.g. the same box both here as an OCPPHub charge point and as a ChargerHub instance of its own). Determines which of the two entries counts as authoritative for consumption counting for EMS/MeterHub/Dashboard — deliberately NEVER detected automatically, ALWAYS a user decision.'],
                 [
                     'type'    => 'Select',
                     'name'    => 'DuplicateOfSource',
-                    'caption' => OHUB_Text::t('This instance is a duplicate of …'),
+                    'caption' => 'This instance is a duplicate of …',
                     'options' => [
-                        ['value' => '', 'caption' => OHUB_Text::t('— no, this entry counts normally —')],
-                        ['value' => 'chargerhub', 'caption' => OHUB_Text::t('a ChargerHub instance (select below)')],
-                        ['value' => 'ocpphub', 'caption' => OHUB_Text::t('another OCPPHub charge point instance (select below)')],
+                        ['value' => '', 'caption' => '— no, this entry counts normally —'],
+                        ['value' => 'chargerhub', 'caption' => 'a ChargerHub instance (select below)'],
+                        ['value' => 'ocpphub', 'caption' => 'another OCPPHub charge point instance (select below)'],
                     ],
                 ],
-                ['type' => 'SelectInstance', 'name' => 'DuplicateOfInstanceID', 'caption' => OHUB_Text::t('Counting instance (for “ChargerHub”/“OCPPHub” above, otherwise ignored)')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ Effect as soon as something is selected here: the entry stays visible in `OHUB_GetFunctions()` (now carrying the field `duplicateOf`), but stack consumers (EMS/MeterHub/Dashboard) skip it themselves when counting consumption. Concerns ONLY the counting — whether this charge point may continue to write to the wallbox is decided exclusively by “Who is in control?” above (or `OHUBL_SetActive()`).')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('⚠️ Why this matters: if “Who is in control?” above is still set to “Nobody” AND the instance chosen as the counting one also controls by itself (no external load management entered there), both sides could write at the same time. For exactly this forgotten case the instance then shows a warning status (“Two controllers on one wallbox”) until “Who is in control?” is set to an external value here or there.')],
+                ['type' => 'SelectInstance', 'name' => 'DuplicateOfInstanceID', 'caption' => 'Counting instance (for “ChargerHub”/“OCPPHub” above, otherwise ignored)'],
+                ['type' => 'Label', 'caption' => 'ℹ️ Effect as soon as something is selected here: the entry stays visible in `OHUB_GetFunctions()` (now carrying the field `duplicateOf`), but stack consumers (EMS/MeterHub/Dashboard) skip it themselves when counting consumption. Concerns ONLY the counting — whether this charge point may continue to write to the wallbox is decided exclusively by “Who is in control?” above (or `OHUBL_SetActive()`).'],
+                ['type' => 'Label', 'caption' => '⚠️ Why this matters: if “Who is in control?” above is still set to “Nobody” AND the instance chosen as the counting one also controls by itself (no external load management entered there), both sides could write at the same time. For exactly this forgotten case the instance then shows a warning status (“Two controllers on one wallbox”) until “Who is in control?” is set to an external value here or there.'],
             ],
         ];
     }
@@ -536,16 +536,16 @@ class OCPPHubLadepunkt extends IPSModule
         return
         [
             'type'    => 'ExpansionPanel',
-            'caption' => OHUB_Text::t('☀️ PV surplus charging (standalone, only without an active EMS)'),
+            'caption' => '☀️ PV surplus charging (standalone, only without an active EMS)',
             'items'   => [
-                ['type' => 'CheckBox', 'name' => 'EnableSurplusCharging', 'caption' => OHUB_Text::t('Enable')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Only effective if “Who is in control?” above is set to “Nobody” AND no active EMS is installed AND a MeterHub meter at the grid connection point delivers a real-time value. If an EMS is active, it always has priority — this option then automatically does not apply. A visible status appears as the variable “PV surplus charging” (`surplus_status`) as soon as this option is checked.')],
-                ['type' => 'NumberSpinner', 'name' => 'IntervalFast', 'caption' => OHUB_Text::t('Control interval (s, fallback/watchdog)'), 'minimum' => 5, 'maximum' => 300, 'suffix' => 's'],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('The control primarily recalculates event-driven as soon as the wallbox reports a fresh measurement (MeterValues) — this timer is only the fallback in case no report arrives.')],
-                ['type' => 'NumberSpinner', 'name' => 'StorageSharePercent', 'caption' => OHUB_Text::t('Share for battery storage (%)'), 'minimum' => 0, 'maximum' => 100, 'suffix' => '%'],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('This share of the surplus stays reserved for the battery storage and is deducted from the ampere calculation for charging. 0 % = all surplus goes into the wallbox, 100 % = nothing goes into the wallbox.')],
-                ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'caption' => OHUB_Text::t('Battery storage capacity (kWh, 0 = no storage/unknown)'), 'minimum' => 0, 'maximum' => 200, 'digits' => 1, 'suffix' => 'kWh'],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Currently only stored for information — the phase switching wait time built on it (as in ChargerHub) is not yet implemented in OCPPHub (phase switching is a stage 2 topic).')],
+                ['type' => 'CheckBox', 'name' => 'EnableSurplusCharging', 'caption' => 'Enable'],
+                ['type' => 'Label', 'caption' => 'Only effective if “Who is in control?” above is set to “Nobody” AND no active EMS is installed AND a MeterHub meter at the grid connection point delivers a real-time value. If an EMS is active, it always has priority — this option then automatically does not apply. A visible status appears as the variable “PV surplus charging” (`surplus_status`) as soon as this option is checked.'],
+                ['type' => 'NumberSpinner', 'name' => 'IntervalFast', 'caption' => 'Control interval (s, fallback/watchdog)', 'minimum' => 5, 'maximum' => 300, 'suffix' => 's'],
+                ['type' => 'Label', 'caption' => 'The control primarily recalculates event-driven as soon as the wallbox reports a fresh measurement (MeterValues) — this timer is only the fallback in case no report arrives.'],
+                ['type' => 'NumberSpinner', 'name' => 'StorageSharePercent', 'caption' => 'Share for battery storage (%)', 'minimum' => 0, 'maximum' => 100, 'suffix' => '%'],
+                ['type' => 'Label', 'caption' => 'This share of the surplus stays reserved for the battery storage and is deducted from the ampere calculation for charging. 0 % = all surplus goes into the wallbox, 100 % = nothing goes into the wallbox.'],
+                ['type' => 'NumberSpinner', 'name' => 'BatteryCapacityKWh', 'caption' => 'Battery storage capacity (kWh, 0 = no storage/unknown)', 'minimum' => 0, 'maximum' => 200, 'digits' => 1, 'suffix' => 'kWh'],
+                ['type' => 'Label', 'caption' => 'Currently only stored for information — the phase switching wait time built on it (as in ChargerHub) is not yet implemented in OCPPHub (phase switching is a stage 2 topic).'],
                 ...$this->surplusMeterFieldElements(),
             ],
         ];
@@ -616,7 +616,7 @@ class OCPPHubLadepunkt extends IPSModule
         $rows = [];
         $hidden = [];
         foreach ($layout as $key => $l) {
-            $name = trim((string)preg_replace('/\s*\(.*$/u', '', (string)($free[$key]['caption'] ?? $key)));
+            $name = trim((string)preg_replace('/\s*\(.*$/u', '', OHUB_Text::t((string)($free[$key]['caption'] ?? $key))));
             $rows[] = ['Key' => $key, 'Panel' => $name, 'Opened' => $l['open'] === 'open', 'Closed' => $l['open'] === 'closed',
                 'Hidden' => $l['open'] === 'hidden', 'Pos' => $l['pos']];
             if ($l['open'] === 'hidden') {
@@ -630,22 +630,22 @@ class OCPPHubLadepunkt extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'LayoutPanel', 'expanded' => false,
             'caption' => OHUB_Text::t('🪟  Form layout') . ($hidden ? OHUB_Text::t(' (%d hidden)', count($hidden)) : ''),
             'items' => array_merge($hiddenLine, [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Here you decide which areas are expanded when the form is opened and in which order they appear. Symcon does not remember expanding and collapsing by itself, so the setting here applies every time the form is opened. It takes effect after “Apply changes” the next time the form is opened.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('No check mark means “default”: as the module intends. The position is a number; with equal numbers the default order is kept. “Hidden” removes an area from the display without it losing anything: its settings are preserved and stay in effect (meant for areas you rarely need). To show it again, remove the check mark at “Hidden” or click “Reset to default”. If several check marks are set, “Hidden” takes precedence over “Collapsed”, which takes precedence over “Expanded”. The areas above (purpose, news, documentation, connections) and below (feedback, about this module) stay where they are and cannot be hidden.')],
+                ['type' => 'Label', 'caption' => 'Here you decide which areas are expanded when the form is opened and in which order they appear. Symcon does not remember expanding and collapsing by itself, so the setting here applies every time the form is opened. It takes effect after “Apply changes” the next time the form is opened.'],
+                ['type' => 'Label', 'caption' => 'No check mark means “default”: as the module intends. The position is a number; with equal numbers the default order is kept. “Hidden” removes an area from the display without it losing anything: its settings are preserved and stay in effect (meant for areas you rarely need). To show it again, remove the check mark at “Hidden” or click “Reset to default”. If several check marks are set, “Hidden” takes precedence over “Collapsed”, which takes precedence over “Expanded”. The areas above (purpose, news, documentation, connections) and below (feedback, about this module) stay where they are and cannot be hidden.'],
                 [
-                    'type' => 'List', 'name' => 'FormLayout', 'caption' => OHUB_Text::t('Areas'), 'rowCount' => count($rows), 'add' => false, 'delete' => false,
+                    'type' => 'List', 'name' => 'FormLayout', 'caption' => 'Areas', 'rowCount' => count($rows), 'add' => false, 'delete' => false,
                     'loadValuesFromConfiguration' => false,
                     'values' => $rows,
                     'columns' => [
-                        ['caption' => OHUB_Text::t('Area'), 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
-                        ['caption' => OHUB_Text::t('Key'), 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
-                        ['caption' => OHUB_Text::t('Expanded'), 'name' => 'Opened', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => OHUB_Text::t('Collapsed'), 'name' => 'Closed', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => OHUB_Text::t('🙈 Hidden'), 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => OHUB_Text::t('Position'), 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
+                        ['caption' => 'Area', 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
+                        ['caption' => 'Key', 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
+                        ['caption' => 'Expanded', 'name' => 'Opened', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Collapsed', 'name' => 'Closed', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => '🙈 Hidden', 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Position', 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
                     ],
                 ],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('↩️ Reset to default'), 'onClick' => 'echo OHUBL_ResetFormLayout($id);'],
+                ['type' => 'Button', 'caption' => '↩️ Reset to default', 'onClick' => 'echo OHUBL_ResetFormLayout($id);'],
             ]),
         ];
     }
@@ -657,7 +657,7 @@ class OCPPHubLadepunkt extends IPSModule
         $free = $this->freePanels();
         $rows = [];
         foreach (self::LAYOUT_KEYS as $i => $k) {
-            $name = trim((string)preg_replace('/\s*\(.*$/u', '', (string)($free[$k]['caption'] ?? $k)));
+            $name = trim((string)preg_replace('/\s*\(.*$/u', '', OHUB_Text::t((string)($free[$k]['caption'] ?? $k))));
             $rows[] = ['Key' => $k, 'Panel' => $name, 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => $i + 1];
         }
         $this->UpdateFormField('FormLayout', 'values', json_encode($rows, JSON_UNESCAPED_UNICODE));
@@ -670,14 +670,14 @@ class OCPPHubLadepunkt extends IPSModule
     {
         return [
             'type' => 'ExpansionPanel', 'expanded' => false,
-            'caption' => OHUB_Text::t('🧡  About this module'),
+            'caption' => '🧡  About this module',
             'items' => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('View license text'), 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('☕  Donate via PayPal'), 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.'],
+                ['type' => 'Label', 'caption' => 'License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.'],
+                ['type' => 'Button', 'caption' => 'View license text', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu'],
+                ['type' => 'Label', 'caption' => 'Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.'],
+                ['type' => 'Button', 'caption' => '☕  Donate via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
             ],
         ];
     }
@@ -689,12 +689,12 @@ class OCPPHubLadepunkt extends IPSModule
         }
         return [
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
-            'caption' => OHUB_Text::t('👋 What is this module for?'),
+            'caption' => '👋 What is this module for?',
             'items' => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('This “OCPPHub Charge Point” instance stands for exactly one wallbox (or connector) — it holds the visible readings (charging power, energy meter, vehicle plugged in) and the control variables (charge enable, current limit) as ordinary Symcon variables. The actual OCPP communication runs through the assigned “OCPPHub Splitter” instance; here things are only configured and displayed.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('The benefit: set charge enable/current limit from within Symcon, real charging power/energy for dashboards or an energy management system (EMS), optionally standalone PV surplus charging even without an EMS installed.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Still missing the right wallbox, or want to create several at once? “OCPPHub Configurator” shows wallboxes that are already connected but not yet created, for one-click creation.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUBL_AckPurposeIntro($id);'],
+                ['type' => 'Label', 'caption' => 'This “OCPPHub Charge Point” instance stands for exactly one wallbox (or connector) — it holds the visible readings (charging power, energy meter, vehicle plugged in) and the control variables (charge enable, current limit) as ordinary Symcon variables. The actual OCPP communication runs through the assigned “OCPPHub Splitter” instance; here things are only configured and displayed.'],
+                ['type' => 'Label', 'caption' => 'The benefit: set charge enable/current limit from within Symcon, real charging power/energy for dashboards or an energy management system (EMS), optionally standalone PV surplus charging even without an EMS installed.'],
+                ['type' => 'Label', 'caption' => 'Still missing the right wallbox, or want to create several at once? “OCPPHub Configurator” shows wallboxes that are already connected but not yet created, for one-click creation.'],
+                ['type' => 'Button', 'caption' => 'Understood – do not show again', 'onClick' => 'OHUBL_AckPurposeIntro($id);'],
             ],
         ];
     }
@@ -710,11 +710,11 @@ class OCPPHubLadepunkt extends IPSModule
         if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
             return null;
         }
-        $items = [['type' => 'Label', 'caption' => OHUB_Text::t('🆕 New in this module — please take a quick look and check your settings if needed:')]];
+        $items = [['type' => 'Label', 'caption' => '🆕 New in this module — please take a quick look and check your settings if needed:']];
         foreach (self::NEWS_ITEMS as $line) {
             $items[] = ['type' => 'Label', 'caption' => '• ' . OHUB_Text::t($line)];
         }
-        $items[] = ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUBL_AckNews($id);'];
+        $items[] = ['type' => 'Button', 'caption' => 'Understood – do not show again', 'onClick' => 'OHUBL_AckNews($id);'];
         return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => OHUB_Text::t('🆕 New in version %s', self::NEWS_VERSION), 'expanded' => true, 'items' => $items];
     }
 
@@ -2111,7 +2111,7 @@ class OCPPHubLadepunkt extends IPSModule
             }
             $items[] = $label;
         }
-        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => OHUB_Text::t('🔗 Connections in the stack'), 'expanded' => true, 'items' => $items];
+        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Connections in the stack', 'expanded' => true, 'items' => $items];
     }
 
     // SUITE.md „Wert kommt automatisch: Eingabefeld ersetzen" (21.09.2026):
@@ -2121,7 +2121,7 @@ class OCPPHubLadepunkt extends IPSModule
     // Eigene Auswahl: ✏️, Feld sichtbar. Nichts gefunden: ℹ️, Feld sichtbar.
     private function surplusMeterFieldElements(): array
     {
-        $field = ['type' => 'SelectInstance', 'name' => 'SurplusMeterID', 'caption' => OHUB_Text::t('Grid meter (MeterHub)'), 'moduleID' => self::METERHUB_GUID];
+        $field = ['type' => 'SelectInstance', 'name' => 'SurplusMeterID', 'caption' => 'Grid meter (MeterHub)', 'moduleID' => self::METERHUB_GUID];
         $forced = $this->ReadPropertyInteger('SurplusMeterID');
         if ($forced > 0) {
             $name = @IPS_InstanceExists($forced) ? OHUB_Text::t('“%s”', IPS_GetName($forced)) : OHUB_Text::t('(no longer exists)');
@@ -2134,11 +2134,11 @@ class OCPPHubLadepunkt extends IPSModule
         if ($meter !== null) {
             return [
                 ['type' => 'Label', 'caption' => OHUB_Text::t('🔗 Grid meter: MeterHub #%d “%s” (automatically through the MeterHub contract, grid power in real time)', $meter['iid'], IPS_GetName($meter['iid'])), 'color' => 0x2E8B3D],
-                ['type' => 'ExpansionPanel', 'caption' => OHUB_Text::t('✏️ Use own grid meter instead'), 'expanded' => false, 'items' => [$field]],
+                ['type' => 'ExpansionPanel', 'caption' => '✏️ Use own grid meter instead', 'expanded' => false, 'items' => [$field]],
             ];
         }
         return [
-            ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ Grid meter: none found automatically (MeterHub with real-time grid power), needed for surplus charging. Please select one below.')],
+            ['type' => 'Label', 'caption' => 'ℹ️ Grid meter: none found automatically (MeterHub with real-time grid power), needed for surplus charging. Please select one below.'],
             $field,
         ];
     }

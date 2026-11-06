@@ -283,6 +283,20 @@ $m = new $class(0);
 $json = $m->GetConfigurationForm();
 $form = json_decode($json, true);
 
+// Die Konsole übersetzt caption/label/confirm eines Formulars selbst (Store-Checkliste 25): das Modul liefert
+// feste Beschriftungen auf Englisch, die Übersetzung kommt aus locale.json. Der Prüfstand bildet das nach.
+$konsole = function ($knoten) use (&$konsole, $locale) {
+    foreach ((array)$knoten as $k => $v) {
+        if (is_array($v)) {
+            $knoten[$k] = $konsole($v);
+        } elseif (is_string($v) && in_array($k, ['caption', 'label', 'confirm'], true) && isset($locale[$v])) {
+            $knoten[$k] = $locale[$v];
+        }
+    }
+    return $knoten;
+};
+$form = $konsole($form);
+
 // Englischer Lauf (OHUB_SPRACHE=en): kein Inhaltsvergleich, sondern Prüfstand „keine deutschen Reste im
 // Formular". Jedes Szenario erzeugt das Formular mit den englischen Quelltexten und sucht Umlaute,
 // ß und typische deutsche Wörter (SUITE.md Konvention 9).

@@ -20,7 +20,7 @@ require_once __DIR__ . '/../libs/OHUB_Text.php';
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.5.0';
+    private const VERSION = '0.5.1';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -428,16 +428,16 @@ class OCPPHubAbrechnung extends IPSModule
         $kunden = $this->getKunden();
         $activePanel = $this->ReadAttributeString('ActiveAccordionPanel');
 
-        $fahrzeugOptions = [['caption' => OHUB_Text::t('— no vehicle —'), 'value' => 0]];
+        $fahrzeugOptions = [['caption' => '— no vehicle —', 'value' => 0]];
         foreach ($fahrzeuge as $f) {
             $fahrzeugName = $this->resolveFahrzeugName($f);
             $fahrzeugOptions[] = ['caption' => $fahrzeugName . ($f['kennzeichen'] !== '' ? ' (' . $f['kennzeichen'] . ')' : ''), 'value' => (int)$f['id']];
         }
-        $gruppenOptions = [['caption' => OHUB_Text::t('— no group —'), 'value' => 0]];
+        $gruppenOptions = [['caption' => '— no group —', 'value' => 0]];
         foreach ($gruppen as $g) {
             $gruppenOptions[] = ['caption' => $g['name'], 'value' => (int)$g['id']];
         }
-        $kundenOptions = [['caption' => OHUB_Text::t('— no customer —'), 'value' => 0]];
+        $kundenOptions = [['caption' => '— no customer —', 'value' => 0]];
         foreach ($kunden as $k) {
             $kundenOptions[] = ['caption' => $k['name'], 'value' => (int)$k['id']];
         }
@@ -448,23 +448,23 @@ class OCPPHubAbrechnung extends IPSModule
             'Fahrzeuge' => [
                 'type'     => 'ExpansionPanel',
                 'name'     => 'PanelFahrzeuge',
-                'caption'  => OHUB_Text::t('🚙 Vehicles'),
+                'caption'  => '🚙 Vehicles',
                 'expanded' => $activePanel === 'Fahrzeuge',
                 'width'    => $this->panelWidth('Fahrzeuge', $activePanel),
                 'onClick'  => 'OHUBA_OnPanelToggle($id, \'Fahrzeuge\');',
                 'items'    => [
-                    ['type' => 'Label', 'width' => '540px', 'caption' => OHUB_Text::t('Select “Tessie vehicle” if the car is already known in the stack (mirrors its name there automatically — no typing it twice, always up to date). Without Tessie, or for a car not recorded through Tessie: enter the display name/license plate by hand and leave “Tessie vehicle” on “no vehicle”.')],
+                    ['type' => 'Label', 'width' => '540px', 'caption' => 'Select “Tessie vehicle” if the car is already known in the stack (mirrors its name there automatically — no typing it twice, always up to date). Without Tessie, or for a car not recorded through Tessie: enter the display name/license plate by hand and leave “Tessie vehicle” on “no vehicle”.'],
                     [
                         'type'     => 'List',
                         'name'     => 'Fahrzeuge',
-                        'caption'  => OHUB_Text::t('Vehicles'),
+                        'caption'  => 'Vehicles',
                         'rowCount' => 5,
                         'add'      => true,
                         'delete'   => true,
                         'columns'  => [
-                            ['caption' => OHUB_Text::t('Tessie vehicle'), 'name' => 'tessieInstanceId', 'width' => '180px', 'add' => 0, 'edit' => ['type' => 'SelectInstance', 'moduleID' => self::TESSIE_VEHICLE_GUID]],
-                            ['caption' => OHUB_Text::t('Display name (if no Tessie vehicle)'), 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('License plate'), 'name' => 'kennzeichen', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Tessie vehicle', 'name' => 'tessieInstanceId', 'width' => '180px', 'add' => 0, 'edit' => ['type' => 'SelectInstance', 'moduleID' => self::TESSIE_VEHICLE_GUID]],
+                            ['caption' => 'Display name (if no Tessie vehicle)', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'License plate', 'name' => 'kennzeichen', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ],
                         'values' => $fahrzeuge,
                     ],
@@ -473,24 +473,24 @@ class OCPPHubAbrechnung extends IPSModule
             'Gruppen' => [
                 'type'     => 'ExpansionPanel',
                 'name'     => 'PanelGruppen',
-                'caption'  => OHUB_Text::t('👥 Groups'),
+                'caption'  => '👥 Groups',
                 'expanded' => $activePanel === 'Gruppen',
                 'width'    => $this->panelWidth('Gruppen', $activePanel),
                 'onClick'  => 'OHUBA_OnPanelToggle($id, \'Gruppen\');',
                 'items'    => [
-                    ['type' => 'Label', 'width' => '540px', 'caption' => OHUB_Text::t('Purely for bundling consumption limits (e.g. “Family” with a shared monthly limit) — no charging behavior of its own.')],
+                    ['type' => 'Label', 'width' => '540px', 'caption' => 'Purely for bundling consumption limits (e.g. “Family” with a shared monthly limit) — no charging behavior of its own.'],
                     [
                         'type'     => 'List',
                         'name'     => 'Gruppen',
-                        'caption'  => OHUB_Text::t('Groups'),
+                        'caption'  => 'Groups',
                         'rowCount' => 5,
                         'add'      => true,
                         'delete'   => true,
                         'columns'  => [
-                            ['caption' => OHUB_Text::t('Name'), 'name' => 'name', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('Week'), 'name' => 'maxKwhWeek', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                            ['caption' => OHUB_Text::t('Month'), 'name' => 'maxKwhMonth', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                            ['caption' => OHUB_Text::t('Year'), 'name' => 'maxKwhYear', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Name', 'name' => 'name', 'width' => '150px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Week', 'name' => 'maxKwhWeek', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Month', 'name' => 'maxKwhMonth', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Year', 'name' => 'maxKwhYear', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
                         ],
                         'values' => $gruppen,
                     ],
@@ -499,7 +499,7 @@ class OCPPHubAbrechnung extends IPSModule
             'Kunden' => [
                 'type'     => 'ExpansionPanel',
                 'name'     => 'PanelKunden',
-                'caption'  => OHUB_Text::t('🙋 Customers'),
+                'caption'  => '🙋 Customers',
                 'expanded' => $activePanel === 'Kunden',
                 'width'    => $this->panelWidth('Kunden', $activePanel),
                 'onClick'  => 'OHUBA_OnPanelToggle($id, \'Kunden\');',
@@ -507,17 +507,17 @@ class OCPPHubAbrechnung extends IPSModule
                     [
                         'type'     => 'List',
                         'name'     => 'Kunden',
-                        'caption'  => OHUB_Text::t('Customers'),
+                        'caption'  => 'Customers',
                         'rowCount' => 6,
                         'add'      => true,
                         'delete'   => true,
                         'columns'  => [
-                            ['caption' => OHUB_Text::t('Name'), 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('Active'), 'name' => 'active', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                            ['caption' => OHUB_Text::t('Group'), 'name' => 'groupId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $gruppenOptions]],
-                            ['caption' => OHUB_Text::t('Limit/week (kWh, 0=off)'), 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                            ['caption' => OHUB_Text::t('Limit/month (kWh, 0=off)'), 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                            ['caption' => OHUB_Text::t('Limit/year (kWh, 0=off)'), 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Name', 'name' => 'name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Active', 'name' => 'active', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                            ['caption' => 'Group', 'name' => 'groupId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $gruppenOptions]],
+                            ['caption' => 'Limit/week (kWh, 0=off)', 'name' => 'maxKwhWeek', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Limit/month (kWh, 0=off)', 'name' => 'maxKwhMonth', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                            ['caption' => 'Limit/year (kWh, 0=off)', 'name' => 'maxKwhYear', 'width' => '150px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
                         ],
                         'values' => $kunden,
                     ],
@@ -526,7 +526,7 @@ class OCPPHubAbrechnung extends IPSModule
             'Zugaenge' => [
                 'type'     => 'ExpansionPanel',
                 'name'     => 'PanelZugaenge',
-                'caption'  => OHUB_Text::t('🪪 Access (cards)'),
+                'caption'  => '🪪 Access (cards)',
                 'expanded' => $activePanel === 'Zugaenge',
                 'width'    => $this->panelWidth('Zugaenge', $activePanel),
                 'onClick'  => 'OHUBA_OnPanelToggle($id, \'Zugaenge\');',
@@ -534,19 +534,19 @@ class OCPPHubAbrechnung extends IPSModule
                     [
                         'type'     => 'List',
                         'name'     => 'Zugaenge',
-                        'caption'  => OHUB_Text::t('Access'),
+                        'caption'  => 'Access',
                         'rowCount' => 8,
                         'add'      => true,
                         'delete'   => true,
                         'columns'  => [
-                            ['caption' => OHUB_Text::t('idTag (card)'), 'name' => 'idTag', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('Display name'), 'name' => 'name', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('Customer'), 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
-                            ['caption' => OHUB_Text::t('Vehicle'), 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
-                            ['caption' => OHUB_Text::t('Active'), 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                            ['caption' => OHUB_Text::t('Valid until (YYYY-MM-DD, empty=unlimited)'), 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('Allowed from (HH:MM, empty=always)'), 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                            ['caption' => OHUB_Text::t('Allowed until (HH:MM, empty=always)'), 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'idTag (card)', 'name' => 'idTag', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Display name', 'name' => 'name', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Customer', 'name' => 'customerId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $kundenOptions]],
+                            ['caption' => 'Vehicle', 'name' => 'vehicleId', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'Select', 'options' => $fahrzeugOptions]],
+                            ['caption' => 'Active', 'name' => 'active', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                            ['caption' => 'Valid until (YYYY-MM-DD, empty=unlimited)', 'name' => 'validUntil', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Allowed from (HH:MM, empty=always)', 'name' => 'allowedFrom', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                            ['caption' => 'Allowed until (HH:MM, empty=always)', 'name' => 'allowedTo', 'width' => '120px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ],
                         'values' => $this->getZugaenge(),
                     ],
@@ -583,12 +583,12 @@ class OCPPHubAbrechnung extends IPSModule
                     'caption'  => OHUB_Text::t('📖 Documentation & help (version %s)', self::VERSION),
                     'expanded' => false,
                     'items'    => [
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('What this instance does: customer management for operating mode ② “Multiple users” (see the splitter form). This instance always exists (it is created automatically by the splitter) but ONLY has an effect while “Multiple users” is selected on the splitter — with “Single user” every card is accepted and the data here stays unused.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('📋 Order of creation: first vehicles and groups (if wanted), then customers (can be assigned to a group), finally access entries/cards (each assigned to exactly one customer, optionally to a vehicle). A customer can have several access entries — e.g. main card + spare card.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🔑 Access entry = a single RFID card (idTag). The idTag must match exactly the value the wallbox reports to OCPPHub when the card is presented (visible as “Authorize” in the debug output of the splitter instance). Any number of access entries is possible — no upper limit like a wallbox’s internal card list.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('⏱️ Consumption limits (week/month/year, 0 = no limit) apply per customer AND per group independently — the stricter limit applies first. A charge already in progress is NOT stopped when the limit is reached, only the next card presentation is rejected. The counting period is the calendar week/month/year, not rolling.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('🕐 Time window on the access entry (time from/to, format HH:MM, empty = no restriction) — e.g. a guest card that may only charge during the day.')],
-                        ['type' => 'Label', 'caption' => OHUB_Text::t('ℹ️ NOT included yet (stage 3): tariffs/cost calculation, reports/CSV export, reservation fee. The consumption data (kWh per transaction) is already recorded now, so that enabling it later does not have to build on missing raw data.')],
+                        ['type' => 'Label', 'caption' => 'What this instance does: customer management for operating mode ② “Multiple users” (see the splitter form). This instance always exists (it is created automatically by the splitter) but ONLY has an effect while “Multiple users” is selected on the splitter — with “Single user” every card is accepted and the data here stays unused.'],
+                        ['type' => 'Label', 'caption' => '📋 Order of creation: first vehicles and groups (if wanted), then customers (can be assigned to a group), finally access entries/cards (each assigned to exactly one customer, optionally to a vehicle). A customer can have several access entries — e.g. main card + spare card.'],
+                        ['type' => 'Label', 'caption' => '🔑 Access entry = a single RFID card (idTag). The idTag must match exactly the value the wallbox reports to OCPPHub when the card is presented (visible as “Authorize” in the debug output of the splitter instance). Any number of access entries is possible — no upper limit like a wallbox’s internal card list.'],
+                        ['type' => 'Label', 'caption' => '⏱️ Consumption limits (week/month/year, 0 = no limit) apply per customer AND per group independently — the stricter limit applies first. A charge already in progress is NOT stopped when the limit is reached, only the next card presentation is rejected. The counting period is the calendar week/month/year, not rolling.'],
+                        ['type' => 'Label', 'caption' => '🕐 Time window on the access entry (time from/to, format HH:MM, empty = no restriction) — e.g. a guest card that may only charge during the day.'],
+                        ['type' => 'Label', 'caption' => 'ℹ️ NOT included yet (stage 3): tariffs/cost calculation, reports/CSV export, reservation fee. The consumption data (kWh per transaction) is already recorded now, so that enabling it later does not have to build on missing raw data.'],
                         ['type' => 'Label', 'caption' => OHUB_Text::t('🧩 Configuration tile: the same management (vehicles/groups/customers/access entries, card teach-in) is also available as a WebFront tile of this instance — useful for assigning it to a secured WebFront without granting console access. Prerequisite: a WebHook Control instance must exist in the object tree (Symcon usually creates it automatically); the tile registers there under “/hook/ohubadmin%d”. Access protection runs entirely through Symcon’s own WebFront visibility per instance — no additional password in this module.', $this->InstanceID)],
                     ],
                 ],
@@ -600,18 +600,18 @@ class OCPPHubAbrechnung extends IPSModule
                 $this->layoutPanel($layout, $panelDefs),
             ],
             'status' => [
-                ['code' => 102, 'icon' => 'active', 'caption' => OHUB_Text::t('Active')],
+                ['code' => 102, 'icon' => 'active', 'caption' => 'Active'],
             ],
         ];
 
         if (!$this->ReadAttributeBoolean(self::ATTR_REVIEW_HINT_GONE)) {
             $form['elements'][] = [
                 'type' => 'ExpansionPanel', 'name' => 'ReviewHint', 'expanded' => true,
-                'caption' => OHUB_Text::t('💬 Feedback'),
+                'caption' => '💬 Feedback',
                 'items' => [
-                    ['type' => 'Label', 'caption' => OHUB_Text::t('🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.')],
-                    ['type' => 'Button', 'caption' => OHUB_Text::t('Go to forum thread'), 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
-                    ['type' => 'Button', 'caption' => OHUB_Text::t('Do not show again'), 'onClick' => 'OHUBA_DismissReviewHint($id);'],
+                    ['type' => 'Label', 'caption' => '🧪 OCPPHub is an early beta — feedback is welcome in the Symcon forum.'],
+                    ['type' => 'Button', 'caption' => 'Go to forum thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
+                    ['type' => 'Button', 'caption' => 'Do not show again', 'onClick' => 'OHUBA_DismissReviewHint($id);'],
                 ],
             ];
         }
@@ -635,7 +635,7 @@ class OCPPHubAbrechnung extends IPSModule
             array_unshift($form['elements'], [
                 'type'  => 'RowLayout',
                 'items' => [
-                    ['type' => 'Label', 'caption' => OHUB_Text::t('⚠️ No splitter uses this instance as its Billing instance. Every OCPPHub splitter uses exactly ONE Billing instance, stored with it — this one is not it (regardless of where it sits in the object tree) and is therefore queried by NO splitter. Entries made here have no effect at all. Please enter your data in the instance the splitter created itself (name ends in “… Billing”) and delete this one.')],
+                    ['type' => 'Label', 'caption' => '⚠️ No splitter uses this instance as its Billing instance. Every OCPPHub splitter uses exactly ONE Billing instance, stored with it — this one is not it (regardless of where it sits in the object tree) and is therefore queried by NO splitter. Entries made here have no effect at all. Please enter your data in the instance the splitter created itself (name ends in “… Billing”) and delete this one.'],
                 ],
             ]);
         }
@@ -698,7 +698,7 @@ class OCPPHubAbrechnung extends IPSModule
             }
             $items[] = $label;
         }
-        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => OHUB_Text::t('🔗 Connections in the stack'), 'expanded' => true, 'items' => $items];
+        return ['type' => 'ExpansionPanel', 'name' => 'ConnectionsPanel', 'caption' => '🔗 Connections in the stack', 'expanded' => true, 'items' => $items];
     }
 
     public function DismissReviewHint(): void
@@ -713,14 +713,14 @@ class OCPPHubAbrechnung extends IPSModule
     {
         return [
             'type' => 'ExpansionPanel', 'expanded' => false,
-            'caption' => OHUB_Text::t('🧡  About this module'),
+            'caption' => '🧡  About this module',
             'items' => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('View license text'), 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('☕  Donate via PayPal'), 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Born out of genuine enthusiasm for my own installation — and a few evenings of typing. Still: hobby software or not, this is intellectual property and real work went into it.'],
+                ['type' => 'Label', 'caption' => 'License: PolyForm Noncommercial 1.0.0 — free for private, non-commercial use; commercial use requires a separate license from the rights holder.'],
+                ['type' => 'Button', 'caption' => 'View license text', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Commercial use or questions about the license? Just get in touch: dietmar@gureth.eu'],
+                ['type' => 'Label', 'caption' => 'Do you like the module and would still like to leave something behind? I would be happy about a small donation — entirely voluntary, nothing expected in return.'],
+                ['type' => 'Button', 'caption' => '☕  Donate via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
             ],
         ];
     }
@@ -732,12 +732,12 @@ class OCPPHubAbrechnung extends IPSModule
         }
         return [
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
-            'caption' => OHUB_Text::t('👋 What is this module for?'),
+            'caption' => '👋 What is this module for?',
             'items' => [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('This “OCPPHub Billing” instance is the customer management: customer → access entry (RFID card) → optionally vehicle/group, with consumption limits and time windows. It always exists (it is created automatically by the associated splitter instance) but ONLY has an effect when “② Multiple users” is selected there — with “① Single user” every card is accepted, regardless of the data maintained here.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('The benefit: several people/vehicles on the same wallbox, each with their own card, their own consumption limits (week/month/year) and optionally their own time window — e.g. for a guest card that may only charge during the day.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('The same management is also available as a WebFront tile (see the “🧩 Configuration tile” panel below) — handy for assigning it to a secured WebFront without granting console access.')],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUBA_AckPurposeIntro($id);'],
+                ['type' => 'Label', 'caption' => 'This “OCPPHub Billing” instance is the customer management: customer → access entry (RFID card) → optionally vehicle/group, with consumption limits and time windows. It always exists (it is created automatically by the associated splitter instance) but ONLY has an effect when “② Multiple users” is selected there — with “① Single user” every card is accepted, regardless of the data maintained here.'],
+                ['type' => 'Label', 'caption' => 'The benefit: several people/vehicles on the same wallbox, each with their own card, their own consumption limits (week/month/year) and optionally their own time window — e.g. for a guest card that may only charge during the day.'],
+                ['type' => 'Label', 'caption' => 'The same management is also available as a WebFront tile (see the “🧩 Configuration tile” panel below) — handy for assigning it to a secured WebFront without granting console access.'],
+                ['type' => 'Button', 'caption' => 'Understood – do not show again', 'onClick' => 'OHUBA_AckPurposeIntro($id);'],
             ],
         ];
     }
@@ -791,7 +791,7 @@ class OCPPHubAbrechnung extends IPSModule
         $rows = [];
         $hidden = [];
         foreach ($layout as $key => $l) {
-            $name = trim((string)preg_replace('/\s*\(.*$/u', '', (string)($panelDefs[$key]['caption'] ?? $key)));
+            $name = trim((string)preg_replace('/\s*\(.*$/u', '', OHUB_Text::t((string)($panelDefs[$key]['caption'] ?? $key))));
             $rows[] = ['Key' => $key, 'Panel' => $name, 'Hidden' => $l['hidden'], 'Pos' => $l['pos']];
             if ($l['hidden']) {
                 $hidden[] = trim((string)preg_replace('/^[^\p{L}\p{N}]+/u', '', $name));
@@ -804,20 +804,20 @@ class OCPPHubAbrechnung extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'LayoutPanel', 'expanded' => false,
             'caption' => OHUB_Text::t('🪟  Form layout') . ($hidden ? OHUB_Text::t(' (%d hidden)', count($hidden)) : ''),
             'items' => array_merge($hiddenLine, [
-                ['type' => 'Label', 'caption' => OHUB_Text::t('Here you decide in which order the four tabs (vehicles, groups, customers, access entries) appear and which of them you do not want to see at all. It takes effect after “Apply changes” the next time the form is opened. You cannot set expanded/collapsed here: the four tabs form an accordion (only one open at a time), and the module remembers the tab you opened last.')],
-                ['type' => 'Label', 'caption' => OHUB_Text::t('No check mark at “Hidden” means “default”: visible. The position is a number; with equal numbers the default order is kept. “Hidden” removes a tab from the display without it losing anything: its entries are preserved and stay in effect (meant for areas you rarely need). To show it again, remove the check mark or click “Reset to default”. The areas above (purpose, news, documentation, connections) and below (feedback, about this module) stay where they are and cannot be hidden.')],
+                ['type' => 'Label', 'caption' => 'Here you decide in which order the four tabs (vehicles, groups, customers, access entries) appear and which of them you do not want to see at all. It takes effect after “Apply changes” the next time the form is opened. You cannot set expanded/collapsed here: the four tabs form an accordion (only one open at a time), and the module remembers the tab you opened last.'],
+                ['type' => 'Label', 'caption' => 'No check mark at “Hidden” means “default”: visible. The position is a number; with equal numbers the default order is kept. “Hidden” removes a tab from the display without it losing anything: its entries are preserved and stay in effect (meant for areas you rarely need). To show it again, remove the check mark or click “Reset to default”. The areas above (purpose, news, documentation, connections) and below (feedback, about this module) stay where they are and cannot be hidden.'],
                 [
-                    'type' => 'List', 'name' => 'FormLayout', 'caption' => OHUB_Text::t('Areas'), 'rowCount' => count($rows), 'add' => false, 'delete' => false,
+                    'type' => 'List', 'name' => 'FormLayout', 'caption' => 'Areas', 'rowCount' => count($rows), 'add' => false, 'delete' => false,
                     'loadValuesFromConfiguration' => false,
                     'values' => $rows,
                     'columns' => [
-                        ['caption' => OHUB_Text::t('Area'), 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
-                        ['caption' => OHUB_Text::t('Key'), 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
-                        ['caption' => OHUB_Text::t('🙈 Hidden'), 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => OHUB_Text::t('Position'), 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
+                        ['caption' => 'Area', 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
+                        ['caption' => 'Key', 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
+                        ['caption' => '🙈 Hidden', 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Position', 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
                     ],
                 ],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('↩️ Reset to default'), 'onClick' => 'echo OHUBA_ResetFormLayout($id);'],
+                ['type' => 'Button', 'caption' => '↩️ Reset to default', 'onClick' => 'echo OHUBA_ResetFormLayout($id);'],
             ]),
         ];
     }
@@ -868,7 +868,7 @@ class OCPPHubAbrechnung extends IPSModule
             'visible' => $tag !== '',
             'items'   => [
                 ['type' => 'Label', 'caption' => $caption],
-                ['type' => 'Button', 'caption' => OHUB_Text::t('Adopt as new access entry'), 'onClick' => 'OHUBA_AdoptLastUnknownIdTag($id);'],
+                ['type' => 'Button', 'caption' => 'Adopt as new access entry', 'onClick' => 'OHUBA_AdoptLastUnknownIdTag($id);'],
             ],
         ];
     }
@@ -923,11 +923,11 @@ class OCPPHubAbrechnung extends IPSModule
         if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
             return null;
         }
-        $items = [['type' => 'Label', 'caption' => OHUB_Text::t('🆕 New in this module — please take a quick look and check your settings if needed:')]];
+        $items = [['type' => 'Label', 'caption' => '🆕 New in this module — please take a quick look and check your settings if needed:']];
         foreach (self::NEWS_ITEMS as $line) {
             $items[] = ['type' => 'Label', 'caption' => '• ' . OHUB_Text::t($line)];
         }
-        $items[] = ['type' => 'Button', 'caption' => OHUB_Text::t('Understood – do not show again'), 'onClick' => 'OHUBA_AckNews($id);'];
+        $items[] = ['type' => 'Button', 'caption' => 'Understood – do not show again', 'onClick' => 'OHUBA_AckNews($id);'];
         return ['type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'caption' => OHUB_Text::t('🆕 New in version %s', self::NEWS_VERSION), 'expanded' => true, 'items' => $items];
     }
 

@@ -48,6 +48,27 @@ foreach ($module as $m) {
                 break;
             }
         }
+        // Feste Formular-Beschriftung ('caption'/'label'/'confirm' => 'English text'): die Konsole übersetzt sie
+        // selbst (Store-Checkliste 25), der Text muss deshalb als Schlüssel in der Tabelle stehen.
+        $q = $i + 1;
+        while ($q < $n && is_array($tok[$q]) && $tok[$q][0] === T_WHITESPACE) {
+            $q++;
+        }
+        $istCaption = false;
+        if ($vor !== '' && is_array($vor) && $vor[0] === T_DOUBLE_ARROW && ($tok[$q] ?? null) !== '.') {
+            $kj = $j - 1;
+            while ($kj >= 0 && is_array($tok[$kj]) && $tok[$kj][0] === T_WHITESPACE) {
+                $kj--;
+            }
+            $istCaption = is_array($tok[$kj] ?? null) && $tok[$kj][0] === T_CONSTANT_ENCAPSED_STRING
+                && in_array(trim($tok[$kj][1], "'\""), ['caption', 'label', 'confirm'], true);
+        }
+        if ($istCaption && preg_match('/\p{L}/u', $val)) {
+            $benutzt[$val] = true;
+            if (!array_key_exists($val, $tab)) {
+                $fehler[] = "$m:{$k[2]}: Formular-Beschriftung fehlt in locale.json: " . mb_substr($val, 0, 70);
+            }
+        }
         if ($istT || ($imConst && preg_match('/\p{L}{3,}/u', $val) && !preg_match('/^[{A-Za-z0-9_\-\.\/:\\\\}]+$/', $val))) {
             if (!preg_match('/\p{L}/u', $val)) {
                 continue;
