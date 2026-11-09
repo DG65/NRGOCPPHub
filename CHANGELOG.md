@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.2 (09.11.2026)
+
+Splitter 0.4.2 / Ladepunkt 0.4.2 / Abrechnung 0.5.2 / Konfigurator 0.3.2.
+
+- Statuszeile des Ladepunkts: Status 104 zeigte „Charge-Point-Identity fehlt“, auch wenn die Identity gesetzt
+  und der Ladepunkt nur deaktiviert war. Die Beschriftung lautet jetzt „Inaktiv (deaktiviert oder
+  Charge-Point-Identity fehlt)“. Der Statuscode bleibt 104, am Verhalten ändert sich nichts.
+- Enthält 0.8.1 (Store-Checkliste Punkt 25, Formular-Beschriftungen übersetzt die Konsole), das bisher nur
+  auf Beta lag.
+
 ## 0.8.1 (06.11.2026)
 
 Splitter 0.4.1 / Ladepunkt 0.4.1 / Abrechnung 0.5.1 / Konfigurator 0.3.1. Store-Checkliste Punkt 25
