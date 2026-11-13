@@ -22,8 +22,22 @@
     --danger: #c0392b;
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
+  /* Hell/dunkel richtet sich nach dem Symcon-Theme (Variablen --card-color/--content-color, die
+     html-sdk.js setzt), NICHT nach prefers-color-scheme (SUITE.md Stolperstein 30: das folgt dem
+     Betriebssystem und gibt in einer anderen Visualisierung falsche Farben). Die Klasse setzt
+     symconSchema() unten; ohne Symcon-Variablen bleibt die Medienabfrage als Rückfall. */
+  :root.hell { color-scheme: light; }
+  :root.dunkel {
+    color-scheme: dark;
+    --text: #f0f0f2;
+    --textmuted: #a3a3a8;
+    --border: rgba(255,255,255,0.3);
+    --border-soft: rgba(255,255,255,0.16);
+    --input-bg: rgba(255,255,255,0.09);
+    --panel-bg: rgba(255,255,255,0.045);
+  }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not(.hell):not(.dunkel) {
       --text: #f0f0f2;
       --textmuted: #a3a3a8;
       --border: rgba(255,255,255,0.3);
@@ -69,8 +83,9 @@
     background: var(--input-bg); color: var(--text); cursor: pointer;
   }
   button:hover { filter: brightness(0.92); }
+  :root.dunkel button:hover { filter: brightness(1.3); }
   @media (prefers-color-scheme: dark) {
-    button:hover { filter: brightness(1.3); }
+    :root:not(.hell):not(.dunkel) button:hover { filter: brightness(1.3); }
   }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   button.primary:hover { filter: brightness(1.08); }
@@ -121,6 +136,35 @@ let PAYLOAD = null;
 
 // Texte: PHP liefert die Uebersetzungen (window.OHUB_TEXTS), englische Quelltexte als Schluessel.
 function tr(s) { return (window.OHUB_TEXTS && window.OHUB_TEXTS[s]) || s; }
+
+// Hell/dunkel aus den CSS-Variablen, die Symcons html-sdk.js auf :root setzt (SUITE.md Stolperstein 30;
+// Vorlage RoboHub 0.37.6). '' = unbekannt, dann gilt prefers-color-scheme als Rückfall.
+function symconSchema() {
+  try {
+    var cs = getComputedStyle(document.documentElement);
+    var karte = helligkeit(cs.getPropertyValue('--card-color'));
+    if (karte !== null) { return karte < 0.5 ? 'dunkel' : 'hell'; }
+    var text = helligkeit(cs.getPropertyValue('--content-color'));
+    if (text !== null) { return text > 0.5 ? 'dunkel' : 'hell'; }
+  } catch (e) { /* ohne Symcon-Variablen */ }
+  return '';
+}
+// '#rrggbb', '#rgb' oder 8-stellig. Symcon reicht Flutter-Farben weiter: beginnt ein 8-stelliger Wert
+// mit "ff", ist er als AARRGGBB gemeint (deckend), sonst als RRGGBBAA gelesen.
+function helligkeit(wert) {
+  var h = String(wert || '').trim().replace(/^#/, '');
+  if (!/^[0-9a-f]+$/i.test(h)) { return null; }
+  if (h.length === 3) { h = h.replace(/(.)/g, '$1$1'); }
+  if (h.length === 8) { h = /^ff/i.test(h) ? h.slice(2) : h.slice(0, 6); }
+  if (h.length !== 6) { return null; }
+  var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+function schemaSetzen() {
+  var s = symconSchema();
+  document.documentElement.classList.toggle('hell', s === 'hell');
+  document.documentElement.classList.toggle('dunkel', s === 'dunkel');
+}
 let HOOK_PATH = '';
 let DRAFTS = {};
 let TOUCHED = {};
@@ -369,12 +413,17 @@ function handleMessage(payload) {
       DRAFTS[area] = (payload[area] || []).map(cloneRow);
     }
   });
+  schemaSetzen();
   applyTexts();
   renderOrphanBanner();
   renderDemoBanner();
   renderUnknownBanner();
   Object.keys(AREAS).forEach(renderTable);
 }
+
+// Symcon setzt seine Farbvariablen eventuell erst nach dem ersten Aufbau: beim Laden und kurz danach nachziehen.
+window.addEventListener('load', schemaSetzen);
+setTimeout(schemaSetzen, 500);
 
 setInterval(function () {
   if (!HOOK_PATH) return;

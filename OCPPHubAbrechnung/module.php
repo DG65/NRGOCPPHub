@@ -20,7 +20,7 @@ require_once __DIR__ . '/../libs/OHUB_Text.php';
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.5.2';
+    private const VERSION = '0.5.3';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.

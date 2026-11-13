@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.3 (13.11.2026)
+
+Splitter 0.4.3 / Ladepunkt 0.4.3 / Abrechnung 0.5.3 / Konfigurator 0.3.3. SUITE.md Stolperstein 30
+(Hell/Dunkel in HTML-Kacheln):
+
+- Abrechnung-Kachel: Hell oder Dunkel richtet sich jetzt nach dem Symcon-Theme (CSS-Variablen `--card-color`
+  / `--content-color`, die `html-sdk.js` setzt, 8-stellige Werte mit führendem `ff` als AARRGGBB) statt nach
+  `prefers-color-scheme`, das dem Betriebssystem folgt und in einer anderen Visualisierung falsche Farben gab
+  (Schrift auf gleichfarbigem Grund). Ohne Symcon-Variablen bleibt `prefers-color-scheme` der Rückfall.
+  Geprüft mit Dunkel/Hell-Karte bei dunklem Betriebssystem und ohne Variablen.
+- Prüfstand: JS-Zeilenkommentare in `module.html` zählen beim Umlaut-Check nicht mehr als Text.
+
 ## 0.8.2 (09.11.2026)
 
 Splitter 0.4.2 / Ladepunkt 0.4.2 / Abrechnung 0.5.2 / Konfigurator 0.3.2.

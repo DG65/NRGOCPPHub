@@ -133,7 +133,9 @@ foreach (array_keys($inPhp) as $x) {
         $fehler[] = 'TILE_TEXTS enthält Text, den die Kachel nicht benutzt: ' . mb_substr($x, 0, 60);
     }
 }
-if (preg_match('/[äöüÄÖÜß]/u', preg_replace('/<!--.*?-->|\/\*.*?\*\//s', '', $html))) {
+$ohneKommentare = preg_replace('/<!--.*?-->|\/\*.*?\*\//s', '', $html);
+$ohneKommentare = preg_replace('/(^|[ \t;{}])\/\/[^\n]*/m', '$1', $ohneKommentare);   // JS-Zeilenkommentare
+if (preg_match('/[äöüÄÖÜß]/u', $ohneKommentare)) {
     $fehler[] = 'module.html enthält noch Umlaute außerhalb von Kommentaren';
 }
 
