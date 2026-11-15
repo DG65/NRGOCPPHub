@@ -20,7 +20,7 @@ require_once __DIR__ . '/../libs/OHUB_Text.php';
 
 class OCPPHubAbrechnung extends IPSModule
 {
-    private const VERSION = '0.5.3';
+    private const VERSION = '0.5.4';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -55,6 +55,20 @@ class OCPPHubAbrechnung extends IPSModule
         parent::__construct($InstanceID);
         // Quelltexte sind englisch, Deutsch steht in locale.json; je Text fragt Symcon nur einmal je Prozess.
         OHUB_Text::setzen(fn (string $text): string => $this->Translate($text));
+    }
+
+    public function Destroy()
+    {
+        // Destroy läuft auch beim bloßen Entladen des Moduls (Update, Neustart): nur wenn die Instanz
+        // wirklich gelöscht wurde, darf der Hook-Eintrag aus der WebHook Control verschwinden.
+        if (!IPS_InstanceExists($this->InstanceID)) {
+            try {
+                $this->removeOwnHook('/hook/ohubadmin' . $this->InstanceID);
+            } catch (\Throwable $e) {
+                // Aufräumen darf das Löschen der Instanz nie verhindern.
+            }
+        }
+        parent::Destroy();
     }
 
     public function Create()
@@ -141,6 +155,27 @@ class OCPPHubAbrechnung extends IPSModule
 
     // Standard-WebHook-Registrierungsmuster (1:1 aus NRGDashboardTile
     // übernommen, generischer Symcon-Mechanismus, keine modul-eigene Logik).
+    // Gegenstück zu RegisterHook(): entfernt nur den EIGENEN Eintrag (gleicher Pfad UND diese Instanz als Ziel),
+    // fremde Einträge der WebHook Control bleiben unberührt. Bewusst nicht "UnregisterHook" genannt
+    // (ab Symcon 8.2 gibt es eine Kernfunktion mit diesem Namen).
+    private function removeOwnHook(string $WebHook): void
+    {
+        $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
+        if (count($ids) === 0) {
+            return;
+        }
+        $hooks = json_decode((string)IPS_GetProperty($ids[0], 'Hooks'), true);
+        if (!is_array($hooks)) {
+            return;
+        }
+        $rest = array_values(array_filter($hooks, fn ($e) => !(($e['Hook'] ?? '') === $WebHook && (int)($e['TargetID'] ?? 0) === $this->InstanceID)));
+        if (count($rest) === count($hooks)) {
+            return;
+        }
+        IPS_SetProperty($ids[0], 'Hooks', json_encode($rest));
+        IPS_ApplyChanges($ids[0]);
+    }
+
     private function RegisterHook(string $WebHook): void
     {
         $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');

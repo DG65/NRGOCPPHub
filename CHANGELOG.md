@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.4 (15.11.2026)
+
+Splitter 0.4.4 / Ladepunkt 0.4.4 / Abrechnung 0.5.4 / Konfigurator 0.3.4. Hinweis aus dem Forum (dallard) über
+die MeterHub-Sitzung: gelöschte Instanzen ließen ihren Eintrag in der WebHook Control stehen.
+
+- Splitter und Abrechnung haben jetzt ein `Destroy()`, das den eigenen WebHook-Eintrag (`/hook/ocpphub/<ID>`
+  bzw. `/hook/ohubadmin<ID>`) entfernt. Das geschieht nur, wenn die Instanz wirklich gelöscht wurde
+  (`!IPS_InstanceExists`), denn `Destroy` läuft auch beim bloßen Entladen des Moduls. Entfernt wird nur der
+  Eintrag mit gleichem Pfad UND dieser Instanz als Ziel; fremde Einträge bleiben. Die Hilfsfunktion heißt
+  `removeOwnHook()`, nicht `UnregisterHook` (ab Symcon 8.2 Kernfunktion).
+- Ladepunkt und Konfigurator haben keinen Hook und ändern sich nicht (nur Versionsnummer).
+- Prüfstand: sieben neue Prüfungen in `test-datenfluss.php` (Entladen lässt Hooks stehen, Löschen entfernt nur den
+  eigenen Eintrag, fremde und fremd-adressierte Einträge bleiben, zweites Destroy harmlos; Mutationstest bestätigt).
+
 ## 0.8.3 (13.11.2026)
 
 Splitter 0.4.3 / Ladepunkt 0.4.3 / Abrechnung 0.5.3 / Konfigurator 0.3.3. SUITE.md Stolperstein 30

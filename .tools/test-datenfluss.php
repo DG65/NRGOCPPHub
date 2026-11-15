@@ -88,6 +88,7 @@ class IPSModule
     public function SetTimerInterval($n, $ms) { Bus::$ereignisse[] = ['timer', $this->InstanceID, $n, $ms]; }
     public function UpdateFormField($f, $p, $v) { Bus::$formfelder[] = [$f, $p, $v]; }
     public function SetStatus($s) {}
+    public function Destroy() {}
     public function RegisterMessage($a, $b) {}
     public function SendDataToChildren($json)
     {
@@ -500,6 +501,36 @@ foreach (['Splitter', 'Ladepunkt', 'Abrechnung', 'Konfigurator'] as $m) {
     }
     pruefe("$m sucht keine eigenen Kinder/Eltern über die Instanzliste", !preg_match('/IPS_GetInstanceListByModuleID\(\s*self::(LADEPUNKT|ABRECHNUNG|SPLITTER)_GUID/', $teile) || $m === 'Konfigurator' || $m === 'Ladepunkt');
 }
+
+// ---- 7) Destroy entfernt den eigenen WebHook, aber nur beim echten Löschen ----------------------------------
+Bus::reset();
+$whc = new class { public int $InstanceID = 0; public array $props = []; };
+Bus::add(999, $whc, G_WEBHOOK);
+$hooksSetzen = function () use ($whc) {
+    $whc->props['Hooks'] = json_encode([
+        ['Hook' => '/hook/ocpphub/100', 'TargetID' => 100],
+        ['Hook' => '/hook/ohubadmin300', 'TargetID' => 300],
+        ['Hook' => '/hook/fremd', 'TargetID' => 777],
+        ['Hook' => '/hook/ohubadmin301', 'TargetID' => 555],   // gleicher Pfad-Stil, aber andere Instanz als Ziel
+    ]);
+};
+$hooksPfade = fn () => array_map(fn ($e) => $e['Hook'], json_decode($whc->props['Hooks'], true));
+$spD = Bus::add(100, new OCPPHubSplitter(0), G_SPLITTER);
+$abD = Bus::add(300, new OCPPHubAbrechnung(0), G_ABRECHNUNG, 100);
+$hooksSetzen();
+$spD->Destroy();
+$abD->Destroy();
+pruefe('Destroy bei weiter bestehender Instanz (Modul wird nur entladen) lässt alle Hooks stehen', count($hooksPfade()) === 4);
+unset(Bus::$obj[100]);
+$spD->Destroy();
+pruefe('Destroy des gelöschten Splitters entfernt seinen Hook', !in_array('/hook/ocpphub/100', $hooksPfade(), true));
+pruefe('... und lässt die anderen Hooks stehen', count($hooksPfade()) === 3);
+unset(Bus::$obj[300]);
+$abD->Destroy();
+pruefe('Destroy der gelöschten Abrechnung entfernt ihren Hook', !in_array('/hook/ohubadmin300', $hooksPfade(), true));
+pruefe('fremder Hook und Hook mit anderer Ziel-Instanz bleiben unberührt', $hooksPfade() === ['/hook/fremd', '/hook/ohubadmin301']);
+$abD->Destroy();
+pruefe('zweites Destroy ist harmlos (nichts mehr zu entfernen)', count($hooksPfade()) === 2);
 
 // ---- Ergebnis ---------------------------------------------------------------------------------------------
 if ($fails === []) {
