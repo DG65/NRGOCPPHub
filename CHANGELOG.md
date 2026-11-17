@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.4 Build 80 (17.11.2026)
+
+Nur Metadaten: `date` in library.json auf die Unixzeit des Releases gesetzt (Release-Regel Punkt 8, der Store zeigt es an), Build 79 → 80. Kein Code geändert.
+
 ## 0.8.4 (15.11.2026)
 
 Splitter 0.4.4 / Ladepunkt 0.4.4 / Abrechnung 0.5.4 / Konfigurator 0.3.4. Hinweis aus dem Forum (dallard) über
