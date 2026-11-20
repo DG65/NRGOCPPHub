@@ -83,6 +83,7 @@ class IPSModule
     public function WriteAttributeString($n, $v) { $this->attrs[$n] = $v; }
     public function WriteAttributeInteger($n, $v) { $this->attrs[$n] = $v; }
     public function WriteAttributeBoolean($n, $v) { $this->attrs[$n] = $v; }
+    public function GetIDForIdent($i) { return 1000 + (crc32($i) % 1000); }
     public function GetValue($i) { return $this->werte[$i] ?? 0; }
     public function SetValue($i, $v) { $this->werte[$i] = $v; }
     public function SetTimerInterval($n, $ms) { Bus::$ereignisse[] = ['timer', $this->InstanceID, $n, $ms]; }
@@ -180,7 +181,10 @@ class TSplitterRec extends OCPPHubSplitter
     public bool $demo = false;
     public function ManualStart(string $cpid): void { $this->rec[] = ['ManuellStart', $cpid]; }
     public function RemoteStop(string $cpid, int $transactionId): void { $this->rec[] = ['Stopp', $cpid, $transactionId]; }
-    public function SetCurrentLimit(string $cpid, float $ampere): void { $this->rec[] = ['Stromlimit', $cpid, $ampere]; }
+    protected function stromlimitSenden(string $cpid, float $ampere, int $failsafeSec = 0, float $baseAmpere = 0.0, bool $failsafeState = false): void
+    {
+        $this->rec[] = ($failsafeSec === 0 && !$failsafeState) ? ['Stromlimit', $cpid, $ampere] : ['Stromlimit', $cpid, $ampere, $failsafeSec, $baseAmpere, $failsafeState];
+    }
     public function AutoAuthorizeVehicle(string $cpid, string $vehicleName): void { $this->rec[] = ['AutoFreigabe', $cpid, $vehicleName]; }
     public function ClearGoeForceLock(string $cpid): void { $this->rec[] = ['ForceLockLoesen', $cpid]; }
     public function ReserveNow(string $cpid, string $idTag, string $expiryIso): int { $this->rec[] = ['Reservieren', $cpid, $idTag, $expiryIso]; return 77; }
@@ -349,6 +353,43 @@ pruefe('GetFunctions sammelt die Vertragseinträge aller Ladepunkte über den Da
 $sp->props['Active'] = false;
 pruefe('Inaktiver Splitter liefert keine Einträge', $sp->GetFunctions() === []);
 
+// Vertragseintrag 1.8: contractType und Rückfall-Felder
+Bus::reset();
+$cp = Bus::add(201, new OCPPHubLadepunkt(0), G_LADEPUNKT);
+$cp->props = ['CPID' => 'WB2', 'ManagedBy' => 'none', 'MinCurrent' => 6, 'MaxCurrent' => 16];
+$e = $cp->GetContractEntry();
+pruefe('Vertrag 1.8: contractVersion und contractType „charger“ (neben function)', $e['contractVersion'] === '1.8' && $e['contractType'] === 'charger' && $e['function'] === 'charger' && $e['failsafeMode'] === 'deadman');
+pruefe('Rückfall aus: failsafeSec 0, nicht verifiziert, sicherer Strom = Mindeststrom', $e['failsafeSec'] === 0 && $e['failsafeVerified'] === false && $e['failsafeLimitA'] === 6);
+$cp->props['FailsafeEnabled'] = true;
+$cp->props['FailsafeSec'] = 300;
+$e = $cp->GetContractEntry();
+pruefe('Rückfall an, aber nicht bestätigt: failsafeSec bleibt 0 (kein Rückfall gemeldet, den niemand geprüft hat)', $e['failsafeSec'] === 0 && $e['failsafeVerified'] === false);
+$cp->props['FailsafeVerified'] = true;
+$e = $cp->GetContractEntry();
+pruefe('Rückfall an und bestätigt: failsafeSec 300, verifiziert', $e['failsafeSec'] === 300 && $e['failsafeVerified'] === true && $e['failsafeLimitA'] === 6);
+$cp->props['FailsafeEnabled'] = false;
+$e = $cp->GetContractEntry();
+pruefe('Bestätigt, aber Rückfall ausgeschaltet: nichts gemeldet', $e['failsafeSec'] === 0 && $e['failsafeVerified'] === false);
+
+// Rückfall im Splitter: die tatsächlich gesendeten OCPP-Frames
+[$sp] = aufbau();
+$sp->SetCurrentLimit('WB1', 10.0);
+$alt = frames('SetChargingProfile');
+pruefe('Ohne Rückfall: genau ein Profil, Id 1, stackLevel 0, ohne Ablaufzeit (altes Verhalten)', count($alt) === 1 && $alt[0][3]['csChargingProfiles']['chargingProfileId'] === 1 && $alt[0][3]['csChargingProfiles']['stackLevel'] === 0 && !isset($alt[0][3]['csChargingProfiles']['validTo']) && $alt[0][3]['csChargingProfiles']['chargingSchedule']['chargingSchedulePeriod'][0]['limit'] == 10);
+[$sp] = aufbau();
+privat($sp, 'stromlimitSenden', 'WB1', 10.0, 300, 6.0);
+$neu = frames('SetChargingProfile');
+$basis = $neu[0][3]['csChargingProfiles'] ?? [];
+$steuer = $neu[1][3]['csChargingProfiles'] ?? [];
+pruefe('Mit Rückfall: zwei Profile, Basis zuerst', count($neu) === 2 && ($basis['chargingProfileId'] ?? 0) === 2 && ($steuer['chargingProfileId'] ?? 0) === 1);
+pruefe('Basis-Profil: stackLevel 0, Mindeststrom, ohne Ablaufzeit', ($basis['stackLevel'] ?? -1) === 0 && ($basis['chargingSchedule']['chargingSchedulePeriod'][0]['limit'] ?? 0) == 6 && !isset($basis['validTo']));
+pruefe('Steuer-Profil: stackLevel 1 mit dem gewünschten Strom', ($steuer['stackLevel'] ?? -1) === 1 && ($steuer['chargingSchedule']['chargingSchedulePeriod'][0]['limit'] ?? 0) == 10);
+$bis = strtotime((string)($steuer['validTo'] ?? ''));
+pruefe('Steuer-Profil: validTo in UTC, jetzt + 300 s', $bis !== false && abs($bis - (time() + 300)) <= 3 && str_ends_with((string)$steuer['validTo'], 'Z'));
+[$sp] = aufbau();
+privat($sp, 'stromlimitSenden', 'WB1', 6.0, 0, 6.0, true);
+$wd = frames('SetChargingProfile');
+pruefe('Rückfall-Zustand: Steuer-Profil mit Mindeststrom, OHNE Ablaufzeit', count($wd) === 2 && !isset($wd[1][3]['csChargingProfiles']['validTo']) && $wd[1][3]['csChargingProfiles']['stackLevel'] === 1 && $wd[1][3]['csChargingProfiles']['chargingSchedule']['chargingSchedulePeriod'][0]['limit'] == 6);
 // Ohne Ladepunkte darf nichts passieren
 Bus::reset();
 $leer = Bus::add(100, new OCPPHubSplitter(0), G_SPLITTER);
@@ -371,6 +412,44 @@ $lp->RequestAction('ctl_curr_limit', 12);
 pruefe('Stromlimit: Splitter bekommt den auf die Grenzen begrenzten Wert', in_array(['Stromlimit', 'WB2', 12.0], $rec->rec, true));
 $lp->RequestAction('ctl_curr_limit', 99);
 pruefe('Stromlimit über Maximum wird auf das Maximum begrenzt', in_array(['Stromlimit', 'WB2', 16.0], $rec->rec, true));
+
+// Rückfall (Fremdanbindung 20.11.2026): aus = wie bisher; an = Frist und Mindeststrom gehen mit
+$rec->rec = [];
+$lp->props['FailsafeEnabled'] = true;
+$lp->props['FailsafeSec'] = 300;
+$lp->RequestAction('ctl_curr_limit', 12);
+pruefe('Rückfall an: Stromlimit geht mit Frist 300 s und Mindeststrom als Basis zum Splitter', in_array(['Stromlimit', 'WB2', 12.0, 300, 6.0, false], $rec->rec, true));
+pruefe('Rückfall an: Zeitpunkt des Befehls wird gemerkt', ($lp->attrs['LastLimitWriteAt'] ?? 0) > time() - 5);
+$lp->props['FailsafeSec'] = 5;
+$rec->rec = [];
+$lp->RequestAction('ctl_curr_limit', 12);
+pruefe('Rückfall: Frist unter 30 s wird auf 30 s angehoben', in_array(['Stromlimit', 'WB2', 12.0, 30, 6.0, false], $rec->rec, true));
+$lp->props['FailsafeSec'] = 300;
+pruefe('Nachschreiben nicht fällig direkt nach dem Befehl', privat($lp, 'failsafeRefreshDue') === false);
+$lp->attrs['LastLimitWriteAt'] = time() - 160;
+pruefe('Nachschreiben fällig nach der halben Frist', privat($lp, 'failsafeRefreshDue') === true);
+// Soft-Watchdog
+$rec->rec = [];
+$lp->werte['ctl_curr_limit'] = 12;
+$lp->attrs['LastLimitWriteAt'] = time() - 100;
+privat($lp, 'failsafeWatch');
+pruefe('Watchdog: innerhalb der Frist passiert nichts', $rec->rec === [] && $lp->werte['ctl_curr_limit'] === 12);
+$lp->attrs['LastLimitWriteAt'] = time() - 400;
+privat($lp, 'failsafeWatch');
+pruefe('Watchdog: nach der Frist zeigt die Steuervariable den Mindeststrom', $lp->werte['ctl_curr_limit'] === 6);
+pruefe('Watchdog: Mindeststrom geht als Rückfall-Zustand an den Splitter', in_array(['Stromlimit', 'WB2', 6.0, 0, 6.0, true], $rec->rec, true));
+pruefe('Watchdog: Zeitpunkt wird zurückgesetzt, kein zweites Mal', ($lp->attrs['LastLimitWriteAt'] ?? 1) === 0);
+$rec->rec = [];
+privat($lp, 'failsafeWatch');
+pruefe('Watchdog: schon im Rückfall, nichts mehr zu tun', $rec->rec === []);
+$lp->props['FailsafeEnabled'] = false;
+$lp->attrs['LastLimitWriteAt'] = time() - 400;
+$lp->werte['ctl_curr_limit'] = 12;
+privat($lp, 'failsafeWatch');
+pruefe('Rückfall aus: Watchdog tut nichts', $rec->rec === [] && $lp->werte['ctl_curr_limit'] === 12);
+$rec->rec = [];
+$lp->RequestAction('ctl_curr_limit', 12);
+pruefe('Rückfall aus: Stromlimit geht ohne Zusätze zum Splitter (altes Verhalten)', in_array(['Stromlimit', 'WB2', 12.0], $rec->rec, true));
 
 $rec->rec = [];
 $rec->demo = true;

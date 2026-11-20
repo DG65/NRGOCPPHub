@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.9.0 Build 81 (20.11.2026)
+
+Splitter 0.5.0 / Ladepunkt 0.5.0 / Abrechnung 0.5.4 / Konfigurator 0.3.4. Auslöser: Rundschreiben Fremdanbindung der
+EMS-Sitzung (SUITE.md „Fremdanbindung: Module anderer Autoren“), Dietmars Entscheidung dazu: sicherer Zustand =
+Mindeststrom, Frist 300 s.
+
+- **Vertrag OHUB_GetFunctions 1.7 → 1.8 (additiv):** `contractType: 'charger'` (Selbstbeschreibung, gleich `function`),
+  `failsafeSec` (s), `failsafeLimitA` (A, sicherer Strom = Mindeststrom), `failsafeVerified` (bool), `failsafeMode: 'deadman'`
+  (Wunsch der EMS-Sitzung).
+- **Optionaler Rückfall bei ausbleibenden Steuerbefehlen, standardmäßig AUS** (Bereich „Strombereich & Steuerhoheit“:
+  „Rückfall, wenn Befehle ausbleiben“, „Rückfall nach (Sekunden)“, „Rückfall an dieser Wallbox getestet“). Eingeschaltet
+  sendet der Splitter zwei Profile: ein Basis-Profil (Id 2, stackLevel 0, Mindeststrom, ohne Ablaufzeit) und das
+  Steuer-Profil (Id 1, stackLevel 1, gewünschter Strom, `validTo` = jetzt + Frist). Läuft das Steuer-Profil ab, gilt nach
+  OCPP das Basis-Profil. Ausgeschaltet bleibt das Senden unverändert (ein Profil, Id 1, stackLevel 0, ohne Ablaufzeit).
+- **Nachschreiben:** jeder Schreibzugriff auf `ctl_curr_limit` (auch mit unverändertem Wert) erneuert die Frist, die eigene
+  Überschussregelung schreibt nach der halben Frist auch ohne Änderung nach. Das EMS soll innerhalb `failsafeSec`/2
+  nachschreiben.
+- **Soft-Watchdog** (Minutentakt der Verbindungsüberwachung): kommt kein Strom-Befehl mehr, zeigt `ctl_curr_limit` den
+  Mindeststrom und das Steuer-Profil wird mit dem Mindeststrom ohne Ablaufzeit ersetzt, falls eine Wallbox `validTo`
+  ignoriert.
+- **`failsafeSec` > 0 meldet der Vertrag nur, wenn der Rückfall eingeschaltet UND „an dieser Wallbox getestet“ bestätigt
+  ist** — sonst 0, damit kein Konsument sich auf einen ungeprüften Rückfall verlässt. Ob die Wallbox `stackLevel`/`validTo`
+  einhält, ist je Hersteller verschieden und für go-e noch nicht am Gerät geprüft.
+- Eine Ablehnung des Basis-Profils durch die Wallbox wird gesondert geloggt (Rückfall nicht gewährleistet) und löst nicht
+  die Fahrzeug-Diagnose der Ladeablehnung aus.
+- Prüfstand: `test-datenfluss` 123 Prüfungen (Frames des Splitters, Vertrag, Watchdog, Mutationstest), 8 neue Texte in
+  `libs/locale.json`.
+
 ## 0.8.4 Build 80 (17.11.2026)
 
 Nur Metadaten: `date` in library.json auf die Unixzeit des Releases gesetzt (Release-Regel Punkt 8, der Store zeigt es an), Build 79 → 80. Kein Code geändert.

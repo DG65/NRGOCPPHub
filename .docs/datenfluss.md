@@ -71,7 +71,7 @@ Antwort immer `{"ok": true, "daten": ...}` oder `{"ok": false, "fehler": "..."}`
 |---|---|---|---|
 | `ManuellStart` | Ladepunkt | `Cpid` | leer |
 | `Stopp` | Ladepunkt | `Cpid`, `TransaktionsId` | leer |
-| `Stromlimit` | Ladepunkt | `Cpid`, `Ampere` | leer |
+| `Stromlimit` | Ladepunkt | `Cpid`, `Ampere`; optional `RueckfallSek` (Frist des Steuer-Profils, 0 = aus), `BasisAmpere` (sicherer Strom), `Rueckfall` (true = Steuer-Profil mit dem sicheren Strom ohne Ablaufzeit, Soft-Watchdog) | leer |
 | `AutoFreigabe` | Ladepunkt | `Cpid`, `Name` | leer |
 | `ForceLockLoesen` | Ladepunkt | `Cpid` | leer |
 | `Reservieren` | Ladepunkt | `Cpid`, `IdTag`, `Bis` | `reservierungsId` |

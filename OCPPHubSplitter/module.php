@@ -51,7 +51,7 @@ class OCPPHubSplitter extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.4.4';
+    private const VERSION = '0.5.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt 5)
     // — seit dem Stable-Start (27.10.2026) liegt LICENSE auf `main`, dorthin
@@ -684,6 +684,9 @@ class OCPPHubSplitter extends IPSModule
                 $action = $this->resolvePendingCall((string)($message[1] ?? ''));
                 if ($isFailure) {
                     $this->LogMessage(OHUB_Text::t('Rejection/error on a call that was sent [%s]: %s', $cpid, $raw), KL_WARNING);
+                    if ($action === self::PENDING_FAILSAFE) {
+                        $this->LogMessage(OHUB_Text::t('The wallbox [%s] rejects the fail-safe profile (stack level or validity period not supported?). The fail-safe is not guaranteed for this wallbox — switch it off at the charge point or test it with the wallbox.', $cpid), KL_WARNING);
+                    }
                 } elseif ($action === 'GetConfiguration') {
                     // Live-Fund 31.08.2026 (Dietmar, am eigenen Leib erlebt): eine
                     // ERFOLGREICHE Antwort ohne "status"-Feld (z. B. GetConfiguration.conf
@@ -975,7 +978,13 @@ class OCPPHubSplitter extends IPSModule
                 $this->RemoteStop($cpid, (int)($a['TransaktionsId'] ?? 0));
                 return [];
             case 'Stromlimit':
-                $this->SetCurrentLimit($cpid, (float)($a['Ampere'] ?? 0));
+                $this->stromlimitSenden(
+                    $cpid,
+                    (float)($a['Ampere'] ?? 0),
+                    (int)($a['RueckfallSek'] ?? 0),
+                    (float)($a['BasisAmpere'] ?? 0),
+                    !empty($a['Rueckfall'])
+                );
                 return [];
             case 'AutoFreigabe':
                 $this->AutoAuthorizeVehicle($cpid, (string)($a['Name'] ?? ''));
@@ -1622,7 +1631,22 @@ class OCPPHubSplitter extends IPSModule
     // $ampere: gewünschtes Stromlimit. connectorId 0 = ganze Wallbox (bei
     // Wallboxen mit nur einem Connector üblich) — Mehr-Connector-Adressierung
     // ist Stufe-2-Thema.
+    //
+    // Rückfall (Fremdanbindung, 20.11.2026, SUITE.md „Fremdanbindung"): ohne $failsafeSec bleibt alles wie
+    // bisher (EIN Profil, stackLevel 0, ohne Ablaufzeit). Mit $failsafeSec > 0 gehen ZWEI Profile raus:
+    //   - Basis-Profil (Id 2, stackLevel 0, ohne Ablaufzeit) mit dem sicheren Strom $baseAmpere und
+    //   - Steuer-Profil (Id 1, stackLevel 1) mit $ampere und `validTo` = jetzt + $failsafeSec.
+    // Läuft das Steuer-Profil ab, gilt nach OCPP automatisch das Basis-Profil. $failsafeState = true sendet
+    // das Steuer-Profil ohne Ablaufzeit mit dem sicheren Strom (Soft-Watchdog des Ladepunkts: falls die
+    // Wallbox `validTo` ignoriert, wird das alte, höhere Limit trotzdem ersetzt).
     public function SetCurrentLimit(string $cpid, float $ampere): void
+    {
+        $this->stromlimitSenden($cpid, $ampere);
+    }
+
+    // Erweiterte Fassung für den Datenfluss; bewusst nicht öffentlich, damit die öffentliche Funktion
+    // OHUB_SetCurrentLimit ihre Parameterzahl behält (Migrationsvergleich: feste Arität).
+    protected function stromlimitSenden(string $cpid, float $ampere, int $failsafeSec = 0, float $baseAmpere = 0.0, bool $failsafeState = false): void
     {
         if ($this->IsDemoMode()) {
             $this->LogMessage(OHUB_Text::t('Demo mode is active — SetChargingProfile [%s] suppressed.', $cpid), KL_WARNING);
@@ -1637,21 +1661,44 @@ class OCPPHubSplitter extends IPSModule
         // numberPhases sind laut .docs/architektur.md je Hersteller zu
         // verifizieren (dort als offener Punkt vermerkt) — hier bewusst nur
         // 'A', bis ein Live-Test das Gegenteil zeigt.
+        if ($failsafeSec <= 0 && !$failsafeState) {
+            $this->sendCall($cpid, 'SetChargingProfile', [
+                'connectorId'        => 0,
+                'csChargingProfiles' => $this->chargingProfile(1, 0, $ampere, null),
+            ]);
+            return;
+        }
+        // Basis-Profil zuerst (eigene Bezeichnung, damit eine Ablehnung als „Rückfall nicht unterstützt"
+        // gemeldet wird und nicht die Fahrzeug-Diagnose der Ladeablehnung anstößt).
         $this->sendCall($cpid, 'SetChargingProfile', [
-            'connectorId'         => 0,
-            'csChargingProfiles'  => [
-                'chargingProfileId'      => 1,
-                'stackLevel'             => 0,
-                'chargingProfilePurpose' => 'TxDefaultProfile',
-                'chargingProfileKind'    => 'Absolute',
-                'chargingSchedule'       => [
-                    'chargingRateUnit'       => 'A',
-                    'chargingSchedulePeriod' => [
-                        ['startPeriod' => 0, 'limit' => $ampere],
-                    ],
-                ],
-            ],
+            'connectorId'        => 0,
+            'csChargingProfiles' => $this->chargingProfile(2, 0, $baseAmpere, null),
+        ], self::PENDING_FAILSAFE);
+        $validTo = $failsafeState ? null : gmdate('Y-m-d\TH:i:s\Z', time() + $failsafeSec);
+        $this->sendCall($cpid, 'SetChargingProfile', [
+            'connectorId'        => 0,
+            'csChargingProfiles' => $this->chargingProfile(1, 1, $ampere, $validTo),
         ]);
+    }
+
+    private function chargingProfile(int $id, int $stackLevel, float $ampere, ?string $validTo): array
+    {
+        $profile = [
+            'chargingProfileId'      => $id,
+            'stackLevel'             => $stackLevel,
+            'chargingProfilePurpose' => 'TxDefaultProfile',
+            'chargingProfileKind'    => 'Absolute',
+        ];
+        if ($validTo !== null) {
+            $profile['validTo'] = $validTo;
+        }
+        $profile['chargingSchedule'] = [
+            'chargingRateUnit'       => 'A',
+            'chargingSchedulePeriod' => [
+                ['startPeriod' => 0, 'limit' => $ampere],
+            ],
+        ];
+        return $profile;
     }
 
     // Reservierung (Stufe 2, siehe .docs/architektur.md „Reservierung") —
@@ -1690,10 +1737,14 @@ class OCPPHubSplitter extends IPSModule
     // falls nie eine Antwort kam (Wallbox offline o. ä.).
     private const PENDING_CALL_MAX_AGE = 300;
 
-    private function sendCall(string $cpid, string $action, array $payload): void
+    // Bezeichnung für das Basis-Profil des Rückfalls in der Antwort-Zuordnung (der OCPP-Befehl selbst heißt
+    // weiterhin SetChargingProfile).
+    private const PENDING_FAILSAFE = 'SetChargingProfile:Failsafe';
+
+    private function sendCall(string $cpid, string $action, array $payload, ?string $pendingLabel = null): void
     {
         $uniqueId = uniqid('ohub_', true);
-        $this->rememberPendingCall($uniqueId, $cpid, $action);
+        $this->rememberPendingCall($uniqueId, $cpid, $pendingLabel ?? $action);
         $this->sendRaw($cpid, [self::OCPP_CALL, $uniqueId, $action, $payload]);
     }
 

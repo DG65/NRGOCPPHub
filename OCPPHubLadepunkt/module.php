@@ -34,7 +34,7 @@ class OCPPHubLadepunkt extends IPSModule
 
     // Bei jedem Versions-Bump in library.json auch hier nachziehen
     // (Verbund-Konvention „Dokumentation & Hilfe"-Panel, siehe SUITE.md).
-    private const VERSION = '0.4.4';
+    private const VERSION = '0.5.0';
     private const ATTR_REVIEW_HINT_GONE = 'ReviewHintDismissed';
     // „Über dieses Modul" (14.09.2026, SUITE.md Formular-Konvention Punkt
     // 5) — siehe OCPPHubSplitter für den LICENSE-Branch-Stolperstein.
@@ -47,8 +47,9 @@ class OCPPHubLadepunkt extends IPSModule
     // „Was ist neu"-Banner (Verbund-Konvention, siehe SUITE.md, Referenz
     // ChargerHub) — bei jedem nutzerrelevanten Änderungs-Bump aktualisieren,
     // NICHT bei jedem library.json-Build (sonst nervt es).
-    private const NEWS_VERSION = '0.4.0';
+    private const NEWS_VERSION = '0.5.0';
     private const NEWS_ITEMS = [
+        '🛟 New: optional fail-safe (“Current range & control authority”). If switched on, every current limit expires after 300 s (adjustable) unless it is written again — then the wallbox continues with the minimum charging current. Off by default; not every wallbox supports it, so test it first and confirm it in the form. The contract (OHUB_GetFunctions 1.8) now reports `contractType`, `failsafeSec`, `failsafeLimitA` and `failsafeVerified`.',
         '🌐 New: German and English. The form, the messages, the variable and profile names follow the Symcon language setting. Variables that already exist keep their names (you can rename them yourself); the labels of the module’s own profiles follow the next time you apply changes.',
         '🎛️ New: “Control” area in the form (as in ChargerHub) — set charge enable and current limit right here, with feedback (✅/⚠️) and a display of who is currently in control. Takes effect immediately, through the same path as the control variables. With another controller in control, deactivation or demo mode, nothing is sent, and the form says so.',
         '🔌 Technical: this charge point now talks to the splitter through the Symcon data flow (messages instead of direct function calls), as the store review requires. You select the splitter at the top, under the interface (“Gateway”); the “OCPPHub splitter” field in the form is gone. Existing instances are connected automatically the first time you apply changes after the update. Behavior does not change.',
@@ -143,6 +144,16 @@ class OCPPHubLadepunkt extends IPSModule
 
         $this->RegisterPropertyInteger('MinCurrent', self::MIN_CURRENT_HARD);
         $this->RegisterPropertyInteger('MaxCurrent', 16);
+        // Rückfall bei ausbleibenden Steuerbefehlen (Fremdanbindung 20.11.2026, SUITE.md „Fremdanbindung"
+        // Punkt 5, Dietmars Entscheidung: sicherer Zustand = Mindeststrom, 300 s). Standardmäßig AUS: das
+        // Verhalten der Wallbox (stackLevel/validTo) ist je Hersteller verschieden und erst nach einem Test an
+        // der echten Wallbox verlässlich. FailsafeVerified ist die Bestätigung des Nutzers, dass genau das
+        // getestet wurde; erst dann meldet der Vertrag failsafeSec > 0.
+        $this->RegisterPropertyBoolean('FailsafeEnabled', false);
+        $this->RegisterPropertyInteger('FailsafeSec', 300);
+        $this->RegisterPropertyBoolean('FailsafeVerified', false);
+        // Zeitpunkt des letzten Strom-Befehls (0 = noch keiner oder schon im Rückfall).
+        $this->RegisterAttributeInteger('LastLimitWriteAt', 0);
         $this->RegisterPropertyString('ManagedBy', 'none');
 
         // Dual-Writer-Zählung (13.09.2026, Dietmars Entscheidung über EMS,
@@ -486,6 +497,11 @@ class OCPPHubLadepunkt extends IPSModule
                 ['type' => 'Label', 'caption' => 'Smallest charging current that the wallbox/vehicle accepts (IEC 61851: 6 A). Below this threshold, surplus charging pauses the charge completely instead of continuing with too little current.'],
                 ['type' => 'NumberSpinner', 'name' => 'MaxCurrent', 'caption' => 'Maximum charging current (A)', 'minimum' => 6, 'maximum' => 63, 'suffix' => 'A'],
                 ['type' => 'Label', 'caption' => 'Supply cable/fuse rating of this charge point — hard upper limit for every current limit that OCPPHub sets (in addition to the wallbox’s hardware limit), regardless of what an EMS requests.'],
+                ['type' => 'CheckBox', 'name' => 'FailsafeEnabled', 'caption' => 'Fail-safe if commands stop'],
+                ['type' => 'Label', 'name' => 'FailsafeEnabledHint', 'caption' => 'If switched on, every current limit expires after the time below unless it is written again (the EMS rewrites it in time). The wallbox then continues with the minimum charging current from above. Not every wallbox supports this (stack level, validity period): test it before you rely on it. Off by default.'],
+                ['type' => 'NumberSpinner', 'name' => 'FailsafeSec', 'caption' => 'Fail-safe after (seconds)', 'minimum' => 30, 'maximum' => 3600, 'suffix' => 's'],
+                ['type' => 'CheckBox', 'name' => 'FailsafeVerified', 'caption' => 'Fail-safe tested on this wallbox'],
+                ['type' => 'Label', 'name' => 'FailsafeVerifiedHint', 'caption' => 'Tick this only after you have tested that your wallbox really drops to the minimum current when no command arrives for that time (for example stop the EMS during a charge and watch). Only then does OCPPHub report the fail-safe to consumers such as the EMS.'],
                 [
                     'type'    => 'Select',
                     'name'    => 'ManagedBy',
@@ -980,7 +996,13 @@ class OCPPHubLadepunkt extends IPSModule
                 );
                 $this->SetValue($Ident, $clamped);
                 if ($cpid !== '') {
-                    $this->anSplitter('Stromlimit', ['Ampere' => (float)$clamped]);
+                    $failsafeSec = $this->failsafeSek();
+                    $this->WriteAttributeInteger('LastLimitWriteAt', $failsafeSec > 0 ? time() : 0);
+                    $this->anSplitter('Stromlimit', [
+                        'Ampere'       => (float)$clamped,
+                        'RueckfallSek' => $failsafeSec,
+                        'BasisAmpere'  => (float)$this->failsafeLimitA(),
+                    ]);
                 }
                 break;
         }
@@ -1322,6 +1344,54 @@ class OCPPHubLadepunkt extends IPSModule
             $this->SetValue('ocpp_connected', $connected);
         }
         $this->refreshInstanceStatus();
+        $this->failsafeWatch();
+    }
+
+    // Rückfall (Fremdanbindung 20.11.2026): Sekunden, nach denen ohne neuen Strom-Befehl der sichere Zustand
+    // gilt; 0 = ausgeschaltet. Untergrenze 30 s, damit ein Tippfehler die Wallbox nicht dauernd zurückwirft.
+    private function failsafeSek(): int
+    {
+        if (!$this->ReadPropertyBoolean('FailsafeEnabled')) {
+            return 0;
+        }
+        return max(30, $this->ReadPropertyInteger('FailsafeSec'));
+    }
+
+    // Sicherer Zustand = Mindeststrom (Dietmar 20.11.2026), die Wallbox lädt dann weiter, aber langsam.
+    private function failsafeLimitA(): int
+    {
+        return $this->ReadPropertyInteger('MinCurrent');
+    }
+
+    // Wann ein unverändertes Limit erneut geschrieben werden muss, damit das Steuer-Profil nicht abläuft
+    // (die Hälfte der Frist, wie es der Vertrag für den Konsumenten verlangt).
+    private function failsafeRefreshDue(): bool
+    {
+        $sek = $this->failsafeSek();
+        return $sek > 0 && (time() - $this->ReadAttributeInteger('LastLimitWriteAt')) >= intdiv($sek, 2);
+    }
+
+    // Soft-Watchdog als Gürtel zum Ablauf in der Wallbox (validTo): kommt kein neuer Strom-Befehl mehr, zeigt
+    // die Steuervariable den sicheren Wert und das Steuer-Profil wird mit dem Mindeststrom ohne Ablaufzeit
+    // ersetzt. So gilt der Rückfall auch dann, wenn die Wallbox die Ablaufzeit ignoriert. Läuft im Minutentakt
+    // der Verbindungsüberwachung.
+    private function failsafeWatch(): void
+    {
+        $sek = $this->failsafeSek();
+        $last = $this->ReadAttributeInteger('LastLimitWriteAt');
+        if ($sek <= 0 || $last <= 0 || (time() - $last) <= $sek) {
+            return;
+        }
+        $this->WriteAttributeInteger('LastLimitWriteAt', 0);
+        $min = $this->failsafeLimitA();
+        if ((int)$this->GetValue('ctl_curr_limit') <= $min) {
+            return;
+        }
+        $this->LogMessage(OHUB_Text::t('No current command for %d s — charge point %d falls back to the minimum current of %d A.', $sek, $this->InstanceID, $min), KL_WARNING);
+        $this->SetValue('ctl_curr_limit', $min);
+        if ($this->ReadPropertyString('CPID') !== '') {
+            $this->anSplitter('Stromlimit', ['Ampere' => (float)$min, 'Rueckfall' => true, 'BasisAmpere' => (float)$min]);
+        }
     }
 
     // Sicherheitsnetz gegen den „markiert, aber vergessen umzustellen"-Fall
@@ -1794,7 +1864,7 @@ class OCPPHubLadepunkt extends IPSModule
         $managedBy = $this->ReadPropertyString('ManagedBy');
         $externallyManaged = !in_array($managedBy, ['none', 'ems'], true);
         $entry = [
-            'contractVersion'   => '1.7',
+            'contractVersion'   => '1.8',
             // 1.1 (Dashboard-Fund 30.08.2026): Splitter sammelt die Einträge
             // ALLER eigenen Ladepunkte über OHUB_GetFunctions() ein — anders
             // als bei ChargerHub (1 Instanz = 1 Wallbox) reicht die
@@ -1832,6 +1902,10 @@ class OCPPHubLadepunkt extends IPSModule
             // `deactivated` ergänzt — eindeutiger Name, deckungsgleich mit
             // Status 104, ohne dass ein Konsument extra den Instanzstatus
             // abfragen muss.
+            // 1.8 (Fremdanbindung 20.11.2026, SUITE.md „Fremdanbindung"): contractType additiv (Selbstbeschreibung,
+            // gleich `function`), dazu der Rückfall: failsafeSec (s; 0 = kein verlässlicher Rückfall — nur > 0, wenn
+            // der Nutzer ihn eingeschaltet UND an seiner Wallbox bestätigt hat), failsafeLimitA (sicherer Strom,
+            // Mindeststrom), failsafeVerified (bool), failsafeMode ('deadman', EMS-Wunsch 20.11.: Art des Rückfalls). Das EMS schreibt innerhalb failsafeSec/2 nach.
             // 1.7 (EMS-Bitte 20.09.2026): stationMaxCurrentA/stationMinCurrentA
             // (Ampere) und phaseSwitchSupported (bool) additiv und optional —
             // nur vorhanden, wenn die Wallbox sie per GetConfiguration
@@ -1845,6 +1919,7 @@ class OCPPHubLadepunkt extends IPSModule
             // Strom-Messwerten je Phase während einer Ladung ableiten.
             'instanceID'        => $this->InstanceID,
             'function'          => 'charger',
+            'contractType'      => 'charger',
             'label'             => $this->ReadPropertyString('Label') ?: IPS_GetName($this->InstanceID),
             'powerID'           => $this->GetIDForIdent('power'),
             'energyImportID'    => $this->GetIDForIdent('energy_total'),
@@ -1874,6 +1949,10 @@ class OCPPHubLadepunkt extends IPSModule
             // Schalter/OHUBL_SetActive(false) abgeschaltet" — deckungsgleich
             // mit Instanzstatus 104.
             'deactivated'       => $this->IsDeactivated(),
+            'failsafeSec'       => ($this->failsafeSek() > 0 && $this->ReadPropertyBoolean('FailsafeVerified')) ? $this->failsafeSek() : 0,
+            'failsafeLimitA'    => $this->failsafeLimitA(),
+            'failsafeMode'      => 'deadman',
+            'failsafeVerified'  => $this->failsafeSek() > 0 && $this->ReadPropertyBoolean('FailsafeVerified'),
         ];
         if ($this->ReadAttributeInteger('StationMaxCurrentA') > 0) {
             $entry['stationMaxCurrentA'] = $this->ReadAttributeInteger('StationMaxCurrentA');
@@ -1943,7 +2022,7 @@ class OCPPHubLadepunkt extends IPSModule
             if (!$this->GetValue('ctl_enable')) {
                 IPS_RequestAction($this->InstanceID, 'ctl_enable', true);
             }
-            if ($this->GetValue('ctl_curr_limit') !== $maxCurrent) {
+            if ($this->GetValue('ctl_curr_limit') !== $maxCurrent || $this->failsafeRefreshDue()) {
                 IPS_RequestAction($this->InstanceID, 'ctl_curr_limit', $maxCurrent);
             }
             $this->SetValue('surplus_status', OHUB_Text::t('Daily override active — charging at %d A', $maxCurrent));
@@ -2003,7 +2082,9 @@ class OCPPHubLadepunkt extends IPSModule
         if (!$this->GetValue('ctl_enable')) {
             IPS_RequestAction($this->InstanceID, 'ctl_enable', true);
         }
-        if ($this->GetValue('ctl_curr_limit') !== $clamped) {
+        // Mit eingeschaltetem Rückfall auch unverändert neu schreiben, sonst läuft das Steuer-Profil in der
+        // Wallbox ab, obwohl die eigene Überschussregelung noch läuft.
+        if ($this->GetValue('ctl_curr_limit') !== $clamped || $this->failsafeRefreshDue()) {
             IPS_RequestAction($this->InstanceID, 'ctl_curr_limit', $clamped);
         }
         $this->SetValue('surplus_status', sprintf(OHUB_Text::t('Charging at %d A (%.0f W surplus)'), $clamped, $surplusW));
